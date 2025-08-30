@@ -127,6 +127,7 @@ dev-dependencies = [
     "pytest-xdist>=3.0.0",
     "mypy>=1.6.0",
     "types-requests>=2.31.0",
+    "pandas>=2.3.2",
 ]
 
 [tool.uv.sources]

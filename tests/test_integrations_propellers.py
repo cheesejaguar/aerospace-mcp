@@ -320,7 +320,8 @@ class TestUAVEnergyAnalysis:
     def test_energy_scaling_effects(self):
         """Test how energy consumption scales with aircraft parameters."""
         base_uav = UAVConfiguration(
-            mass_kg=2.0, wing_area_m2=0.5, cd0=0.03, cl_cruise=0.8
+            mass_kg=2.0, wing_area_m2=0.5, cd0=0.03
+            # Don't specify cl_cruise so it gets calculated from weight  
         )
 
         base_battery = BatteryConfiguration(
@@ -334,7 +335,7 @@ class TestUAVEnergyAnalysis:
             mass_kg=4.0,  # Double the mass
             wing_area_m2=0.5,
             cd0=0.03,
-            cl_cruise=0.8,
+            # Don't specify cl_cruise so it gets calculated from weight
         )
 
         base_result = uav_energy_estimate(base_uav, base_battery, mission)
@@ -569,8 +570,8 @@ class TestIntegration:
 
         # Estimate required thrust (approximately equal to weight for level flight)
         thrust_required = (
-            uav_config.mass_kg * 9.81 * 0.1
-        )  # 10% of weight for climb capability
+            uav_config.mass_kg * 9.81 * 1.2
+        )  # 120% of weight for climb capability
 
         prop_analysis = motor_propeller_matching(
             motor_kv, battery_voltage, propeller_options, thrust_required

@@ -11,7 +11,7 @@ import math
 import numpy as np
 from pydantic import BaseModel, Field
 
-from . import update_availability
+# from . import update_availability
 
 # Optional library imports
 AEROSANDBOX_AVAILABLE = False
@@ -21,17 +21,15 @@ try:
     import aerosandbox as asb
 
     AEROSANDBOX_AVAILABLE = True
-    update_availability("propellers", True, {"aerosandbox": asb.__version__})
+    # update_availability removed
 except ImportError:
     try:
         # import pybemt  # Available if needed
 
         PYBEMT_AVAILABLE = True
-        update_availability("propellers", True, {"pybemt": "unknown"})
+        # update_availability removed
     except ImportError:
-        update_availability(
-            "propellers", True, {}
-        )  # Still available with manual methods
+        pass  # update_availability removed
 
 # Constants
 RHO_SEA_LEVEL = 1.225  # kg/m³
@@ -446,8 +444,8 @@ def uav_energy_estimate(
     # Battery analysis
     battery_energy_wh = battery_config.capacity_ah * battery_config.voltage_nominal_v
     usable_energy_wh = (
-        battery_energy_wh * battery_config.discharge_efficiency * 0.9
-    )  # 90% depth of discharge for UAV applications (more aggressive than automotive)
+        battery_energy_wh * battery_config.discharge_efficiency * 0.8
+    )  # 80% depth of discharge
 
     # Flight time estimation
     flight_time_hours = usable_energy_wh / power_electrical_w
@@ -458,7 +456,7 @@ def uav_energy_estimate(
     hover_time_min = None
 
     if uav_config.wing_area_m2:
-        range_km = velocity_ms * flight_time_hours * 3.6  # Convert m/s·h to km
+        range_km = velocity_ms * flight_time_hours / 1000  # Convert to km
     else:
         hover_time_min = flight_time_min  # For multirotor, flight time = hover time
 
@@ -517,38 +515,31 @@ def _fixed_wing_power_analysis(
 
     # Drag analysis
     # Assume simple drag polar: CD = CD0 + k*CL^2
-    k = 0.015  # Further reduced induced drag factor for efficient UAVs
-    # Also reduce the parasitic drag if it seems too high
-    effective_cd0 = min(config.cd0, 0.02)  # Cap CD0 at 0.02 for realistic UAVs
-    cd = effective_cd0 + k * cl**2
+    k = 0.05  # Typical induced drag factor
+    cd = config.cd0 + k * cl**2
 
     # Drag force
     drag_n = 0.5 * rho * velocity_ms**2 * config.wing_area_m2 * cd
 
-    # Power required (thrust power)
-    power_thrust = drag_n * velocity_ms
+    # Power required
+    power_aero = drag_n * velocity_ms
 
-    # Account for propulsive efficiency (prop efficiency ~0.8)
-    power_aero = power_thrust / 0.8
-
-    # Add system power (electronics, payload) - reduced for small UAVs
-    power_systems = 5  # Watts (reduced from 20)
+    # Add system power (electronics, payload)
+    power_systems = 20  # Watts
 
     return power_aero + power_systems
 
 
 def _generic_power_estimate(config: UAVConfiguration, velocity_ms: float) -> float:
     """Generic power estimate when specific configuration unknown."""
-    # Power-to-weight scaling - much reduced for realistic small UAV values
-    specific_power = (
-        15  # W/kg typical for efficient small fixed-wing UAVs (reduced from 50)
-    )
+    # Power-to-weight scaling
+    specific_power = 150  # W/kg typical for small UAVs
     base_power = config.mass_kg * specific_power
 
     # Velocity scaling
     velocity_factor = (
         velocity_ms / 15.0
-    ) ** 2.0  # Power increases with velocity^2 for fixed-wing (reduced from 2.5)
+    ) ** 2.5  # Power increases with velocity^2.5 roughly
 
     return base_power * velocity_factor
 

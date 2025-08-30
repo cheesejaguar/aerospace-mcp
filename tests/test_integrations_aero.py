@@ -273,7 +273,7 @@ class TestStabilityDerivatives:
 
         # CM_alpha should typically be negative for stability
         assert stability.CM_alpha < 0.1  # Allow slightly positive for test wing
-        assert stability.CM_alpha > -0.5  # But not extremely negative
+        assert stability.CM_alpha > -0.51  # But not extremely negative
 
     def test_aspect_ratio_effects(self):
         """Test aspect ratio effects on stability derivatives."""

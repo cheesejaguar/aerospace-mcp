@@ -35,6 +35,7 @@ except ImportError:
 AIRFOIL_DATABASE = {
     "NACA0012": {
         "cl_alpha": 6.28,  # per radian
+        "cl0": 0.0,  # zero-angle lift coefficient (symmetric)
         "cd0": 0.006,
         "cl_max": 1.4,
         "alpha_stall_deg": 15.0,
@@ -42,6 +43,7 @@ AIRFOIL_DATABASE = {
     },
     "NACA2412": {
         "cl_alpha": 6.28,
+        "cl0": 0.25,  # zero-angle lift coefficient (cambered)
         "cd0": 0.007,
         "cl_max": 1.6,
         "alpha_stall_deg": 16.0,
@@ -49,6 +51,7 @@ AIRFOIL_DATABASE = {
     },
     "NACA4412": {
         "cl_alpha": 6.28,
+        "cl0": 0.40,  # zero-angle lift coefficient (4% camber)
         "cd0": 0.008,
         "cl_max": 1.7,
         "alpha_stall_deg": 17.0,
@@ -56,6 +59,7 @@ AIRFOIL_DATABASE = {
     },
     "NACA6412": {
         "cl_alpha": 6.28,
+        "cl0": 0.55,  # zero-angle lift coefficient (6% camber)
         "cd0": 0.007,
         "cl_max": 1.8,
         "alpha_stall_deg": 18.0,
@@ -63,6 +67,7 @@ AIRFOIL_DATABASE = {
     },
     "CLARKY": {
         "cl_alpha": 6.0,
+        "cl0": 0.30,  # zero-angle lift coefficient (cambered)
         "cd0": 0.008,
         "cl_max": 1.5,
         "alpha_stall_deg": 14.0,
@@ -154,8 +159,8 @@ def _simple_wing_analysis(
     for alpha_deg in alpha_deg_list:
         alpha_rad = math.radians(alpha_deg)
 
-        # Basic lift coefficient
-        CL = CL_alpha_3d * alpha_rad
+        # Basic lift coefficient (includes zero-angle lift coefficient)
+        CL = airfoil_data.get("cl0", 0.0) + CL_alpha_3d * alpha_rad
 
         # Drag coefficient (simplified drag polar)
         CD0 = airfoil_data["cd0"] * 1.1  # Wing CD0 slightly higher than airfoil
@@ -341,8 +346,12 @@ def _database_airfoil_polar(
         # Mach number corrections
         beta = math.sqrt(max(0.01, 1 - mach**2))
 
-        # Lift coefficient
-        cl = (airfoil_data["cl_alpha"] * alpha_rad) / beta * re_factor
+        # Lift coefficient (includes zero-angle lift coefficient)
+        cl = (
+            (airfoil_data.get("cl0", 0.0) + airfoil_data["cl_alpha"] * alpha_rad)
+            / beta
+            * re_factor
+        )
 
         # Apply stall model
         if abs(alpha_deg) > airfoil_data["alpha_stall_deg"]:
