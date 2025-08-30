@@ -13,6 +13,7 @@ __all__ = ["app", "run"]
 def run() -> None:
     """Run the FastAPI server using uvicorn."""
     import os
+
     import uvicorn
 
     # Get configuration from environment variables

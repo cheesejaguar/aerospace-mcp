@@ -1,15 +1,14 @@
 """Tests for airport resolution functionality."""
 
-import pytest
 from unittest.mock import patch
-from typing import List, Optional
+
+import pytest
 
 from aerospace_mcp.core import (
+    AirportResolutionError,
     _airport_from_iata,
     _find_city_airports,
     _resolve_endpoint,
-    AirportOut,
-    AirportResolutionError
 )
 
 

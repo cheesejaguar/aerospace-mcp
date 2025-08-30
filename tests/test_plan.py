@@ -1,19 +1,18 @@
 """Tests for flight planning functionality."""
 
-import pytest
-from unittest.mock import patch, MagicMock
 import math
-from typing import Tuple, List
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from aerospace_mcp.core import (
-    great_circle_points,
-    estimates_openap,
-    SegmentEst,
-    OpenAPError,
-    NM_PER_KM,
     KM_PER_NM,
+    NM_PER_KM,
+    OpenAPError,
     PlanRequest,
-    PlanResponse
+    SegmentEst,
+    estimates_openap,
+    great_circle_points,
 )
 
 

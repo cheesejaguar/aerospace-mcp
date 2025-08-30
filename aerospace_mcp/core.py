@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from typing import List, Literal, Optional, Tuple
-from pydantic import BaseModel, Field
 import math
+from typing import Literal
+
 import airportsdata
+from pydantic import BaseModel, Field
 
 # Optional / graceful import for OpenAP (perf + fuel)
 OPENAP_AVAILABLE = True
 try:
-    from openap.gen import FlightGenerator
     from openap import FuelFlow, prop
+    from openap.gen import FlightGenerator
 except Exception:
     OPENAP_AVAILABLE = False
 
@@ -32,22 +33,22 @@ class AirportOut(BaseModel):
     country: str
     lat: float
     lon: float
-    tz: Optional[str] = None
+    tz: str | None = None
 
 
 class PlanRequest(BaseModel):
     # You can pass cities, or override with explicit IATA
     depart_city: str = Field(..., description="e.g., 'San Jose'")
     arrive_city: str = Field(..., description="e.g., 'Tokyo'")
-    depart_country: Optional[str] = Field(None, description="ISO alpha-2 country code (optional)")
-    arrive_country: Optional[str] = Field(None, description="ISO alpha-2 country code (optional)")
-    prefer_depart_iata: Optional[str] = Field(None, description="Force a particular departure airport by IATA")
-    prefer_arrive_iata: Optional[str] = Field(None, description="Force a particular arrival airport by IATA")
+    depart_country: str | None = Field(None, description="ISO alpha-2 country code (optional)")
+    arrive_country: str | None = Field(None, description="ISO alpha-2 country code (optional)")
+    prefer_depart_iata: str | None = Field(None, description="Force a particular departure airport by IATA")
+    prefer_arrive_iata: str | None = Field(None, description="Force a particular arrival airport by IATA")
 
     # Aircraft/performance knobs
     ac_type: str = Field(..., description="ICAO aircraft type (e.g., 'A320', 'B738')")
     cruise_alt_ft: int = Field(35000, ge=8000, le=45000)
-    mass_kg: Optional[float] = Field(None, description="If not set, defaults to 85% MTOW when available")
+    mass_kg: float | None = Field(None, description="If not set, defaults to 85% MTOW when available")
     route_step_km: float = Field(25.0, gt=1.0, description="Sampling step for polyline points")
     backend: Literal["openap"] = "openap"  # Placeholder for future backends
 
@@ -65,7 +66,7 @@ class PlanResponse(BaseModel):
     arrive: AirportOut
     distance_km: float
     distance_nm: float
-    polyline: List[Tuple[float, float]]  # [(lat, lon), ...]
+    polyline: list[tuple[float, float]]  # [(lat, lon), ...]
     estimates: dict  # {"block": {...}, "climb": {...}, ...}
 
 
@@ -79,7 +80,7 @@ _AIRPORTS_IATA = airportsdata.load("IATA")  # Fast, in-process dict (no network)
 # ----------------------------
 # Airport resolution functions
 # ----------------------------
-def _airport_from_iata(iata: str) -> Optional[AirportOut]:
+def _airport_from_iata(iata: str) -> AirportOut | None:
     ap = _AIRPORTS_IATA.get(iata.upper())
     if not ap:
         return None
@@ -95,7 +96,7 @@ def _airport_from_iata(iata: str) -> Optional[AirportOut]:
     )
 
 
-def _find_city_airports(city: str, country: Optional[str] = None) -> List[AirportOut]:
+def _find_city_airports(city: str, country: str | None = None) -> list[AirportOut]:
     city_l = city.strip().lower()
     out = []
     for iata, ap in _AIRPORTS_IATA.items():
@@ -128,8 +129,8 @@ class AirportResolutionError(Exception):
 
 def _resolve_endpoint(
     city: str,
-    country: Optional[str],
-    prefer_iata: Optional[str],
+    country: str | None,
+    prefer_iata: str | None,
     role: str,
 ) -> AirportOut:
     if prefer_iata:
@@ -147,7 +148,7 @@ def _resolve_endpoint(
 # ----------------------------
 # Geodesic / polyline
 # ----------------------------
-def great_circle_points(lat1: float, lon1: float, lat2: float, lon2: float, step_km: float) -> Tuple[List[Tuple[float, float]], float]:
+def great_circle_points(lat1: float, lon1: float, lat2: float, lon2: float, step_km: float) -> tuple[list[tuple[float, float]], float]:
     g = Geodesic.WGS84.Inverse(lat1, lon1, lat2, lon2)
     dist_m = g["s12"]
     line = Geodesic.WGS84.Line(lat1, lon1, g["azi1"])
@@ -168,7 +169,7 @@ class OpenAPError(Exception):
     pass
 
 
-def estimates_openap(ac_type: str, cruise_alt_ft: int, mass_kg: Optional[float], route_dist_km: float) -> Tuple[dict, str]:
+def estimates_openap(ac_type: str, cruise_alt_ft: int, mass_kg: float | None, route_dist_km: float) -> tuple[dict, str]:
     if not OPENAP_AVAILABLE:
         raise OpenAPError("OpenAP backend unavailable. Please `pip install openap`.")
 
@@ -270,7 +271,7 @@ def health() -> dict:
     }
 
 
-def airports_by_city(city: str, country: Optional[str] = None) -> List[AirportOut]:
+def airports_by_city(city: str, country: str | None = None) -> list[AirportOut]:
     """Search for airports by city and optional country."""
     return _find_city_airports(city, country)
 
@@ -323,7 +324,7 @@ def plan_flight(payload: dict) -> dict:
 # ----------------------------
 # Public API functions
 # ----------------------------
-def search_airports_by_city(city: str, country: Optional[str] = None) -> List[AirportOut]:
+def search_airports_by_city(city: str, country: str | None = None) -> list[AirportOut]:
     """Search for airports by city name."""
     return _find_city_airports(city, country)
 
@@ -331,9 +332,9 @@ def search_airports_by_city(city: str, country: Optional[str] = None) -> List[Ai
 def get_health_status() -> dict:
     """Get system health status."""
     from .integrations import get_domain_status
-    
+
     domain_status = get_domain_status()
-    
+
     return {
         "status": "ok",
         "openap": OPENAP_AVAILABLE,

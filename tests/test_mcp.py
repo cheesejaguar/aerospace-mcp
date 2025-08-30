@@ -1,21 +1,20 @@
 """Tests for MCP server functionality."""
 
-import pytest
-import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock
-from typing import Any, Dict, List
+from unittest.mock import patch
 
-from mcp.types import Tool, TextContent
+import pytest
+from mcp.types import TextContent
+
 from aerospace_mcp.server import (
-    server,
     TOOLS,
-    handle_list_tools,
-    handle_call_tool,
-    _handle_search_airports,
-    _handle_plan_flight,
     _handle_calculate_distance,
     _handle_get_aircraft_performance,
     _handle_get_system_status,
+    _handle_plan_flight,
+    _handle_search_airports,
+    handle_call_tool,
+    handle_list_tools,
+    server,
 )
 
 
@@ -603,6 +602,7 @@ class TestMCPServerTransports:
         """Test run function argument parsing logic."""
         import sys
         from unittest.mock import patch
+
         from aerospace_mcp.server import run
 
         # Test stdio mode (default)

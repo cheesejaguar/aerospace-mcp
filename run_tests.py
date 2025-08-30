@@ -5,9 +5,9 @@ This script provides convenient commands for running different types of tests
 and generating coverage reports.
 """
 
-import sys
-import subprocess
 import argparse
+import subprocess
+import sys
 from pathlib import Path
 
 

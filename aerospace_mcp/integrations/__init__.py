@@ -19,7 +19,7 @@ Available domains:
 from typing import Dict, List, Optional
 
 # Availability flags - set by each module during import
-AVAILABILITY_FLAGS: Dict[str, bool] = {
+AVAILABILITY_FLAGS: dict[str, bool] = {
     "atmosphere": True,  # Core module, always available
     "frames": False,
     "aero": False,
@@ -31,9 +31,9 @@ AVAILABILITY_FLAGS: Dict[str, bool] = {
 }
 
 # Library version tracking
-LIBRARY_VERSIONS: Dict[str, Optional[str]] = {}
+LIBRARY_VERSIONS: dict[str, str | None] = {}
 
-def get_domain_status() -> Dict[str, Dict[str, any]]:
+def get_domain_status() -> dict[str, dict[str, any]]:
     """Get availability status and versions for all domains."""
     return {
         domain: {
@@ -46,7 +46,7 @@ def get_domain_status() -> Dict[str, Dict[str, any]]:
         for domain, available in AVAILABILITY_FLAGS.items()
     }
 
-def update_availability(domain: str, available: bool, libraries: Dict[str, str] = None):
+def update_availability(domain: str, available: bool, libraries: dict[str, str] = None):
     """Update availability status for a domain."""
     AVAILABILITY_FLAGS[domain] = available
     if libraries:
@@ -56,7 +56,7 @@ def update_availability(domain: str, available: bool, libraries: Dict[str, str] 
 # Domain-specific imports (lazy loaded)
 __all__ = [
     "AVAILABILITY_FLAGS",
-    "LIBRARY_VERSIONS", 
+    "LIBRARY_VERSIONS",
     "get_domain_status",
     "update_availability",
 ]

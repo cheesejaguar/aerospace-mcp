@@ -15,8 +15,8 @@ Usage:
   python run_server_example.py --tcp localhost:8000
 """
 
-import sys
 import os
+import sys
 
 # Add the project root to Python path
 project_root = os.path.dirname(os.path.abspath(__file__))

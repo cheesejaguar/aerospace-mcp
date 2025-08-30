@@ -1,18 +1,19 @@
 """Test configuration and fixtures for Aerospace MCP tests."""
 
-import pytest
-from typing import Dict, Any, List, Optional
+from typing import Any
 from unittest.mock import MagicMock, patch
+
 import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
-from aerospace_mcp.core import AirportOut, PlanRequest, SegmentEst, OPENAP_AVAILABLE
+from aerospace_mcp.core import OPENAP_AVAILABLE, AirportOut, PlanRequest
 from main import app
 
 
 # Test data fixtures
 @pytest.fixture
-def sample_airport_data() -> Dict[str, Dict[str, Any]]:
+def sample_airport_data() -> dict[str, dict[str, Any]]:
     """Mock airport data for testing."""
     return {
         "SJC": {
