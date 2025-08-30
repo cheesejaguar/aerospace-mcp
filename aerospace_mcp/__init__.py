@@ -4,13 +4,13 @@ from .core import (
     NM_PER_KM,
     KM_PER_NM,
     OPENAP_AVAILABLE,
-    
+
     # Models
     AirportOut,
     PlanRequest,
     SegmentEst,
     PlanResponse,
-    
+
     # Functions
     _airport_from_iata,
     _find_city_airports,
@@ -20,7 +20,7 @@ from .core import (
     health,
     airports_by_city,
     plan_flight,
-    
+
     # Exceptions
     AirportResolutionError,
     OpenAPError,
@@ -29,11 +29,11 @@ from .core import (
 __version__ = "0.1.0"
 __all__ = [
     "NM_PER_KM",
-    "KM_PER_NM", 
+    "KM_PER_NM",
     "OPENAP_AVAILABLE",
     "AirportOut",
     "PlanRequest",
-    "SegmentEst", 
+    "SegmentEst",
     "PlanResponse",
     "_airport_from_iata",
     "_find_city_airports",

@@ -14,15 +14,15 @@ def run() -> None:
     """Run the FastAPI server using uvicorn."""
     import os
     import uvicorn
-    
+
     # Get configuration from environment variables
     host = os.getenv("AEROSPACE_MCP_HOST", "0.0.0.0")
     port = int(os.getenv("AEROSPACE_MCP_PORT", "8080"))
     log_level = os.getenv("AEROSPACE_MCP_LOG_LEVEL", "info").lower()
-    
+
     # Disable reload in production (when not in development)
     reload = os.getenv("AEROSPACE_MCP_ENV", "production").lower() == "development"
-    
+
     uvicorn.run(
         "main:app",
         host=host,

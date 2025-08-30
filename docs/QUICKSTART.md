@@ -142,7 +142,7 @@ curl -X POST "http://localhost:8000/plan" \
     "lon": -122.378958
   },
   "arrive": {
-    "iata": "LAX", 
+    "iata": "LAX",
     "name": "Los Angeles International Airport",
     "city": "Los Angeles",
     "country": "US",
@@ -168,7 +168,7 @@ curl -X POST "http://localhost:8000/plan" \
   -H "Content-Type: application/json" \
   -d '{
     "depart_city": "New York",
-    "arrive_city": "London", 
+    "arrive_city": "London",
     "prefer_depart_iata": "JFK",
     "prefer_arrive_iata": "LHR",
     "ac_type": "B777",
@@ -194,7 +194,7 @@ def analyze_route(departure, arrival, aircraft="A320"):
         "cruise_alt_ft": 35000,
         "backend": "openap"
     })
-    
+
     if response.status_code == 200:
         plan = response.json()
         print(f"\n=== {departure} → {arrival} ({aircraft}) ===")
@@ -223,7 +223,7 @@ def compare_aircraft(departure, arrival, aircraft_types):
     print(f"\n=== Aircraft Comparison: {departure} → {arrival} ===")
     print(f"{'Aircraft':<8} {'Time (min)':<10} {'Fuel (kg)':<10} {'Range (NM)':<12}")
     print("-" * 50)
-    
+
     for aircraft in aircraft_types:
         response = requests.post("http://localhost:8000/plan", json={
             "depart_city": departure,
@@ -232,7 +232,7 @@ def compare_aircraft(departure, arrival, aircraft_types):
             "cruise_alt_ft": 35000,
             "backend": "openap"
         })
-        
+
         if response.status_code == 200:
             plan = response.json()
             time_min = plan['estimates']['block']['time_min']
@@ -255,13 +255,13 @@ def plan_journey(cities, aircraft="A320"):
     total_distance = 0
     total_time = 0
     total_fuel = 0
-    
+
     print(f"\n=== Multi-City Journey ({aircraft}) ===")
-    
+
     for i in range(len(cities) - 1):
         departure = cities[i]
         arrival = cities[i + 1]
-        
+
         response = requests.post("http://localhost:8000/plan", json={
             "depart_city": departure,
             "arrive_city": arrival,
@@ -269,20 +269,20 @@ def plan_journey(cities, aircraft="A320"):
             "cruise_alt_ft": 35000,
             "backend": "openap"
         })
-        
+
         if response.status_code == 200:
             plan = response.json()
             distance = plan['distance_nm']
             time = plan['estimates']['block']['time_min']
             fuel = plan['estimates']['block']['fuel_kg']
-            
+
             total_distance += distance
             total_time += time
             total_fuel += fuel
-            
+
             print(f"Leg {i+1}: {departure} → {arrival}")
             print(f"  {distance:.0f} NM, {time:.0f} min, {fuel:.0f} kg fuel")
-    
+
     print(f"\nTotals:")
     print(f"  Distance: {total_distance:.0f} NM")
     print(f"  Time: {total_time:.0f} min ({total_time/60:.1f} hours)")
@@ -419,7 +419,7 @@ curl -X POST "http://localhost:8000/plan" -H "Content-Type: application/json" \
 # Increase route step size for faster processing
 curl -X POST "http://localhost:8000/plan" -H "Content-Type: application/json" \
   -d '{
-    "depart_city": "Tokyo", 
+    "depart_city": "Tokyo",
     "arrive_city": "Sydney",
     "ac_type": "B777",
     "route_step_km": 100.0
@@ -505,7 +505,7 @@ import requests
 def benchmark_endpoint(url, data=None, iterations=5):
     """Benchmark an API endpoint."""
     times = []
-    
+
     for i in range(iterations):
         start = time.time()
         if data:
@@ -513,12 +513,12 @@ def benchmark_endpoint(url, data=None, iterations=5):
         else:
             response = requests.get(url)
         end = time.time()
-        
+
         if response.status_code == 200:
             times.append(end - start)
         else:
             print(f"Error {response.status_code}: {response.text}")
-    
+
     if times:
         avg_time = sum(times) / len(times)
         print(f"Average response time: {avg_time:.3f}s")
@@ -528,9 +528,9 @@ def benchmark_endpoint(url, data=None, iterations=5):
 benchmark_endpoint("http://localhost:8000/health")
 benchmark_endpoint("http://localhost:8000/airports/by_city?city=London")
 benchmark_endpoint("http://localhost:8000/plan", {
-    "depart_city": "New York", 
-    "arrive_city": "Los Angeles", 
-    "ac_type": "A320", 
+    "depart_city": "New York",
+    "arrive_city": "Los Angeles",
+    "ac_type": "A320",
     "backend": "openap"
 })
 ```
@@ -554,7 +554,7 @@ curl -X POST "http://localhost:8000/plan" \
     "depart_city": "Frankfurt",
     "arrive_city": "Tokyo",
     "prefer_depart_iata": "FRA",
-    "prefer_arrive_iata": "NRT", 
+    "prefer_arrive_iata": "NRT",
     "ac_type": "A350",
     "cruise_alt_ft": 41000,
     "mass_kg": 280000,

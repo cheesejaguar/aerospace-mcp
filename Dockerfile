@@ -1,6 +1,6 @@
 # Multi-stage build for aerospace-mcp
 # Stage 1: Build dependencies with UV
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 # Install system dependencies for building
 RUN apt-get update && apt-get install -y \
@@ -14,8 +14,12 @@ RUN pip install --no-cache-dir uv
 # Set working directory
 WORKDIR /app
 
-# Copy dependency files
+# Copy dependency files and source code needed for installation
 COPY pyproject.toml ./
+COPY README.md ./
+COPY LICENSE ./
+COPY aerospace_mcp/ ./aerospace_mcp/
+COPY app/ ./app/
 
 # Install dependencies to a virtual environment
 RUN uv venv /opt/venv
@@ -25,12 +29,13 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN uv pip install --no-cache-dir -e .
 
 # Stage 2: Runtime image with minimal footprint
-FROM python:3.11-slim as runtime
+FROM python:3.11-slim AS runtime
 
 # Install minimal runtime dependencies
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 

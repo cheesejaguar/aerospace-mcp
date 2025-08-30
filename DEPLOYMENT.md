@@ -339,7 +339,7 @@ services:
   aerospace-mcp-1:
     # ... configuration
     container_name: aerospace-mcp-1
-    
+
   aerospace-mcp-2:
     # ... configuration
     container_name: aerospace-mcp-2
@@ -358,7 +358,7 @@ services:
       - DATABASE_URL=postgresql://user:pass@postgres:5432/aerospace
     depends_on:
       - postgres
-  
+
   postgres:
     image: postgres:15-alpine
     # ... postgres configuration

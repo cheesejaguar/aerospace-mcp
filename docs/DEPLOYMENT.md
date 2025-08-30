@@ -27,7 +27,7 @@ graph TB
         LB1 --> Server1
         Server1 --> DB1
     end
-    
+
     subgraph "Option 2: Multi-Server"
         LB2[Load Balancer]
         Server2A[Server A]
@@ -35,25 +35,25 @@ graph TB
         Server2C[Server N]
         Cache[Redis Cache]
         DB2[(PostgreSQL)]
-        
+
         LB2 --> Server2A
         LB2 --> Server2B
         LB2 --> Server2C
-        
+
         Server2A --> Cache
         Server2B --> Cache
         Server2C --> Cache
-        
+
         Server2A --> DB2
         Server2B --> DB2
         Server2C --> DB2
     end
-    
+
     subgraph "Option 3: Containerized"
         K8S[Kubernetes Cluster]
         Pods[Multiple Pods]
         PersistentStorage[Persistent Storage]
-        
+
         K8S --> Pods
         Pods --> PersistentStorage
     end
@@ -155,20 +155,20 @@ class Settings:
     APP_NAME: str = config("APP_NAME", default="aerospace-mcp")
     APP_ENV: str = config("APP_ENV", default="development")
     DEBUG: bool = config("DEBUG", default=False, cast=bool)
-    
+
     # Server
     HOST: str = config("HOST", default="127.0.0.1")
     PORT: int = config("PORT", default=8000, cast=int)
     WORKERS: int = config("WORKERS", default=1, cast=int)
-    
+
     # Security
     SECRET_KEY: str = config("SECRET_KEY")
     ALLOWED_HOSTS: List[str] = config("ALLOWED_HOSTS", default="", cast=lambda v: [i.strip() for i in v.split(',')] if v else [])
-    
+
     # Database
     DATABASE_URL: str = config("DATABASE_URL", default="sqlite:///./aerospace.db")
     REDIS_URL: str = config("REDIS_URL", default="redis://localhost:6379/0")
-    
+
     # Rate Limiting
     RATE_LIMIT_ENABLED: bool = config("RATE_LIMIT_ENABLED", default=True, cast=bool)
     RATE_LIMIT_PER_MINUTE: int = config("RATE_LIMIT_PER_MINUTE", default=60, cast=int)
@@ -279,7 +279,7 @@ services:
   nginx:
     image: nginx:alpine
     ports:
-      - "80:80" 
+      - "80:80"
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
@@ -574,29 +574,29 @@ security = HTTPBearer()
 class APIKeyAuth:
     def __init__(self, valid_keys: dict):
         self.valid_keys = valid_keys  # {key_id: key_secret}
-    
+
     def verify_api_key(self, credentials: HTTPAuthorizationCredentials = Security(security)):
         """Verify API key from Authorization header."""
         try:
             # Expected format: "Bearer key_id:signature:timestamp"
             token = credentials.credentials
             parts = token.split(':')
-            
+
             if len(parts) != 3:
                 raise HTTPException(status_code=401, detail="Invalid token format")
-            
+
             key_id, signature, timestamp = parts
-            
+
             # Check if key exists
             if key_id not in self.valid_keys:
                 raise HTTPException(status_code=401, detail="Invalid API key")
-            
+
             # Check timestamp (prevent replay attacks)
             current_time = int(time.time())
             request_time = int(timestamp)
             if abs(current_time - request_time) > 300:  # 5 minutes
                 raise HTTPException(status_code=401, detail="Token expired")
-            
+
             # Verify signature
             secret = self.valid_keys[key_id]
             expected_sig = hmac.new(
@@ -604,12 +604,12 @@ class APIKeyAuth:
                 f"{key_id}:{timestamp}".encode(),
                 hashlib.sha256
             ).hexdigest()
-            
+
             if not hmac.compare_digest(signature, expected_sig):
                 raise HTTPException(status_code=401, detail="Invalid signature")
-            
+
             return {"key_id": key_id, "timestamp": timestamp}
-            
+
         except Exception as e:
             raise HTTPException(status_code=401, detail="Authentication failed")
 
@@ -680,7 +680,7 @@ class SecurePlanRequest(BaseModel):
     cruise_alt_ft: int = Field(35000, ge=8000, le=45000)
     mass_kg: Optional[float] = Field(None, gt=1000, lt=1000000)  # Reasonable aircraft mass range
     route_step_km: float = Field(25.0, gt=1.0, le=1000.0)
-    
+
     @validator('depart_city', 'arrive_city')
     def validate_city_names(cls, v):
         # Additional sanitization
@@ -718,12 +718,12 @@ def get_client_id(request: Request):
             return f"api_key:{key_id}"
         except:
             pass
-    
+
     # Fall back to IP address
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
         return f"ip:{forwarded_for.split(',')[0].strip()}"
-    
+
     return f"ip:{request.client.host}"
 
 limiter = Limiter(key_func=get_client_id, storage_uri="redis://localhost:6379")
@@ -771,7 +771,7 @@ from config import settings
 
 def setup_logging():
     """Configure structured JSON logging."""
-    
+
     # Create custom formatter
     logHandler = logging.StreamHandler(sys.stdout)
     formatter = jsonlogger.JsonFormatter(
@@ -779,12 +779,12 @@ def setup_logging():
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     logHandler.setFormatter(formatter)
-    
+
     # Configure root logger
     logger = logging.getLogger()
     logger.addHandler(logHandler)
     logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper()))
-    
+
     return logger
 
 # Usage in main.py
@@ -813,9 +813,9 @@ app = FastAPI(lifespan=lifespan)
 async def log_requests(request: Request, call_next):
     """Log all HTTP requests."""
     start_time = time.time()
-    
+
     response = await call_next(request)
-    
+
     process_time = time.time() - start_time
     logger.info("HTTP request processed", extra={
         "method": request.method,
@@ -825,7 +825,7 @@ async def log_requests(request: Request, call_next):
         "user_agent": request.headers.get("user-agent"),
         "remote_addr": request.client.host
     })
-    
+
     return response
 ```
 
@@ -848,9 +848,9 @@ ACTIVE_CONNECTIONS = Gauge('active_connections', 'Active connections')
 async def metrics_middleware(request: Request, call_next):
     """Collect request metrics."""
     start_time = time.time()
-    
+
     response = await call_next(request)
-    
+
     # Record metrics
     duration = time.time() - start_time
     REQUEST_COUNT.labels(
@@ -858,12 +858,12 @@ async def metrics_middleware(request: Request, call_next):
         endpoint=request.url.path,
         status=response.status_code
     ).inc()
-    
+
     REQUEST_DURATION.labels(
         method=request.method,
         endpoint=request.url.path
     ).observe(duration)
-    
+
     return response
 
 @app.get("/metrics")
@@ -884,7 +884,7 @@ from typing import Dict, Any
 async def detailed_health_check() -> Dict[str, Any]:
     """Comprehensive health check."""
     start_time = time.time()
-    
+
     health_data = {
         "status": "ok",
         "timestamp": int(time.time()),
@@ -892,14 +892,14 @@ async def detailed_health_check() -> Dict[str, Any]:
         "environment": settings.APP_ENV,
         "checks": {}
     }
-    
+
     # Check OpenAP availability
     try:
         import openap
         health_data["checks"]["openap"] = {"status": "ok", "version": openap.__version__}
     except ImportError:
         health_data["checks"]["openap"] = {"status": "unavailable", "error": "Module not installed"}
-    
+
     # Check database connectivity
     try:
         # Test database connection
@@ -908,7 +908,7 @@ async def detailed_health_check() -> Dict[str, Any]:
     except Exception as e:
         health_data["checks"]["database"] = {"status": "error", "error": str(e)}
         health_data["status"] = "degraded"
-    
+
     # Check Redis connectivity
     try:
         # Test Redis connection
@@ -917,7 +917,7 @@ async def detailed_health_check() -> Dict[str, Any]:
     except Exception as e:
         health_data["checks"]["redis"] = {"status": "error", "error": str(e)}
         health_data["status"] = "degraded"
-    
+
     # System metrics
     health_data["system"] = {
         "cpu_percent": psutil.cpu_percent(),
@@ -925,15 +925,15 @@ async def detailed_health_check() -> Dict[str, Any]:
         "disk_percent": psutil.disk_usage('/').percent,
         "load_average": psutil.getloadavg() if hasattr(psutil, 'getloadavg') else None
     }
-    
+
     # Response time
     health_data["response_time"] = time.time() - start_time
-    
+
     # Overall status determination
     if any(check.get("status") == "error" for check in health_data["checks"].values()):
         health_data["status"] = "error"
         raise HTTPException(status_code=503, detail=health_data)
-    
+
     return health_data
 
 @app.get("/health/detailed")
@@ -1015,7 +1015,7 @@ backend aerospace_backend
     balance roundrobin
     option httpchk GET /health
     http-check expect status 200
-    
+
     server app1 10.0.1.10:8000 check inter 30s rise 2 fall 3
     server app2 10.0.1.11:8000 check inter 30s rise 2 fall 3
     server app3 10.0.1.12:8000 check inter 30s rise 2 fall 3
@@ -1040,18 +1040,18 @@ def cache_response(ttl: int = 3600):
         async def wrapper(*args, **kwargs):
             # Generate cache key from function name and arguments
             cache_key = generate_cache_key(func.__name__, args, kwargs)
-            
+
             # Try to get from cache
             cached_result = redis_client.get(cache_key)
             if cached_result:
                 return json.loads(cached_result)
-            
+
             # Execute function
             result = await func(*args, **kwargs)
-            
+
             # Cache the result
             redis_client.setex(cache_key, ttl, json.dumps(result, default=str))
-            
+
             return result
         return wrapper
     return decorator
@@ -1157,13 +1157,13 @@ echo "Backup completed at $(date)" >> $LOG_FILE
    ```bash
    # Restore from backup
    cd /opt/aerospace-mcp
-   
+
    # Restore database
    gunzip -c /backups/database_latest.sql.gz | psql $DATABASE_URL
-   
+
    # Restore configuration
    tar -xzf /backups/config_latest.tar.gz -C /
-   
+
    # Restart services
    sudo systemctl restart aerospace-mcp
    sudo systemctl restart nginx

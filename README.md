@@ -6,14 +6,14 @@
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A comprehensive flight planning service providing both HTTP API and Model Context Protocol (MCP) integration for aerospace operations. Features intelligent airport resolution, great-circle route calculation, and aircraft performance estimation using OpenAP.
+A comprehensive aerospace research and flight planning service providing both HTTP API and Model Context Protocol (MCP) integration. Features intelligent airport resolution, great-circle route calculation, aircraft performance estimation, atmospheric modeling, coordinate frame transformations, aerodynamic analysis, propeller performance modeling, rocket trajectory optimization, orbital mechanics calculations, and spacecraft trajectory planning for aerospace operations.
 
 ## ⚠️ SAFETY DISCLAIMER
 
 **THIS SOFTWARE IS FOR EDUCATIONAL, RESEARCH, AND DEVELOPMENT PURPOSES ONLY**
 
 - **NOT FOR REAL NAVIGATION**: Do not use for actual flight planning or navigation
-- **NOT CERTIFIED**: This system is not certified by any aviation authority  
+- **NOT CERTIFIED**: This system is not certified by any aviation authority
 - **ESTIMATES ONLY**: Performance calculations are theoretical estimates
 - **NO WEATHER DATA**: Does not account for weather, NOTAMs, or airspace restrictions
 - **NO LIABILITY**: Authors assume no responsibility for any consequences of use
@@ -89,8 +89,21 @@ Add to your Claude Desktop configuration:
 - **Airport Resolution**: Intelligent city-to-airport mapping with 28,000+ airports worldwide
 - **Route Planning**: Great-circle distance calculation with geodesic precision
 - **Performance Estimation**: Aircraft-specific fuel and time calculations via OpenAP
+- **Atmospheric Modeling**: ISA atmosphere profiles with optional enhanced precision
+- **Coordinate Transformations**: ECEF, ECI, geodetic frame conversions for aerospace analysis
 - **Multiple Interfaces**: HTTP REST API and Model Context Protocol (MCP) support
 - **Real-time Processing**: Sub-second response times for flight planning requests
+
+### Space & Orbital Mechanics Capabilities
+
+- 🛰️ **Orbital Elements & State Vectors**: Convert between Keplerian elements and Cartesian state vectors
+- 🌍 **Orbit Propagation**: Numerical integration with J2 perturbations using RK4 method
+- 🗺️ **Ground Track Computation**: Calculate satellite ground tracks for mission planning
+- 🔄 **Hohmann Transfers**: Calculate optimal two-impulse orbital transfers
+- 🤝 **Orbital Rendezvous**: Plan multi-maneuver rendezvous sequences
+- 🎯 **Trajectory Optimization**: Genetic algorithms and particle swarm optimization
+- 📊 **Uncertainty Analysis**: Monte Carlo sampling for trajectory robustness assessment
+- 🚀 **Lambert Problem**: Two-body trajectory determination for given time-of-flight
 
 ### Supported Operations
 
@@ -101,6 +114,30 @@ Add to your Claude Desktop configuration:
 - ✅ Great-circle distance calculations
 - ✅ Multi-leg journey planning
 - ✅ Aircraft comparison analysis
+- ✅ Atmospheric profile calculation (ISA standard atmosphere)
+- ✅ Wind profile modeling (logarithmic/power law)
+- ✅ Coordinate frame transformations (ECEF, ECI, geodetic)
+- ✅ Wing aerodynamics analysis (VLM, lifting line theory)
+- ✅ Airfoil polar generation and database access
+- ✅ Aircraft stability derivatives calculation  
+- ✅ Propeller performance analysis (BEMT)
+- ✅ UAV energy optimization and endurance estimation
+- ✅ Motor-propeller matching analysis
+- ✅ 3DOF rocket trajectory simulation with atmosphere integration
+- ✅ Rocket sizing estimation for mission planning
+- ✅ Launch angle optimization for maximum performance
+- ✅ Thrust profile optimization using gradient descent
+- ✅ Trajectory sensitivity analysis for design studies
+- ✅ System capability discovery and status reporting
+- ✅ **Orbital mechanics calculations** (Keplerian elements, state vectors, propagation)
+- ✅ **Ground track computation** for satellite tracking and visualization
+- ✅ **Hohmann transfer planning** for orbital maneuvers and mission design
+- ✅ **Orbital rendezvous planning** for spacecraft proximity operations  
+- ✅ **Trajectory optimization** using genetic algorithms and particle swarm optimization
+- ✅ **Monte Carlo uncertainty analysis** for trajectory robustness assessment
+- ✅ **Lambert problem solving** for two-body trajectory determination
+- ✅ **Porkchop plot generation** for interplanetary transfer opportunity analysis
+- ✅ **Optional SPICE integration** with fallback to simplified ephemeris models
 
 ### Technical Features
 
@@ -142,6 +179,11 @@ source .venv/bin/activate  # Linux/macOS
 uv add fastapi uvicorn[standard] airportsdata geographiclib pydantic
 uv add openap  # Optional: for performance estimates
 uv add mcp     # Optional: for MCP server functionality
+
+# Install optional aerospace analysis dependencies
+uv add --optional-dependencies atmosphere  # Ambiance for enhanced ISA
+uv add --optional-dependencies space      # Astropy for coordinate frames
+uv add --optional-dependencies all        # All optional dependencies
 
 # Install development dependencies (optional)
 uv add --dev pytest httpx black isort mypy pre-commit
@@ -297,7 +339,7 @@ curl -X POST "http://localhost:8000/plan" \
   -H "Content-Type: application/json" \
   -d '{
     "depart_city": "Los Angeles",
-    "arrive_city": "Tokyo", 
+    "arrive_city": "Tokyo",
     "prefer_depart_iata": "LAX",
     "prefer_arrive_iata": "NRT",
     "ac_type": "B777",
@@ -319,7 +361,7 @@ import json
 class AerospaceClient:
     def __init__(self, base_url="http://localhost:8000"):
         self.base_url = base_url
-    
+
     def plan_flight(self, departure, arrival, aircraft="A320", altitude=35000):
         """Plan a flight between two cities."""
         response = requests.post(f"{self.base_url}/plan", json={
@@ -330,7 +372,7 @@ class AerospaceClient:
             "backend": "openap"
         })
         return response.json()
-    
+
     def find_airports(self, city, country=None):
         """Find airports in a city."""
         params = {"city": city}
@@ -366,7 +408,7 @@ async def plan_multiple_flights(flights: List[Dict]) -> List[Dict]:
         for flight in flights:
             task = plan_single_flight(session, flight)
             tasks.append(task)
-        
+
         results = await asyncio.gather(*tasks, return_exceptions=True)
         return results
 
@@ -392,6 +434,122 @@ for i, result in enumerate(results):
         print(f"Flight {i+1}: {result['distance_nm']:.0f} NM, {result['estimates']['block']['time_min']:.0f} min")
 ```
 
+### Orbital Mechanics Examples
+
+#### Python Examples
+
+```python
+import requests
+
+class OrbitalMechanicsClient:
+    def __init__(self, base_url="http://localhost:8000"):
+        self.base_url = base_url
+
+    def plan_hohmann_transfer(self, r1_km, r2_km):
+        """Calculate Hohmann transfer between two circular orbits."""
+        response = requests.post(f"{self.base_url}/hohmann_transfer", json={
+            "r1_m": r1_km * 1000,  # Convert to meters
+            "r2_m": r2_km * 1000
+        })
+        return response.json()
+
+    def propagate_satellite_orbit(self, elements, duration_hours):
+        """Propagate satellite orbit with J2 perturbations."""
+        response = requests.post(f"{self.base_url}/propagate_orbit_j2", json={
+            "initial_state": elements,
+            "time_span_s": duration_hours * 3600,
+            "time_step_s": 300  # 5-minute steps
+        })
+        return response.json()
+
+# Example usage
+client = OrbitalMechanicsClient()
+
+# Plan a GTO to GEO transfer
+gto_alt = 200    # km (perigee)
+geo_alt = 35786  # km (GEO altitude)
+
+transfer = client.plan_hohmann_transfer(
+    6378 + gto_alt,  # Earth radius + altitude
+    6378 + geo_alt
+)
+
+print(f"Transfer Delta-V: {transfer['delta_v_total_ms']/1000:.2f} km/s")
+print(f"Transfer Time: {transfer['transfer_time_h']:.1f} hours")
+
+# Propagate ISS orbit for one day
+iss_elements = {
+    "semi_major_axis_m": 6793000,  # ~415 km altitude
+    "eccentricity": 0.0001,
+    "inclination_deg": 51.6,
+    "raan_deg": 0.0,
+    "arg_periapsis_deg": 0.0,
+    "true_anomaly_deg": 0.0,
+    "epoch_utc": "2024-01-01T12:00:00"
+}
+
+orbit_states = client.propagate_satellite_orbit(iss_elements, 24)
+print(f"Propagated {len(orbit_states)} orbital states over 24 hours")
+```
+
+#### Trajectory Optimization Example
+
+```python
+# Optimize a lunar transfer trajectory
+def optimize_lunar_transfer():
+    initial_trajectory = [
+        {
+            "time_s": 0,
+            "position_m": [6700000, 0, 0],      # LEO
+            "velocity_ms": [0, 7500, 0]
+        },
+        {
+            "time_s": 86400 * 3,  # 3 days
+            "position_m": [384400000, 0, 0],    # Moon distance
+            "velocity_ms": [0, 1000, 0]
+        }
+    ]
+    
+    response = requests.post("http://localhost:8000/genetic_algorithm_optimization", json={
+        "initial_trajectory": initial_trajectory,
+        "objective": "minimize_delta_v",
+        "constraints": {
+            "max_thrust_n": 50000,
+            "max_acceleration_ms2": 10
+        }
+    })
+    
+    result = response.json()
+    print(f"Optimized Delta-V: {result['total_delta_v_ms']/1000:.2f} km/s")
+    print(f"Flight Time: {result['flight_time_s']/86400:.1f} days")
+    return result
+
+optimized_trajectory = optimize_lunar_transfer()
+
+# Generate porkchop plot for Mars mission planning
+def plan_mars_mission():
+    response = requests.post("http://localhost:8000/porkchop_plot_analysis", json={
+        "departure_body": "Earth",
+        "arrival_body": "Mars", 
+        "min_tof_days": 200,
+        "max_tof_days": 300
+    })
+    
+    analysis = response.json()
+    
+    if analysis["summary_statistics"]["feasible_transfers"] > 0:
+        optimal = analysis["optimal_transfer"]
+        print(f"Optimal Mars Transfer:")
+        print(f"  Launch: {optimal['departure_date']}")
+        print(f"  Arrival: {optimal['arrival_date']}")
+        print(f"  C3: {optimal['c3_km2_s2']:.2f} km²/s²")
+        print(f"  Flight Time: {optimal['time_of_flight_days']:.0f} days")
+    else:
+        print("No feasible transfers found in date range")
+
+plan_mars_mission()
+```
+
 ### JavaScript/TypeScript Examples
 
 ```typescript
@@ -412,18 +570,18 @@ class AerospaceAPI {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
     });
-    
+
     if (!response.ok) {
       throw new Error(`API Error: ${response.statusText}`);
     }
-    
+
     return await response.json();
   }
 
   async findAirports(city: string, country?: string) {
     const params = new URLSearchParams({ city });
     if (country) params.append("country", country);
-    
+
     const response = await fetch(`${this.baseUrl}/airports/by_city?${params}`);
     return await response.json();
   }
@@ -440,7 +598,7 @@ try {
     cruise_alt_ft: 36000,
     backend: "openap"
   });
-  
+
   console.log(`Flight planned: ${plan.distance_nm} NM`);
   console.log(`Estimated time: ${plan.estimates.block.time_min} minutes`);
 } catch (error) {
@@ -456,22 +614,22 @@ try {
 graph TB
     Users[Users/Clients] --> API[FastAPI REST API]
     Users --> MCP[MCP Server]
-    
+
     API --> Core[Core Services]
     MCP --> Core
-    
+
     subgraph "Core Services"
         Airport[Airport Resolution]
-        Route[Route Calculation] 
+        Route[Route Calculation]
         Perf[Performance Estimation]
     end
-    
+
     subgraph "Data Sources"
         AirportDB[Airport Database<br/>28,000+ airports]
         OpenAP[OpenAP Models<br/>190+ aircraft]
         Geodesic[GeographicLib<br/>WGS84 calculations]
     end
-    
+
     Airport --> AirportDB
     Route --> Geodesic
     Perf --> OpenAP
@@ -521,7 +679,7 @@ graph TB
 ### Optimization Tips
 
 1. **Route Resolution**: Use larger `route_step_km` values for faster processing
-2. **Caching**: Implement client-side caching for repeated requests  
+2. **Caching**: Implement client-side caching for repeated requests
 3. **Batch Processing**: Use async clients for multiple concurrent requests
 4. **Memory**: Increase available RAM for better OpenAP performance
 
@@ -613,7 +771,34 @@ Error responses include detailed messages:
 | `plan_flight` | Complete flight planning | `departure`, `arrival`, `aircraft`, `route_options` |
 | `calculate_distance` | Great-circle distance | `origin`, `destination`, `step_km` |
 | `get_aircraft_performance` | Performance estimates | `aircraft_type`, `distance_km`, `cruise_altitude` |
-| `get_system_status` | System health check | None |
+| `get_atmosphere_profile` | ISA atmosphere conditions | `altitudes_m`, `model_type` |
+| `wind_model_simple` | Wind profile calculation | `altitudes_m`, `surface_wind_mps`, `model` |
+| `transform_frames` | Coordinate transformations | `xyz`, `from_frame`, `to_frame`, `epoch_iso` |
+| `geodetic_to_ecef` | Lat/lon to ECEF conversion | `latitude_deg`, `longitude_deg`, `altitude_m` |
+| `ecef_to_geodetic` | ECEF to lat/lon conversion | `x`, `y`, `z` |
+| `wing_vlm_analysis` | Wing aerodynamics analysis (VLM) | `geometry`, `alpha_deg_list`, `mach` |
+| `airfoil_polar_analysis` | Airfoil polar generation | `airfoil_name`, `alpha_deg_list`, `reynolds`, `mach` |
+| `calculate_stability_derivatives` | Stability derivatives calculation | `geometry`, `alpha_deg`, `mach` |
+| `propeller_bemt_analysis` | Propeller performance (BEMT) | `geometry`, `rpm_list`, `velocity_ms`, `altitude_m` |
+| `uav_energy_estimate` | UAV endurance and energy analysis | `uav_config`, `battery_config`, `mission_profile` |
+| `get_airfoil_database` | Available airfoil coefficients | None |
+| `get_propeller_database` | Available propeller data | None |
+| `rocket_3dof_trajectory` | 3DOF rocket trajectory simulation | `geometry`, `dt_s`, `max_time_s`, `launch_angle_deg` |
+| `estimate_rocket_sizing` | Rocket sizing for mission requirements | `target_altitude_m`, `payload_mass_kg`, `propellant_type` |
+| `optimize_launch_angle` | Launch angle optimization | `geometry`, `objective`, `angle_bounds` |
+| `optimize_thrust_profile` | Thrust profile optimization | `geometry`, `burn_time_s`, `total_impulse_target`, `n_segments`, `objective` |
+| `trajectory_sensitivity_analysis` | Parameter sensitivity analysis | `base_geometry`, `parameter_variations`, `objective` |
+| `get_system_status` | System health and capabilities | None |
+| `elements_to_state_vector` | Convert orbital elements to state vector | `elements` |
+| `state_vector_to_elements` | Convert state vector to orbital elements | `state_vector` |
+| `propagate_orbit_j2` | Propagate orbit with J2 perturbations | `initial_state`, `time_span_s`, `time_step_s` |
+| `calculate_ground_track` | Calculate satellite ground track | `orbit_states`, `time_step_s` |
+| `hohmann_transfer` | Calculate Hohmann transfer orbit | `r1_m`, `r2_m` |
+| `orbital_rendezvous_planning` | Plan orbital rendezvous maneuvers | `chaser_elements`, `target_elements` |
+| `genetic_algorithm_optimization` | Trajectory optimization using GA | `initial_trajectory`, `objective`, `constraints` |
+| `particle_swarm_optimization` | Trajectory optimization using PSO | `initial_trajectory`, `objective`, `constraints` |
+| `monte_carlo_uncertainty_analysis` | Monte Carlo trajectory uncertainty analysis | `trajectory`, `uncertainty_params`, `num_samples` |
+| `porkchop_plot_analysis` | Generate porkchop plot for interplanetary transfers | `departure_body`, `arrival_body`, `departure_dates`, `arrival_dates`, `min_tof_days`, `max_tof_days` |
 
 ### Claude Desktop Setup
 

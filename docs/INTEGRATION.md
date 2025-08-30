@@ -287,7 +287,7 @@ class AerospaceMCP {
   async findAirports(city: string, country?: string): Promise<Airport[]> {
     const params = new URLSearchParams({ city });
     if (country) params.append("country", country);
-    
+
     const response = await fetch(`${this.baseUrl}/airports/by_city?${params}`);
     return response.json();
   }
@@ -439,12 +439,12 @@ class RateLimitedClient:
         # Rate limiting logic
         current_time = time.time()
         time_since_last = current_time - self.last_request
-        
+
         if time_since_last < self.min_interval:
             await asyncio.sleep(self.min_interval - time_since_last)
-        
+
         self.last_request = time.time()
-        
+
         # Make the actual request
         # Implementation depends on your HTTP client
         pass
@@ -467,7 +467,7 @@ async def plan_multiple_flights(flight_requests: list) -> list:
             tasks.append(task)
             # Add small delay to avoid overwhelming the server
             await asyncio.sleep(0.1)
-        
+
         return await asyncio.gather(*tasks, return_exceptions=True)
 
 async def plan_single_flight(session, request):
@@ -498,27 +498,27 @@ class CachedFlightPlanner:
     def __init__(self, redis_url="redis://localhost:6379"):
         self.redis = redis.from_url(redis_url)
         self.base_url = "http://localhost:8000"
-    
+
     def _cache_key(self, request_data: dict) -> str:
         """Generate cache key from request parameters."""
         request_str = json.dumps(request_data, sort_keys=True)
         return f"flight_plan:{hashlib.md5(request_str.encode()).hexdigest()}"
-    
+
     def plan_flight(self, request_data: dict, cache_ttl: int = 3600):
         """Plan flight with Redis caching."""
         cache_key = self._cache_key(request_data)
-        
+
         # Check cache first
         cached_result = self.redis.get(cache_key)
         if cached_result:
             return json.loads(cached_result)
-        
+
         # Make API request
         response = requests.post(
             f"{self.base_url}/plan",
             json=request_data
         )
-        
+
         if response.status_code == 200:
             result = response.json()
             # Cache the result
@@ -636,13 +636,13 @@ def check_service_health():
     try:
         response = requests.get("http://localhost:8000/health", timeout=5)
         health_data = response.json()
-        
+
         if health_data["status"] != "ok":
             raise Exception("Service unhealthy")
-            
+
         if not health_data["openap"]:
             print("Warning: OpenAP not available")
-            
+
         return True
     except Exception as e:
         print(f"Health check failed: {e}")

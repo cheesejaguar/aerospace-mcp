@@ -9,13 +9,59 @@ on:
 permissions:
   contents: read
 
+# Optimize for speed with concurrency groups
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Cache key for uv
+  UV_CACHE_DIR: /tmp/.uv-cache
+  # Faster test execution
+  PYTEST_XDIST_WORKER_COUNT: auto
+
 jobs:
+  # Quick pre-checks that fail fast
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v2
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+
+    - name: Set up Python
+      run: uv python install 3.11
+
+    - name: Cache uv
+      uses: actions/cache@v4
+      with:
+        path: /tmp/.uv-cache
+        key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+        restore-keys: |
+          uv-${{ runner.os }}-
+
+    - name: Install dependencies (minimal for linting)
+      run: uv sync --dev --no-install-project
+
+    - name: Run ruff linter (fast fail)
+      run: uv run ruff check --output-format=github .
+
+    - name: Run ruff formatter (fast fail) 
+      run: uv run ruff format --check .
+
   test:
     runs-on: ubuntu-latest
+    needs: pre-commit
     strategy:
-      fail-fast: false
+      fail-fast: true  # Changed to fail-fast for speed
       matrix:
         python-version: ["3.11", "3.12"]
+        # Parallelize test groups for speed
+        test-group: ["unit", "integration"]
 
     steps:
     - uses: actions/checkout@v4
@@ -23,29 +69,53 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v2
       with:
-        # Install a specific version of uv.
-        version: "0.4.15"
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
 
     - name: Set up Python ${{ matrix.python-version }}
       run: uv python install ${{ matrix.python-version }}
 
-    - name: Install dependencies
+    - name: Cache uv
+      uses: actions/cache@v4
+      with:
+        path: /tmp/.uv-cache
+        key: uv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('uv.lock') }}
+        restore-keys: |
+          uv-${{ runner.os }}-${{ matrix.python-version }}-
+          uv-${{ runner.os }}-
+
+    - name: Install dependencies (with cache)
       run: uv sync --all-extras --dev
 
-    - name: Run ruff linter
-      run: uv run ruff check --output-format=github .
-
-    - name: Run ruff formatter
-      run: uv run ruff format --check .
-
-    - name: Run mypy
+    - name: Run mypy (parallel with tests)
+      if: matrix.python-version == '3.11' && matrix.test-group == 'unit'
       run: uv run mypy .
       continue-on-error: true
 
-    - name: Run tests with pytest
-      run: uv run pytest tests/ -v --cov=aerospace_mcp --cov-report=xml --cov-report=html
+    - name: Run unit tests
+      if: matrix.test-group == 'unit'
+      run: |
+        uv run pytest tests/ -v \
+          --cov=aerospace_mcp \
+          --cov-report=xml \
+          --cov-report=html \
+          --maxfail=3 \
+          --tb=short \
+          -n auto \
+          --dist=loadscope \
+          -x
+
+    - name: Run integration tests  
+      if: matrix.test-group == 'integration'
+      run: |
+        uv run pytest tests/test_mcp.py tests/test_health.py -v \
+          --maxfail=1 \
+          --tb=short \
+          -n 2 \
+          -x
 
     - name: Upload coverage reports to Codecov
+      if: matrix.python-version == '3.11' && matrix.test-group == 'unit'
       uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
@@ -55,17 +125,71 @@ jobs:
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  # Parallel security and docker builds for speed
+  security:
+    runs-on: ubuntu-latest
+    needs: pre-commit  # Run in parallel with tests
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v2
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+
+    - name: Set up Python
+      run: uv python install 3.11
+
+    - name: Cache uv
+      uses: actions/cache@v4
+      with:
+        path: /tmp/.uv-cache
+        key: uv-security-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+        restore-keys: |
+          uv-${{ runner.os }}-
+
+    - name: Install dependencies (minimal for security)
+      run: uv sync --dev --no-install-project
+
+    - name: Run bandit security checks
+      run: |
+        uv add bandit[toml]
+        uv run bandit -r aerospace_mcp/ -f json -o bandit-report.json
+      continue-on-error: true
+
+    - name: Run safety checks  
+      run: |
+        uv add safety
+        uv run safety check --json --output safety-report.json
+      continue-on-error: true
+
+    - name: Upload security reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: security-reports-${{ github.run_id }}
+        path: |
+          bandit-report.json
+          safety-report.json
+        retention-days: 7
+
   build-docker:
     runs-on: ubuntu-latest
-    needs: test
+    needs: pre-commit  # Run in parallel with tests
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'test-docker')
 
     steps:
     - uses: actions/checkout@v4
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
+      with:
+        driver-opts: |
+          network=host
 
-    - name: Build Docker image
+    - name: Build Docker image (with aggressive caching)
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -73,37 +197,31 @@ jobs:
         tags: aerospace-mcp:latest
         cache-from: type=gha
         cache-to: type=gha,mode=max
+        platforms: linux/amd64  # Single platform for speed
+        load: true
 
-  security:
+    - name: Quick smoke test of Docker image
+      run: |
+        docker run --rm aerospace-mcp:latest python -c "import aerospace_mcp; print('✅ Import successful')"
+
+  # Summary job for required checks
+  ci-success:
     runs-on: ubuntu-latest
-
+    needs: [pre-commit, test, security]
+    if: always()
+    
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Install uv
-      uses: astral-sh/setup-uv@v2
-      with:
-        version: "0.4.15"
-
-    - name: Set up Python
-      run: uv python install 3.11
-
-    - name: Install dependencies
-      run: uv sync --all-extras --dev
-
-    - name: Run bandit security checks
-      run: uv run bandit -r aerospace_mcp/ -f json -o bandit-report.json
-      continue-on-error: true
-
-    - name: Run safety checks
-      run: uv run safety check --json --output safety-report.json
-      continue-on-error: true
-
-    - name: Upload security reports
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: security-reports
-        path: |
-          bandit-report.json
-          safety-report.json
+    - name: Check all jobs status
+      run: |
+        if [[ "${{ needs.pre-commit.result }}" == "success" && 
+              "${{ needs.test.result }}" == "success" && 
+              "${{ needs.security.result }}" == "success" ]]; then
+          echo "✅ All CI checks passed!"
+          exit 0
+        else
+          echo "❌ Some CI checks failed:"
+          echo "Pre-commit: ${{ needs.pre-commit.result }}"
+          echo "Test: ${{ needs.test.result }}" 
+          echo "Security: ${{ needs.security.result }}"
+          exit 1
+        fi

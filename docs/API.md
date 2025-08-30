@@ -39,7 +39,7 @@ Represents an airport with geographic and identification data.
 ```typescript
 interface Airport {
   iata: string;           // IATA airport code (e.g., "SFO")
-  icao: string;           // ICAO airport code (e.g., "KSFO")  
+  icao: string;           // ICAO airport code (e.g., "KSFO")
   name: string;           // Full airport name
   city: string;           // City name
   country: string;        // ISO country code (e.g., "US")
@@ -53,7 +53,7 @@ interface Airport {
 ```json
 {
   "iata": "SFO",
-  "icao": "KSFO", 
+  "icao": "KSFO",
   "name": "San Francisco International Airport",
   "city": "San Francisco",
   "country": "US",
@@ -72,7 +72,7 @@ interface PlanRequest {
   depart_city: string;              // Departure city name
   arrive_city: string;              // Arrival city name
   depart_country?: string;          // ISO country code for departure
-  arrive_country?: string;          // ISO country code for arrival  
+  arrive_country?: string;          // ISO country code for arrival
   prefer_depart_iata?: string;      // Force specific departure airport
   prefer_arrive_iata?: string;      // Force specific arrival airport
   ac_type: string;                  // ICAO aircraft type (e.g., "A320")
@@ -120,7 +120,7 @@ interface PlanResponse {
       fuel_kg: number;
     };
     climb: SegmentEstimate;                 // Climb phase
-    cruise: SegmentEstimate;                // Cruise phase  
+    cruise: SegmentEstimate;                // Cruise phase
     descent: SegmentEstimate;               // Descent phase
     assumptions: {
       zero_wind: boolean;                   // Wind assumptions
@@ -181,7 +181,7 @@ Find airports by city name with optional country filtering.
 # Find airports in San Francisco
 curl "http://localhost:8000/airports/by_city?city=San%20Francisco"
 
-# Find airports in London, UK specifically  
+# Find airports in London, UK specifically
 curl "http://localhost:8000/airports/by_city?city=London&country=GB"
 
 # Find airports in Paris, France
@@ -194,7 +194,7 @@ curl "http://localhost:8000/airports/by_city?city=Paris&country=FR"
   {
     "iata": "SFO",
     "icao": "KSFO",
-    "name": "San Francisco International Airport", 
+    "name": "San Francisco International Airport",
     "city": "San Francisco",
     "country": "US",
     "lat": 37.621311,
@@ -202,11 +202,11 @@ curl "http://localhost:8000/airports/by_city?city=Paris&country=FR"
     "tz": "America/Los_Angeles"
   },
   {
-    "iata": "OAK", 
+    "iata": "OAK",
     "icao": "KOAK",
     "name": "Oakland International Airport",
     "city": "Oakland",
-    "country": "US", 
+    "country": "US",
     "lat": 37.721278,
     "lon": -122.22075,
     "tz": "America/Los_Angeles"
@@ -235,7 +235,7 @@ curl -X POST "http://localhost:8000/plan" \
   -H "Content-Type: application/json" \
   -d '{
     "depart_city": "New York",
-    "arrive_city": "Los Angeles", 
+    "arrive_city": "Los Angeles",
     "ac_type": "A320",
     "cruise_alt_ft": 37000,
     "route_step_km": 50.0,
@@ -250,7 +250,7 @@ curl -X POST "http://localhost:8000/plan" \
   -d '{
     "depart_city": "New York",
     "arrive_city": "Los Angeles",
-    "prefer_depart_iata": "JFK", 
+    "prefer_depart_iata": "JFK",
     "prefer_arrive_iata": "LAX",
     "ac_type": "B737",
     "cruise_alt_ft": 35000,
@@ -268,7 +268,7 @@ curl -X POST "http://localhost:8000/plan" \
     "iata": "JFK",
     "icao": "KJFK",
     "name": "John F Kennedy International Airport",
-    "city": "New York", 
+    "city": "New York",
     "country": "US",
     "lat": 40.641766,
     "lon": -73.780968,
@@ -276,7 +276,7 @@ curl -X POST "http://localhost:8000/plan" \
   },
   "arrive": {
     "iata": "LAX",
-    "icao": "KLAX", 
+    "icao": "KLAX",
     "name": "Los Angeles International Airport",
     "city": "Los Angeles",
     "country": "US",
@@ -305,7 +305,7 @@ curl -X POST "http://localhost:8000/plan" \
       "fuel_kg": 1876.2
     },
     "cruise": {
-      "time_min": 285.1, 
+      "time_min": 285.1,
       "distance_km": 3821.7,
       "avg_gs_kts": 459.8,
       "fuel_kg": 5894.3
@@ -358,7 +358,7 @@ interface ErrorResponse {
 
 **Common triggers**:
 - Invalid IATA code
-- Identical departure and arrival cities  
+- Identical departure and arrival cities
 - Aircraft type not recognized
 - Altitude outside valid range
 - Invalid route step size
@@ -379,7 +379,7 @@ interface ErrorResponse {
 - Misspelled city names
 - Very small cities without commercial airports
 
-#### 501 Not Implemented  
+#### 501 Not Implemented
 
 **Cause**: Required backend service unavailable
 
@@ -418,9 +418,9 @@ print("Tokyo airports:")
 for airport in departure_airports.json():
     print(f"  {airport['iata']}: {airport['name']}")
 
-# 3. Search for arrival airports  
+# 3. Search for arrival airports
 arrival_airports = requests.get(
-    f"{BASE_URL}/airports/by_city", 
+    f"{BASE_URL}/airports/by_city",
     params={"city": "Sydney", "country": "AU"}
 )
 
@@ -449,26 +449,26 @@ response = requests.post(
 
 if response.status_code == 200:
     plan = response.json()
-    
+
     print(f"\n=== Flight Plan: {plan['depart']['iata']} → {plan['arrive']['iata']} ===")
     print(f"Distance: {plan['distance_nm']:.0f} NM ({plan['distance_km']:.0f} km)")
     print(f"Aircraft: {flight_plan['ac_type']} at FL{flight_plan['cruise_alt_ft']//100}")
     print(f"Mass: {plan['estimates']['assumptions']['mass_kg']:,.0f} kg")
-    
+
     print(f"\n=== Performance Estimates ===")
     print(f"Block Time: {plan['estimates']['block']['time_min']:.0f} min ({plan['estimates']['block']['time_min']/60:.1f} hours)")
     print(f"Block Fuel: {plan['estimates']['block']['fuel_kg']:,.0f} kg")
-    
+
     print(f"\n=== Segment Breakdown ===")
     for segment in ['climb', 'cruise', 'descent']:
-        seg = plan['estimates'][segment] 
+        seg = plan['estimates'][segment]
         print(f"{segment.capitalize()}: {seg['time_min']:.0f}min, {seg['distance_km']:.0f}km, {seg['fuel_kg']:.0f}kg")
-    
+
     print(f"\n=== Route Points ===")
     print(f"Total waypoints: {len(plan['polyline'])}")
     print(f"First point: {plan['polyline'][0]}")  # Departure
     print(f"Last point: {plan['polyline'][-1]}")  # Arrival
-    
+
 else:
     print(f"Error {response.status_code}: {response.json()}")
 ```
@@ -494,7 +494,7 @@ async def plan_flight_async(session, flight_request):
 
 async def plan_multiple_flights():
     """Plan multiple flights concurrently."""
-    
+
     # Define multiple flight requests
     flight_requests = [
         {
@@ -502,55 +502,55 @@ async def plan_multiple_flights():
             "ac_type": "A330", "cruise_alt_ft": 37000, "backend": "openap"
         },
         {
-            "depart_city": "London", "arrive_city": "Dubai", 
+            "depart_city": "London", "arrive_city": "Dubai",
             "ac_type": "B777", "cruise_alt_ft": 39000, "backend": "openap"
         },
         {
             "depart_city": "Dubai", "arrive_city": "Singapore",
-            "ac_type": "A380", "cruise_alt_ft": 41000, "backend": "openap"  
+            "ac_type": "A380", "cruise_alt_ft": 41000, "backend": "openap"
         },
         {
             "depart_city": "Singapore", "arrive_city": "Sydney",
             "ac_type": "B787", "cruise_alt_ft": 40000, "backend": "openap"
         }
     ]
-    
+
     async with aiohttp.ClientSession() as session:
         # Execute all flight plans concurrently
         tasks = [plan_flight_async(session, req) for req in flight_requests]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         # Process results
         total_distance = 0
-        total_time = 0 
+        total_time = 0
         total_fuel = 0
-        
+
         print("=== Multi-Leg Journey Results ===")
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 print(f"Leg {i+1}: ERROR - {result}")
                 continue
-                
+
             if "error" in result:
                 print(f"Leg {i+1}: ERROR - {result['error']['detail']}")
                 continue
-            
+
             # Extract key metrics
             depart = result['depart']['iata']
-            arrive = result['arrive']['iata'] 
+            arrive = result['arrive']['iata']
             distance_nm = result['distance_nm']
             time_min = result['estimates']['block']['time_min']
             fuel_kg = result['estimates']['block']['fuel_kg']
-            
+
             total_distance += distance_nm
             total_time += time_min
             total_fuel += fuel_kg
-            
+
             print(f"Leg {i+1}: {depart} → {arrive}")
             print(f"  Distance: {distance_nm:.0f} NM")
             print(f"  Time: {time_min:.0f} min ({time_min/60:.1f} hours)")
             print(f"  Fuel: {fuel_kg:,.0f} kg")
-            
+
         print(f"\n=== Journey Totals ===")
         print(f"Total Distance: {total_distance:.0f} NM")
         print(f"Total Time: {total_time:.0f} min ({total_time/60:.1f} hours)")
@@ -566,34 +566,34 @@ if __name__ == "__main__":
 ```python
 def compare_aircraft_performance():
     """Compare different aircraft on the same route."""
-    
+
     aircraft_types = ["A320", "A321", "B737", "B738"]
     base_request = {
-        "depart_city": "Chicago", 
+        "depart_city": "Chicago",
         "arrive_city": "Denver",
         "cruise_alt_ft": 35000,
         "backend": "openap"
     }
-    
+
     print("=== Aircraft Performance Comparison ===")
     print("Route: Chicago → Denver")
     print(f"{'Aircraft':<8} {'Time (min)':<10} {'Fuel (kg)':<10} {'Range (NM)':<12}")
     print("-" * 50)
-    
+
     for aircraft in aircraft_types:
         request = {**base_request, "ac_type": aircraft}
-        
+
         response = requests.post(
             "http://localhost:8000/plan",
             json=request
         )
-        
+
         if response.status_code == 200:
             plan = response.json()
             time_min = plan['estimates']['block']['time_min']
             fuel_kg = plan['estimates']['block']['fuel_kg']
             distance_nm = plan['distance_nm']
-            
+
             print(f"{aircraft:<8} {time_min:<10.0f} {fuel_kg:<10.0f} {distance_nm:<12.0f}")
         else:
             print(f"{aircraft:<8} {'ERROR':<10} {'ERROR':<10} {'ERROR':<12}")
@@ -613,7 +613,7 @@ Plan a flight route with performance estimates.
 ```typescript
 {
   departure_city: string;      // Departure city name
-  arrival_city: string;        // Arrival city name  
+  arrival_city: string;        // Arrival city name
   aircraft_type: string;       // ICAO aircraft type
   cruise_altitude?: number;    // Cruise altitude in feet
   departure_country?: string;  // ISO country code
@@ -651,7 +651,7 @@ Currently, the API does not enforce rate limits, but consider implementing them 
 
 **Recommended Limits**:
 - Health checks: 60/minute
-- Airport searches: 100/minute  
+- Airport searches: 100/minute
 - Flight planning: 20/minute (due to computational complexity)
 
 **Implementation Example**:
@@ -679,7 +679,7 @@ For high-volume usage, consider:
 
 The complete OpenAPI specification is available at:
 - **Interactive Docs**: `http://localhost:8000/docs`
-- **ReDoc**: `http://localhost:8000/redoc`  
+- **ReDoc**: `http://localhost:8000/redoc`
 - **JSON Schema**: `http://localhost:8000/openapi.json`
 
 This provides machine-readable API definitions for code generation and testing tools.

@@ -27,7 +27,7 @@ graph TB
     Assistant --> MCP[MCP Client]
     MCP --> Server[Aerospace MCP Server]
     Server --> Tools[Flight Planning Tools]
-    
+
     subgraph "Available Tools"
         SearchAirports[search_airports]
         PlanFlight[plan_flight]
@@ -35,7 +35,7 @@ graph TB
         GetPerformance[get_aircraft_performance]
         SystemStatus[get_system_status]
     end
-    
+
     Tools --> OpenAP[OpenAP Database]
     Tools --> AirportDB[Airport Database]
     Tools --> GeographicLib[Geographic Calculations]
@@ -85,7 +85,7 @@ Assistant: Uses search_airports tool with query="SFO", query_type="iata"
     iata?: string;          // Preferred IATA code
   };
   arrival: {
-    city: string;           // Arrival city  
+    city: string;           // Arrival city
     country?: string;       // Arrival country code
     iata?: string;          // Preferred IATA code
   };
@@ -181,7 +181,7 @@ Assistant: Uses get_system_status tool to check service health
    The Claude Desktop configuration file location varies by operating system:
 
    - **Windows**: `%APPDATA%\Claude\config.json`
-   - **macOS**: `~/Library/Application Support/Claude/config.json`  
+   - **macOS**: `~/Library/Application Support/Claude/config.json`
    - **Linux**: `~/.config/Claude/config.json`
 
 2. **Basic Configuration**
@@ -259,7 +259,7 @@ Assistant: Uses get_system_status tool to check service health
 
 1. **Restart Claude Desktop**
 2. **Test Integration**:
-   
+
    Type these example queries to verify the integration:
 
    ```
@@ -360,25 +360,25 @@ from mcp.client.stdio import stdio_client
 
 async def main():
     """Custom MCP client example."""
-    
+
     # Server parameters
     server_params = StdioServerParameters(
         command="python",
         args=["-m", "aerospace_mcp.server"],
         cwd="/path/to/aerospace-mcp"
     )
-    
+
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
             # Initialize the session
             await session.initialize()
-            
+
             # List available tools
             tools_result = await session.list_tools()
             print("Available tools:")
             for tool in tools_result.tools:
                 print(f"  - {tool.name}: {tool.description}")
-            
+
             # Search for airports
             search_result = await session.call_tool(
                 "search_airports",
@@ -388,7 +388,7 @@ async def main():
                 }
             )
             print(f"\nTokyo airports: {search_result.content[0].text}")
-            
+
             # Plan a flight
             flight_result = await session.call_tool(
                 "plan_flight",
@@ -421,7 +421,7 @@ class AerospaceMCPClient {
       args: ['-m', 'aerospace_mcp.server'],
       cwd: serverPath
     });
-    
+
     this.client = new Client({
       name: 'aerospace-mcp-client',
       version: '1.0.0'
@@ -478,18 +478,18 @@ class AerospaceMCPClient {
 // Usage example
 async function example() {
   const client = new AerospaceMCPClient('/path/to/aerospace-mcp');
-  
+
   try {
     await client.connect();
-    
+
     const airports = await client.searchAirports('London', 'GB');
     console.log('London airports:', airports);
-    
+
     const flightPlan = await client.planFlight(
       'London', 'Paris', 'A320', 35000
     );
     console.log('Flight plan:', flightPlan);
-    
+
   } finally {
     await client.disconnect();
   }
@@ -512,7 +512,7 @@ Found 3 airport(s):
   Coordinates: 37.6213, -122.3790
   Timezone: America/Los_Angeles
 • OAK (KOAK) - Oakland International Airport
-  City: Oakland, US  
+  City: Oakland, US
   Coordinates: 37.7213, -122.2208
 • SJC (KSJC) - San Jose International Airport
   City: San Jose, US
@@ -562,7 +562,7 @@ Performance Estimates (OpenAP):
 
 Flight Segments:
 • Climb: 15 min, 125 km, 2,456 kg fuel
-• Cruise: 385 min, 5335 km, 14,567 kg fuel  
+• Cruise: 385 min, 5335 km, 14,567 kg fuel
 • Descent: 21 min, 125 km, 1,211 kg fuel
 
 Route Polyline: 224 points (every 25 km)
@@ -591,7 +591,7 @@ Block Estimates:
 **Boeing B737:**
 Aircraft Performance Estimates (openap)
 Aircraft: B737
-Distance: 1000 km  
+Distance: 1000 km
 Cruise Altitude: 35,000 ft
 Mass: 65,280 kg
 
@@ -639,7 +639,7 @@ Distance: 5,585 km (3,016 NM)
 Block Time: 7.2 hours
 Block Fuel: 16,234 kg
 
-**Leg 2: London (LHR) → Dubai (DXB)**  
+**Leg 2: London (LHR) → Dubai (DXB)**
 Aircraft: B777 (long-haul efficiency)
 Distance: 5,493 km (2,966 NM)
 Block Time: 6.8 hours
@@ -767,7 +767,7 @@ async def handle_cargo_flight(name: str, arguments: dict):
 ```
 1. User: "I need to find the most efficient route from Seattle to Miami"
 
-2. Assistant: 
+2. Assistant:
    - Uses search_airports to find options in both cities
    - Uses plan_flight with different aircraft types
    - Compares results and recommends optimal choice
@@ -938,20 +938,20 @@ async def test_connection():
         args=["-m", "aerospace_mcp.server"],
         cwd="/path/to/aerospace-mcp"
     )
-    
+
     try:
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 print("✅ MCP connection successful")
-                
+
                 tools = await session.list_tools()
                 print(f"✅ Found {len(tools.tools)} tools")
-                
+
                 # Test a simple tool
                 result = await session.call_tool("get_system_status", {})
                 print(f"✅ System status: {result.content[0].text[:100]}...")
-                
+
     except Exception as e:
         print(f"❌ Connection failed: {e}")
 
@@ -1013,7 +1013,7 @@ async def test_search_airports():
         "query": "San Francisco",
         "query_type": "city"
     })
-    
+
     assert len(result) == 1
     assert "SFO" in result[0].text
     assert "San Francisco International" in result[0].text
@@ -1026,7 +1026,7 @@ async def test_plan_flight():
         "arrival": {"city": "Los Angeles"},
         "aircraft": {"type": "A320"}
     })
-    
+
     assert len(result) == 1
     assert "JFK" in result[0].text or "LGA" in result[0].text
     assert "LAX" in result[0].text
@@ -1049,11 +1049,11 @@ async def test_full_mcp_integration():
         args=["-m", "aerospace_mcp.server"],
         cwd="/path/to/aerospace-mcp"
     )
-    
+
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            
+
             # Test tool listing
             tools_result = await session.list_tools()
             tool_names = [tool.name for tool in tools_result.tools]
@@ -1061,10 +1061,10 @@ async def test_full_mcp_integration():
                 "search_airports", "plan_flight", "calculate_distance",
                 "get_aircraft_performance", "get_system_status"
             ]
-            
+
             for tool in expected_tools:
                 assert tool in tool_names
-            
+
             # Test airport search
             search_result = await session.call_tool(
                 "search_airports",
@@ -1090,22 +1090,22 @@ async def performance_test():
         args=["-m", "aerospace_mcp.server"],
         cwd="/path/to/aerospace-mcp"
     )
-    
+
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            
+
             # Test multiple concurrent requests
             start_time = time.time()
-            
+
             tasks = []
             for i in range(10):
                 task = session.call_tool("get_system_status", {})
                 tasks.append(task)
-            
+
             results = await asyncio.gather(*tasks)
             end_time = time.time()
-            
+
             print(f"10 concurrent requests completed in {end_time - start_time:.2f}s")
             print(f"Average response time: {(end_time - start_time) / 10:.3f}s")
 

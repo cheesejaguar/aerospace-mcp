@@ -17,7 +17,7 @@ def sample_airport_data() -> Dict[str, Dict[str, Any]]:
     return {
         "SJC": {
             "iata": "SJC",
-            "icao": "KSJC", 
+            "icao": "KSJC",
             "name": "San Jose International Airport",
             "city": "San Jose",
             "country": "US",
@@ -30,7 +30,7 @@ def sample_airport_data() -> Dict[str, Dict[str, Any]]:
             "icao": "RJAA",
             "name": "Narita International Airport",
             "city": "Tokyo",
-            "country": "JP", 
+            "country": "JP",
             "lat": 35.7647,
             "lon": 140.386,
             "tz": "Asia/Tokyo"
@@ -75,7 +75,7 @@ def sjc_airport() -> AirportOut:
         iata="SJC",
         icao="KSJC",
         name="San Jose International Airport",
-        city="San Jose", 
+        city="San Jose",
         country="US",
         lat=37.3626,
         lon=-121.929,
@@ -88,7 +88,7 @@ def nrt_airport() -> AirportOut:
     """Sample NRT airport for testing."""
     return AirportOut(
         iata="NRT",
-        icao="RJAA", 
+        icao="RJAA",
         name="Narita International Airport",
         city="Tokyo",
         country="JP",
@@ -105,7 +105,7 @@ def sample_plan_request() -> PlanRequest:
         depart_city="San Jose",
         arrive_city="Tokyo",
         depart_country="US",
-        arrive_country="JP", 
+        arrive_country="JP",
         ac_type="A359",
         cruise_alt_ft=35000,
         route_step_km=25.0
@@ -116,7 +116,7 @@ def sample_plan_request() -> PlanRequest:
 def mock_openap_flight_generator():
     """Mock OpenAP FlightGenerator for testing."""
     mock_gen = MagicMock()
-    
+
     # Mock climb segment
     climb_data = pd.DataFrame({
         't': [0, 10, 20, 30, 40, 50],
@@ -125,7 +125,7 @@ def mock_openap_flight_generator():
         'groundspeed': [200, 220, 240, 260, 280, 300],  # knots
         'vertical_rate': [2000, 1800, 1600, 1400, 1200, 1000]  # fpm
     })
-    
+
     # Mock cruise segment
     cruise_data = pd.DataFrame({
         't': [0, 10, 20, 30],
@@ -134,20 +134,20 @@ def mock_openap_flight_generator():
         'groundspeed': [450, 450, 450, 450],  # knots
         'vertical_rate': [0, 0, 0, 0]  # fpm
     })
-    
+
     # Mock descent segment
     descent_data = pd.DataFrame({
-        't': [0, 10, 20, 30, 40, 50], 
+        't': [0, 10, 20, 30, 40, 50],
         's': [0, 2000, 4000, 6000, 8000, 12000],  # meters
         'altitude': [35000, 30000, 25000, 15000, 8000, 2000],  # feet
         'groundspeed': [420, 400, 380, 350, 320, 280],  # knots
         'vertical_rate': [-1000, -1200, -1400, -1600, -1800, -2000]  # fpm
     })
-    
+
     mock_gen.climb.return_value = climb_data
     mock_gen.cruise.return_value = cruise_data
     mock_gen.descent.return_value = descent_data
-    
+
     return mock_gen
 
 
@@ -168,7 +168,7 @@ def mock_openap_props():
     }
 
 
-@pytest.fixture 
+@pytest.fixture
 def mock_airports_iata(sample_airport_data):
     """Mock the airports IATA data loading."""
     with patch('aerospace_mcp.core._AIRPORTS_IATA', sample_airport_data):
@@ -212,14 +212,14 @@ def city_search_test_cases():
     """Test cases for city airport search."""
     return [
         ("San Jose", "US", ["SJC"]),  # City with country
-        ("San Jose", None, ["SJC"]),  # City without country  
+        ("San Jose", None, ["SJC"]),  # City without country
         ("Tokyo", "JP", ["NRT"]),  # International city
         ("Nonexistent", "US", []),  # Non-existent city
         ("", "US", []),  # Empty city name
     ]
 
 
-@pytest.fixture 
+@pytest.fixture
 def flight_plan_test_cases():
     """Test cases for flight planning."""
     return [
@@ -227,7 +227,7 @@ def flight_plan_test_cases():
             "name": "SJC to NRT",
             "request": {
                 "depart_city": "San Jose",
-                "arrive_city": "Tokyo", 
+                "arrive_city": "Tokyo",
                 "depart_country": "US",
                 "arrive_country": "JP",
                 "ac_type": "A359"
@@ -238,14 +238,14 @@ def flight_plan_test_cases():
         {
             "name": "Same city error",
             "request": {
-                "depart_city": "San Jose", 
+                "depart_city": "San Jose",
                 "arrive_city": "San Jose",
                 "ac_type": "A320"
             },
             "should_succeed": False
         },
         {
-            "name": "Invalid aircraft type", 
+            "name": "Invalid aircraft type",
             "request": {
                 "depart_city": "San Jose",
                 "arrive_city": "Tokyo",

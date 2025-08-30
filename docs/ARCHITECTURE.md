@@ -5,7 +5,7 @@ This document provides a comprehensive overview of the Aerospace MCP system desi
 ## Table of Contents
 
 - [System Overview](#system-overview)
-- [Component Architecture](#component-architecture)  
+- [Component Architecture](#component-architecture)
 - [Data Flow](#data-flow)
 - [Technology Stack](#technology-stack)
 - [Design Decisions](#design-decisions)
@@ -31,25 +31,25 @@ graph TB
     API[FastAPI Application]
     Core[Core Services]
     Data[Data Sources]
-    
+
     Client --> MCP
     Client --> API
     MCP --> API
     API --> Core
     Core --> Data
-    
+
     subgraph "Core Services"
         Airport[Airport Resolution]
-        Route[Route Calculation] 
+        Route[Route Calculation]
         Perf[Performance Estimation]
     end
-    
+
     subgraph "Data Sources"
         AirportDB[Airport Database]
         OpenAP[OpenAP Models]
         Geodesic[Geographiclib]
     end
-    
+
     Airport --> AirportDB
     Route --> Geodesic
     Perf --> OpenAP
@@ -75,12 +75,12 @@ graph LR
     Search --> Filter[Country Filter]
     Filter --> Rank[Airport Ranking]
     Rank --> Output[Selected Airport]
-    
+
     subgraph "Data Access"
         Search --> AirportDB[airportsdata.load]
         Filter --> AirportDB
     end
-    
+
     subgraph "Business Logic"
         Rank --> IntlPref[Prefer International]
         Rank --> NameMatch[Name Matching]
@@ -103,9 +103,9 @@ graph LR
 graph LR
     Origin[Origin Airport] --> GC[Great Circle Calculation]
     Dest[Destination Airport] --> GC
-    GC --> Sample[Route Sampling] 
+    GC --> Sample[Route Sampling]
     Sample --> Polyline[Polyline Generation]
-    
+
     subgraph "Geodesic Engine"
         GC --> Geodesic[geographiclib.Geodesic]
         Sample --> Line[Geodesic.Line]
@@ -130,14 +130,14 @@ graph TB
     Aircraft[Aircraft Type] --> Props[Aircraft Properties]
     Route[Route Distance] --> Segments[Flight Segments]
     Mass[Aircraft Mass] --> FuelFlow[Fuel Flow Models]
-    
+
     subgraph "OpenAP Integration"
         Props --> FlightGen[FlightGenerator]
         FlightGen --> Climb[Climb Profile]
-        FlightGen --> Cruise[Cruise Profile] 
+        FlightGen --> Cruise[Cruise Profile]
         FlightGen --> Descent[Descent Profile]
     end
-    
+
     subgraph "Calculations"
         Segments --> Time[Time Estimation]
         FuelFlow --> Fuel[Fuel Estimation]
@@ -165,7 +165,7 @@ classDiagram
         +float lon
         +string tz
     }
-    
+
     class PlanRequest {
         +string depart_city
         +string arrive_city
@@ -179,7 +179,7 @@ classDiagram
         +float route_step_km
         +string backend
     }
-    
+
     class PlanResponse {
         +string engine
         +AirportOut depart
@@ -189,14 +189,14 @@ classDiagram
         +List polyline
         +dict estimates
     }
-    
+
     class SegmentEst {
         +float time_min
         +float distance_km
         +float avg_gs_kts
         +float fuel_kg
     }
-    
+
     PlanResponse --> AirportOut : contains
     PlanResponse --> SegmentEst : estimates
 ```
@@ -213,22 +213,22 @@ sequenceDiagram
     participant RouteCalculator
     participant PerformanceEstimator
     participant OpenAP
-    
+
     Client->>FastAPI: POST /plan
     FastAPI->>FastAPI: Validate PlanRequest
-    
+
     FastAPI->>AirportResolver: Resolve departure airport
     AirportResolver->>AirportResolver: Search city/IATA
     AirportResolver-->>FastAPI: Departure airport
-    
+
     FastAPI->>AirportResolver: Resolve arrival airport
     AirportResolver->>AirportResolver: Search city/IATA
     AirportResolver-->>FastAPI: Arrival airport
-    
+
     FastAPI->>RouteCalculator: Calculate great circle route
     RouteCalculator->>RouteCalculator: Generate polyline
     RouteCalculator-->>FastAPI: Route & distance
-    
+
     FastAPI->>PerformanceEstimator: Estimate performance
     PerformanceEstimator->>OpenAP: Get aircraft properties
     OpenAP-->>PerformanceEstimator: Aircraft data
@@ -236,7 +236,7 @@ sequenceDiagram
     OpenAP-->>PerformanceEstimator: Climb/cruise/descent
     PerformanceEstimator->>PerformanceEstimator: Calculate fuel flow
     PerformanceEstimator-->>FastAPI: Performance estimates
-    
+
     FastAPI->>FastAPI: Assemble PlanResponse
     FastAPI-->>Client: Complete flight plan
 ```
@@ -248,16 +248,16 @@ graph TD
     Request[Incoming Request] --> Validate[Input Validation]
     Validate -->|Invalid| ValidationError[422 Validation Error]
     Validate -->|Valid| Process[Process Request]
-    
+
     Process --> Airport[Airport Resolution]
     Airport -->|Not Found| NotFoundError[404 Airport Not Found]
     Airport -->|Found| Route[Route Calculation]
-    
+
     Route --> Performance[Performance Estimation]
     Performance -->|OpenAP Missing| NotImplementedError[501 Backend Unavailable]
     Performance -->|Aircraft Invalid| BadRequestError[400 Invalid Aircraft]
     Performance -->|Success| Response[200 Success Response]
-    
+
     ValidationError --> ErrorResponse[Error Response]
     NotFoundError --> ErrorResponse
     NotImplementedError --> ErrorResponse
@@ -296,18 +296,18 @@ graph LR
         IATA[IATA Database]
         OpenFlights[OpenFlights Data]
     end
-    
+
     subgraph "Aircraft Performance"
         OpenAP[OpenAP Database]
         BADA[BADA Models]
         Manufacturers[OEM Data]
     end
-    
+
     subgraph "Geographic"
         WGS84[WGS84 Geodesic]
         GeographicLib[GeographicLib]
     end
-    
+
     AirportData --> IATA
     AirportData --> OpenFlights
     OpenAP --> BADA
@@ -396,7 +396,7 @@ def _resolve_endpoint(city, country, prefer_iata, role):
         ap = _airport_from_iata(prefer_iata)
         if not ap:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail=f"{role}: IATA '{prefer_iata}' not found."
             )
     # ... more validation
@@ -428,7 +428,7 @@ pie title Memory Usage Distribution
 
 **Bottlenecks** (in order of impact):
 1. **OpenAP Calculations**: Flight profile generation (200-500ms)
-2. **Geodesic Calculations**: Route sampling (10-50ms)  
+2. **Geodesic Calculations**: Route sampling (10-50ms)
 3. **Airport Search**: City name fuzzy matching (1-5ms)
 4. **JSON Serialization**: Pydantic model conversion (1-2ms)
 
@@ -442,7 +442,7 @@ pie title Memory Usage Distribution
 
 Current single-threaded performance estimates:
 - **Health checks**: 10,000+ req/sec
-- **Airport searches**: 1,000+ req/sec  
+- **Airport searches**: 1,000+ req/sec
 - **Flight planning**: 5-10 req/sec (OpenAP-limited)
 
 **Scaling Strategies**:
@@ -451,13 +451,13 @@ graph TB
     Current[Single Process] --> Horizontal[Horizontal Scaling]
     Current --> Vertical[Vertical Scaling]
     Current --> Async[Async Processing]
-    
+
     Horizontal --> LoadBalancer[Load Balancer]
     Horizontal --> MultiInstance[Multiple Instances]
-    
+
     Vertical --> MoreCPU[More CPU Cores]
     Vertical --> MoreRAM[More RAM]
-    
+
     Async --> Celery[Celery Workers]
     Async --> AsyncFramework[Async Framework]
 ```
@@ -537,25 +537,25 @@ graph TB
     LB[Load Balancer] --> App1[App Instance 1]
     LB --> App2[App Instance 2]
     LB --> AppN[App Instance N]
-    
+
     App1 --> Cache[Redis Cache]
     App2 --> Cache
     AppN --> Cache
-    
+
     App1 --> DB[(Airport Database)]
     App2 --> DB
     AppN --> DB
-    
+
     subgraph "Background Workers"
         Worker1[Performance Worker 1]
         Worker2[Performance Worker 2]
         WorkerN[Performance Worker N]
     end
-    
+
     App1 --> Queue[Task Queue]
     App2 --> Queue
     AppN --> Queue
-    
+
     Queue --> Worker1
     Queue --> Worker2
     Queue --> WorkerN
@@ -627,7 +627,7 @@ async def track_flight(websocket: WebSocket, flight_id: str):
 
 #### 1. Caching Strategy
 - **L1 Cache**: In-memory LRU cache for common requests
-- **L2 Cache**: Redis for shared cache across instances  
+- **L2 Cache**: Redis for shared cache across instances
 - **L3 Cache**: CDN for static airport data
 
 #### 2. Database Optimization
@@ -654,11 +654,11 @@ graph LR
     App[Application] --> Metrics[Metrics Collector]
     App --> Logs[Log Aggregator]
     App --> Traces[Distributed Tracing]
-    
+
     Metrics --> Prometheus[Prometheus]
     Logs --> ELK[ELK Stack]
     Traces --> Jaeger[Jaeger]
-    
+
     Prometheus --> Grafana[Grafana Dashboard]
     ELK --> Kibana[Kibana Dashboard]
     Jaeger --> UI[Jaeger UI]

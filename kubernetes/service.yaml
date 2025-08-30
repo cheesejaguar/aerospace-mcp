@@ -20,10 +20,10 @@ spec:
     port: 80
     targetPort: http
     protocol: TCP
-  
+
   # Session affinity (optional)
   sessionAffinity: None
-  
+
   # IP families for dual-stack (optional)
   ipFamilyPolicy: SingleStack
   ipFamilies:
@@ -52,7 +52,7 @@ spec:
     targetPort: http
     nodePort: 30080  # Accessible on any node at port 30080
     protocol: TCP
-  
+
   sessionAffinity: None
   externalTrafficPolicy: Local  # Better for home lab performance
 

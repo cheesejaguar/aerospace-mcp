@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from aerospace_mcp.core import (
     _airport_from_iata,
-    _find_city_airports, 
+    _find_city_airports,
     _resolve_endpoint,
     AirportOut,
     AirportResolutionError
@@ -15,7 +15,7 @@ from aerospace_mcp.core import (
 
 class TestAirportFromIata:
     """Tests for _airport_from_iata function."""
-    
+
     @pytest.mark.unit
     def test_valid_iata_code(self, mock_airports_iata, sjc_airport):
         """Test resolving a valid IATA code."""
@@ -29,35 +29,35 @@ class TestAirportFromIata:
         assert result.lat == 37.3626
         assert result.lon == -121.929
         assert result.tz == "America/Los_Angeles"
-    
+
     @pytest.mark.unit
     def test_case_insensitive_iata(self, mock_airports_iata):
         """Test that IATA codes are case insensitive."""
         result_lower = _airport_from_iata("sjc")
         result_upper = _airport_from_iata("SJC")
         result_mixed = _airport_from_iata("sJc")
-        
+
         assert result_lower is not None
         assert result_upper is not None
         assert result_mixed is not None
         assert result_lower.iata == result_upper.iata == result_mixed.iata == "SJC"
-    
-    @pytest.mark.unit 
+
+    @pytest.mark.unit
     def test_invalid_iata_code(self, mock_airports_iata):
         """Test resolving an invalid IATA code."""
         result = _airport_from_iata("INVALID")
         assert result is None
-    
+
     @pytest.mark.unit
     def test_empty_iata_code(self, mock_airports_iata):
         """Test resolving an empty IATA code."""
         result = _airport_from_iata("")
         assert result is None
-        
+
     @pytest.mark.unit
     @pytest.mark.parametrize("iata,expected_iata,should_exist", [
         ("SJC", "SJC", True),
-        ("NRT", "NRT", True), 
+        ("NRT", "NRT", True),
         ("INVALID", None, False),
         ("", None, False),
         ("XYZ", None, False),
@@ -74,7 +74,7 @@ class TestAirportFromIata:
 
 class TestFindCityAirports:
     """Tests for _find_city_airports function."""
-    
+
     @pytest.mark.unit
     def test_san_jose_us(self, mock_airports_iata):
         """Test finding airports for San Jose, US."""
@@ -83,24 +83,24 @@ class TestFindCityAirports:
         assert results[0].iata == "SJC"
         assert results[0].city == "San Jose"
         assert results[0].country == "US"
-    
+
     @pytest.mark.unit
     def test_case_insensitive_city_search(self, mock_airports_iata):
         """Test that city search is case insensitive."""
         results_lower = _find_city_airports("san jose", "US")
         results_upper = _find_city_airports("SAN JOSE", "US")
         results_mixed = _find_city_airports("San Jose", "US")
-        
+
         assert len(results_lower) == len(results_upper) == len(results_mixed) == 1
         assert results_lower[0].iata == results_upper[0].iata == results_mixed[0].iata
-    
+
     @pytest.mark.unit
     def test_city_without_country(self, mock_airports_iata):
         """Test finding airports for a city without specifying country."""
         results = _find_city_airports("San Jose")
         assert len(results) >= 1
         assert any(airport.iata == "SJC" for airport in results)
-    
+
     @pytest.mark.unit
     def test_international_airport_preference(self, mock_airports_iata):
         """Test that international airports are preferred in sorting."""
@@ -110,14 +110,14 @@ class TestFindCityAirports:
             "SJC": {
                 "iata": "SJC",
                 "icao": "KSJC",
-                "name": "San Jose International Airport", 
+                "name": "San Jose International Airport",
                 "city": "San Jose",
                 "country": "US",
                 "lat": 37.3626,
                 "lon": -121.929,
             },
             "SJO": {
-                "iata": "SJO", 
+                "iata": "SJO",
                 "icao": "MROC",
                 "name": "Juan Santamaría Airport",
                 "city": "San Jose",
@@ -131,32 +131,32 @@ class TestFindCityAirports:
             international_airports = [a for a in results if "international" in a.name.lower()]
             if international_airports:
                 assert results[0] in international_airports
-    
+
     @pytest.mark.unit
     def test_nonexistent_city(self, mock_airports_iata):
         """Test searching for a non-existent city."""
         results = _find_city_airports("NonexistentCity", "US")
         assert len(results) == 0
-    
+
     @pytest.mark.unit
     def test_empty_city_name(self, mock_airports_iata):
         """Test searching with empty city name."""
         results = _find_city_airports("", "US")
         assert len(results) == 0
-    
+
     @pytest.mark.unit
     def test_country_filtering(self, mock_airports_iata):
         """Test that country filtering works correctly."""
         results_us = _find_city_airports("San Jose", "US")
-        results_cr = _find_city_airports("San Jose", "CR") 
-        
+        results_cr = _find_city_airports("San Jose", "CR")
+
         # Should only get US airports
         for airport in results_us:
             assert airport.country == "US"
-        
+
         # Should only get CR airports (none in our test data)
         assert len(results_cr) == 0
-    
+
     @pytest.mark.unit
     @pytest.mark.parametrize("city,country,expected_iatas", [
         ("San Jose", "US", ["SJC"]),
@@ -174,19 +174,19 @@ class TestFindCityAirports:
 
 class TestResolveEndpoint:
     """Tests for _resolve_endpoint function."""
-    
+
     @pytest.mark.unit
     def test_resolve_with_preferred_iata(self, mock_airports_iata):
         """Test resolving with a preferred IATA code."""
         result = _resolve_endpoint(
             city="Any City",
             country=None,
-            prefer_iata="SJC", 
+            prefer_iata="SJC",
             role="departure"
         )
         assert result.iata == "SJC"
         assert result.city == "San Jose"
-    
+
     @pytest.mark.unit
     def test_resolve_with_invalid_preferred_iata(self, mock_airports_iata):
         """Test resolving with an invalid preferred IATA code."""
@@ -197,7 +197,7 @@ class TestResolveEndpoint:
                 prefer_iata="INVALID",
                 role="departure"
             )
-    
+
     @pytest.mark.unit
     def test_resolve_by_city(self, mock_airports_iata):
         """Test resolving by city name."""
@@ -209,7 +209,7 @@ class TestResolveEndpoint:
         )
         assert result.iata == "SJC"
         assert result.city == "San Jose"
-    
+
     @pytest.mark.unit
     def test_resolve_nonexistent_city(self, mock_airports_iata):
         """Test resolving a non-existent city."""
@@ -220,7 +220,7 @@ class TestResolveEndpoint:
                 prefer_iata=None,
                 role="departure"
             )
-    
+
     @pytest.mark.unit
     def test_resolve_with_role_in_error_message(self, mock_airports_iata):
         """Test that the role is included in error messages."""
@@ -231,7 +231,7 @@ class TestResolveEndpoint:
                 prefer_iata="INVALID",
                 role="arrival"
             )
-    
+
     @pytest.mark.unit
     def test_resolve_prefers_iata_over_city(self, mock_airports_iata):
         """Test that preferred IATA takes precedence over city."""
@@ -247,7 +247,7 @@ class TestResolveEndpoint:
 
 class TestAirportResolutionIntegration:
     """Integration tests for airport resolution."""
-    
+
     @pytest.mark.integration
     def test_real_airport_data_sjc(self):
         """Test with real airport data - SJC should exist."""
@@ -256,8 +256,8 @@ class TestAirportResolutionIntegration:
             assert result.iata == "SJC"
             assert result.country == "US"
             assert "San Jose" in result.name or "San Jose" in result.city
-    
-    @pytest.mark.integration 
+
+    @pytest.mark.integration
     def test_real_airport_data_city_search(self):
         """Test city search with real airport data."""
         results = _find_city_airports("San Jose", "US")
@@ -267,13 +267,13 @@ class TestAirportResolutionIntegration:
             # At least one should be SJC
             iatas = [airport.iata for airport in results]
             assert "SJC" in iatas
-    
+
     @pytest.mark.integration
     def test_error_handling_with_real_data(self):
         """Test error handling with real airport data."""
         # This should always fail regardless of real data
         result = _airport_from_iata("DEFINITELYNOTREAL123")
         assert result is None
-        
+
         results = _find_city_airports("DefinitelyNotARealCity123", "XX")
         assert len(results) == 0

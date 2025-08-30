@@ -280,25 +280,25 @@ def plan_flight(payload: dict) -> dict:
     try:
         # Validate the request using PlanRequest model
         req = PlanRequest(**payload)
-        
+
         # Check for identical departure and arrival
-        if (req.depart_city.strip().lower() == req.arrive_city.strip().lower() 
+        if (req.depart_city.strip().lower() == req.arrive_city.strip().lower()
             and not req.prefer_arrive_iata and not req.prefer_depart_iata):
             raise ValueError("Departure and arrival look identical—please specify airports explicitly.")
-        
+
         # Resolve departure and arrival airports
         dep = _resolve_endpoint(req.depart_city, req.depart_country, req.prefer_depart_iata, role="departure")
         arr = _resolve_endpoint(req.arrive_city, req.arrive_country, req.prefer_arrive_iata, role="arrival")
-        
+
         # Calculate great-circle route
         poly, dist_km = great_circle_points(dep.lat, dep.lon, arr.lat, arr.lon, req.route_step_km)
-        
+
         # Generate estimates
         if req.backend == "openap":
             est, engine_name = estimates_openap(req.ac_type, req.cruise_alt_ft, req.mass_kg, dist_km)
         else:
             raise ValueError(f"Unknown backend: {req.backend}")
-        
+
         # Build response
         response = PlanResponse(
             engine=engine_name,
@@ -309,9 +309,9 @@ def plan_flight(payload: dict) -> dict:
             polyline=poly,
             estimates=est,
         )
-        
+
         return response.model_dump()
-        
+
     except (ValueError, AirportResolutionError) as e:
         raise ValueError(str(e))
     except OpenAPError as e:
@@ -330,11 +330,16 @@ def search_airports_by_city(city: str, country: Optional[str] = None) -> List[Ai
 
 def get_health_status() -> dict:
     """Get system health status."""
+    from .integrations import get_domain_status
+    
+    domain_status = get_domain_status()
+    
     return {
         "status": "ok",
         "openap": OPENAP_AVAILABLE,
         "airports_count": len(_AIRPORTS_IATA),
-        "version": "0.1.0"
+        "version": "0.1.0",
+        "domains": domain_status
     }
 
 

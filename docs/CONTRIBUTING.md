@@ -183,14 +183,14 @@ from fastapi import HTTPException
 
 def _find_city_airports(city: str, country: Optional[str] = None) -> List[AirportOut]:
     """Find airports matching a city name.
-    
+
     Args:
         city: City name to search for
         country: Optional ISO country code filter
-        
+
     Returns:
         List of matching airports, sorted by preference
-        
+
     Raises:
         HTTPException: When no airports are found
     """
@@ -267,10 +267,10 @@ def test_airport_search():
    # Run formatting
    black main.py tests/
    isort main.py tests/
-   
+
    # Run type checking
    mypy main.py
-   
+
    # Run tests
    pytest --cov=. --cov-report=term-missing
    ```
@@ -288,7 +288,7 @@ def test_airport_search():
 ### PR Guidelines
 
 1. **Title**: Use descriptive titles (e.g., "Add support for helicopter airports in city search")
-2. **Description**: 
+2. **Description**:
    - Explain the problem being solved
    - Describe the solution approach
    - List any breaking changes

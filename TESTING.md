@@ -7,7 +7,7 @@ This document describes the comprehensive test suite for the Aerospace MCP proje
 The test suite provides >80% code coverage and includes both unit tests and integration tests for all major components:
 
 - **Airport resolution functionality** (`tests/test_airports.py`)
-- **Flight planning and performance estimation** (`tests/test_plan.py`) 
+- **Flight planning and performance estimation** (`tests/test_plan.py`)
 - **FastAPI health endpoints** (`tests/test_health.py`)
 - **MCP server functionality** (`tests/test_mcp.py`)
 - **Shared test fixtures and configuration** (`tests/conftest.py`)
@@ -27,7 +27,7 @@ tests/
 ├── conftest.py          # Shared fixtures and test configuration
 ├── test_airports.py     # Airport resolution and search tests
 ├── test_plan.py         # Flight planning and distance calculation tests
-├── test_health.py       # FastAPI endpoint tests  
+├── test_health.py       # FastAPI endpoint tests
 └── test_mcp.py          # MCP server and tool tests
 ```
 
@@ -71,7 +71,7 @@ pytest tests/
 # Unit tests only
 pytest -m unit tests/
 
-# Integration tests only  
+# Integration tests only
 pytest -m integration tests/
 
 # Specific test file
@@ -164,7 +164,7 @@ def mock_airports_iata(sample_airport_data):
         yield sample_airport_data
 
 # Mock OpenAP availability
-@pytest.fixture(params=["with_openap", "without_openap"])  
+@pytest.fixture(params=["with_openap", "without_openap"])
 def openap_availability(request):
     available = request.param == "with_openap"
     with patch('aerospace_mcp.core.OPENAP_AVAILABLE', available):
@@ -181,7 +181,7 @@ The test suite includes performance-related tests:
 
 - Distance calculation accuracy for known routes
 - Reasonable flight time estimates
-- Fuel consumption within expected ranges  
+- Fuel consumption within expected ranges
 - Polyline generation efficiency
 
 ## Error Testing
@@ -230,7 +230,7 @@ Tests are designed to run reliably in CI environments:
 When adding new functionality:
 
 1. **Add unit tests** for individual functions
-2. **Add integration tests** for component interactions  
+2. **Add integration tests** for component interactions
 3. **Update fixtures** if new mock data is needed
 4. **Mark tests appropriately** (`@pytest.mark.unit`, etc.)
 5. **Maintain coverage** above 80%
@@ -246,7 +246,7 @@ Example:
 class TestAirportResolution:
     def test_valid_iata_code_returns_airport(self):
         ...
-    
+
     def test_invalid_iata_code_returns_none(self):
         ...
 ```
