@@ -406,7 +406,7 @@ class GeneticAlgorithm:
             delta_v_total_ms=delta_v_total,
             fuel_mass_kg=fuel_mass,
             converged=generations_without_improvement <= 20,
-            iterations=generation + 1,
+            iterations=self.params.generations,
             computation_time_s=computation_time,
             algorithm="Genetic Algorithm",
         )
