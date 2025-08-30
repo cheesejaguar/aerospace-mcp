@@ -42,7 +42,7 @@ class TestMCPServerInitialization:
         for expected_tool in expected_tools:
             assert expected_tool in tool_names
 
-# Updated for Phase 4 - now we have many more tools, just check required ones exist
+        # Updated for Phase 4 - now we have many more tools, just check required ones exist
         assert len(TOOLS) >= len(expected_tools)
 
     @pytest.mark.unit
