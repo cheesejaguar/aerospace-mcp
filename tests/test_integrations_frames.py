@@ -157,9 +157,11 @@ class TestFrameTransformations:
         assert result.frame == "ECEF"
         # With proper transformation, coordinates will be significantly different due to Earth rotation
         # Just check that the magnitude is reasonable (should be similar distance from Earth center)
-        original_magnitude = (xyz[0]**2 + xyz[1]**2 + xyz[2]**2)**0.5
-        result_magnitude = (result.x**2 + result.y**2 + result.z**2)**0.5
-        assert abs(result_magnitude - original_magnitude) < 1000  # Magnitude should be preserved
+        original_magnitude = (xyz[0] ** 2 + xyz[1] ** 2 + xyz[2] ** 2) ** 0.5
+        result_magnitude = (result.x**2 + result.y**2 + result.z**2) ** 0.5
+        assert (
+            abs(result_magnitude - original_magnitude) < 1000
+        )  # Magnitude should be preserved
 
     @pytest.mark.skipif(not ASTROPY_AVAILABLE, reason="astropy not available")
     def test_astropy_integration(self):
@@ -301,7 +303,9 @@ class TestNumericalStability:
             # Should maintain precision
             assert abs(geodetic.latitude_deg - lat) < 1e-9
             assert abs(geodetic.longitude_deg - lon) < 1e-9
-            assert abs(geodetic.altitude_m - alt) < 5e-3  # Relaxed for high latitude/altitude cases
+            assert (
+                abs(geodetic.altitude_m - alt) < 5e-3
+            )  # Relaxed for high latitude/altitude cases
 
 
 if __name__ == "__main__":
