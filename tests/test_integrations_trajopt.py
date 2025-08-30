@@ -226,7 +226,7 @@ class TestThrustProfileOptimization:
             assert impulse_error < 2.0  # Within 200% - very lenient
         else:
             # If optimization fails to produce thrust, just verify the result structure exists
-            assert hasattr(result.performance, 'total_impulse_ns')
+            assert hasattr(result.performance, "total_impulse_ns")
 
     def test_thrust_profile_different_objectives(self):
         """Test thrust profile optimization with different objectives."""

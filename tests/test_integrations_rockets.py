@@ -196,7 +196,9 @@ class TestRocketTrajectory:
 
         # Max Q should be reasonable
         assert performance.max_q_pa > 0
-        assert performance.max_q_pa < 1000000  # Less than 1000 kPa (more realistic for model rocket)
+        assert (
+            performance.max_q_pa < 1000000
+        )  # Less than 1000 kPa (more realistic for model rocket)
 
 
 class TestRocketSizing:
@@ -256,7 +258,8 @@ class TestRocketSizing:
         # Just check that if feasible, the mass ratio is very high
         if sizing["feasible"]:
             assert (
-                sizing["mass_ratio"] > 2.5  # More realistic threshold for challenging mission
+                sizing["mass_ratio"]
+                > 2.5  # More realistic threshold for challenging mission
             )  # Very high mass ratio indicates difficulty
 
     def test_sizing_parameter_relationships(self):

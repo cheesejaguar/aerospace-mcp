@@ -320,7 +320,9 @@ class TestUAVEnergyAnalysis:
     def test_energy_scaling_effects(self):
         """Test how energy consumption scales with aircraft parameters."""
         base_uav = UAVConfiguration(
-            mass_kg=2.0, wing_area_m2=0.5, cd0=0.03
+            mass_kg=2.0,
+            wing_area_m2=0.5,
+            cd0=0.03,
             # Don't specify cl_cruise so it gets calculated from weight
         )
 
