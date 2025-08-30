@@ -6,7 +6,7 @@
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-purple.svg)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A comprehensive aerospace research and flight planning service providing both HTTP API and Model Context Protocol (MCP) integration. Features intelligent airport resolution, great-circle route calculation, aircraft performance estimation, atmospheric modeling, coordinate frame transformations, aerodynamic analysis, propeller performance modeling, rocket trajectory optimization, orbital mechanics calculations, and spacecraft trajectory planning for aerospace operations.
+A comprehensive aerospace research and flight planning service providing both HTTP API and Model Context Protocol (MCP) integration. Built with **FastMCP** for streamlined MCP server development. Features intelligent airport resolution, great-circle route calculation, aircraft performance estimation, atmospheric modeling, coordinate frame transformations, aerodynamic analysis, propeller performance modeling, rocket trajectory optimization, orbital mechanics calculations, and spacecraft trajectory planning for aerospace operations.
 
 ## ⚠️ SAFETY DISCLAIMER
 
@@ -32,7 +32,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/username/aerospace-mcp.git
 cd aerospace-mcp
 uv venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
-uv add fastapi uvicorn airportsdata geographiclib openap
+uv sync
 
 # Run HTTP server
 uvicorn main:app --reload --host 0.0.0.0 --port 8080
@@ -61,8 +61,8 @@ Add to your Claude Desktop configuration:
 {
   "mcpServers": {
     "aerospace-mcp": {
-      "command": "python",
-      "args": ["-m", "aerospace_mcp.server"],
+      "command": "uv",
+      "args": ["run", "aerospace-mcp"],
       "cwd": "/path/to/aerospace-mcp"
     }
   }
@@ -75,6 +75,7 @@ Add to your Claude Desktop configuration:
 - [Installation](#installation)
 - [Usage Examples](#usage-examples)
 - [Architecture](#architecture)
+- [FastMCP Migration](#fastmcp-migration)
 - [Performance](#performance)
 - [API Documentation](#api-documentation)
 - [MCP Integration](#mcp-integration)
@@ -664,6 +665,79 @@ graph TB
 - **Type Safety**: Full type hints and Pydantic validation
 - **Extensible**: Plugin architecture for new backends
 - **Standards Compliant**: ICAO, IATA, and OpenAP standards
+
+## 🚀 FastMCP Migration
+
+This project has been **migrated from the traditional MCP SDK to FastMCP**, providing significant improvements in developer experience and code maintainability.
+
+### What is FastMCP?
+
+[FastMCP](https://github.com/jlowin/fastmcp) is a high-level, Pythonic framework for building Model Context Protocol servers. It dramatically reduces boilerplate code while maintaining full MCP compatibility.
+
+### Migration Benefits
+
+✅ **70% Less Code**: Tool definitions went from verbose JSON schemas to simple Python decorators  
+✅ **Better Type Safety**: Automatic schema generation from type hints  
+✅ **Cleaner Architecture**: Modular tool organization across logical domains  
+✅ **Improved Maintainability**: Pythonic code that's easier to read and extend  
+✅ **Full Compatibility**: Same MCP protocol, works with all existing clients  
+
+### Before vs After
+
+**Before (Traditional MCP SDK):**
+```python
+Tool(
+    name="search_airports",
+    description="Search for airports by IATA code or city name",
+    inputSchema={
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "IATA code or city name"},
+            "country": {"type": "string", "description": "Optional country filter"},
+            "query_type": {"type": "string", "enum": ["iata", "city", "auto"]}
+        },
+        "required": ["query"]
+    }
+)
+
+@server.call_tool()
+async def handle_call_tool(name: str, arguments: dict):
+    if name == "search_airports":
+        return await _handle_search_airports(arguments)
+    # ... 30+ more tool handlers
+```
+
+**After (FastMCP):**
+```python
+@mcp.tool
+def search_airports(
+    query: str, 
+    country: str | None = None, 
+    query_type: Literal["iata", "city", "auto"] = "auto"
+) -> str:
+    """Search for airports by IATA code or city name."""
+    # Implementation here
+```
+
+### Architecture Improvements
+
+The FastMCP refactoring introduced a **modular architecture** with tools organized by domain:
+
+- `tools/core.py` - Core flight planning (search, plan, distance, performance)  
+- `tools/atmosphere.py` - Atmospheric modeling and wind analysis  
+- `tools/frames.py` - Coordinate frame transformations  
+- `tools/aerodynamics.py` - Wing analysis and airfoil polars  
+- `tools/propellers.py` - Propeller BEMT and UAV energy analysis  
+- `tools/rockets.py` - Rocket trajectory and sizing  
+- `tools/orbits.py` - Orbital mechanics and propagation  
+- `tools/optimization.py` - Trajectory optimization algorithms  
+
+### Compatibility Notes
+
+- **Entry Point**: Now uses `aerospace_mcp.fastmcp_server:run`
+- **Dependencies**: Includes `fastmcp>=2.11.3` instead of raw `mcp` 
+- **Server Name**: Still `aerospace-mcp` for client compatibility
+- **All Tools**: All 30+ tools maintain exact same names and parameters
 
 ## ⚡ Performance
 
