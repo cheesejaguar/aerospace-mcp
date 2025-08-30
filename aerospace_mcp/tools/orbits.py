@@ -26,23 +26,23 @@ def elements_to_state_vector(orbital_elements: dict) -> str:
         elements = OrbitElements(**orbital_elements)
         result = _elements_to_state(elements)
 
-        return json.dumps({
-            "position_m": {
-                "x": result.position_m[0],
-                "y": result.position_m[1],
-                "z": result.position_m[2]
+        return json.dumps(
+            {
+                "position_m": {
+                    "x": result.position_m[0],
+                    "y": result.position_m[1],
+                    "z": result.position_m[2],
+                },
+                "velocity_ms": {
+                    "x": result.velocity_ms[0],
+                    "y": result.velocity_ms[1],
+                    "z": result.velocity_ms[2],
+                },
+                "reference_frame": "J2000",
+                "units": {"position": "meters", "velocity": "m/s"},
             },
-            "velocity_ms": {
-                "x": result.velocity_ms[0],
-                "y": result.velocity_ms[1],
-                "z": result.velocity_ms[2]
-            },
-            "reference_frame": "J2000",
-            "units": {
-                "position": "meters",
-                "velocity": "m/s"
-            }
-        }, indent=2)
+            indent=2,
+        )
 
     except ImportError:
         return "Orbital mechanics not available - install orbital packages"
@@ -71,15 +71,18 @@ def state_vector_to_elements(state_vector: dict) -> str:
         state = StateVector(**state_vector)
         result = _state_to_elements(state)
 
-        return json.dumps({
-            "semi_major_axis_m": result.semi_major_axis_m,
-            "eccentricity": result.eccentricity,
-            "inclination_deg": result.inclination_deg,
-            "raan_deg": result.raan_deg,
-            "arg_perigee_deg": result.arg_perigee_deg,
-            "true_anomaly_deg": result.true_anomaly_deg,
-            "epoch_utc": result.epoch_utc,
-        }, indent=2)
+        return json.dumps(
+            {
+                "semi_major_axis_m": result.semi_major_axis_m,
+                "eccentricity": result.eccentricity,
+                "inclination_deg": result.inclination_deg,
+                "raan_deg": result.raan_deg,
+                "arg_perigee_deg": result.arg_perigee_deg,
+                "true_anomaly_deg": result.true_anomaly_deg,
+                "epoch_utc": result.epoch_utc,
+            },
+            indent=2,
+        )
 
     except ImportError:
         return "Orbital mechanics not available - install orbital packages"
@@ -89,9 +92,7 @@ def state_vector_to_elements(state_vector: dict) -> str:
 
 
 def propagate_orbit_j2(
-    initial_state: dict,
-    propagation_time_s: float,
-    time_step_s: float = 60.0
+    initial_state: dict, propagation_time_s: float, time_step_s: float = 60.0
 ) -> str:
     """Propagate orbit with J2 perturbations using numerical integration.
 
@@ -118,9 +119,7 @@ def propagate_orbit_j2(
 
 
 def calculate_ground_track(
-    orbital_state: dict,
-    duration_s: float,
-    time_step_s: float = 60.0
+    orbital_state: dict, duration_s: float, time_step_s: float = 60.0
 ) -> str:
     """Calculate ground track from orbital state vectors.
 
@@ -171,9 +170,7 @@ def hohmann_transfer(r1_m: float, r2_m: float) -> str:
 
 
 def orbital_rendezvous_planning(
-    chaser_elements: dict,
-    target_elements: dict,
-    rendezvous_options: dict | None = None
+    chaser_elements: dict, target_elements: dict, rendezvous_options: dict | None = None
 ) -> str:
     """Plan orbital rendezvous maneuvers between two spacecraft.
 

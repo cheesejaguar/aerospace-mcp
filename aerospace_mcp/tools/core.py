@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 def search_airports(
     query: str,
     country: str | None = None,
-    query_type: Literal["iata", "city", "auto"] = "auto"
+    query_type: Literal["iata", "city", "auto"] = "auto",
 ) -> str:
     """Search for airports by IATA code or city name.
 
@@ -80,7 +80,7 @@ def plan_flight(
     departure: dict,
     arrival: dict,
     aircraft: dict | None = None,
-    route_options: dict | None = None
+    route_options: dict | None = None,
 ) -> str:
     """Plan a flight route between two airports with performance estimates.
 
@@ -158,8 +158,8 @@ def plan_flight(
                     "country": depart_airport.country,
                     "coordinates": {
                         "lat": depart_airport.lat,
-                        "lon": depart_airport.lon
-                    }
+                        "lon": depart_airport.lon,
+                    },
                 }
             },
             "arrival": {
@@ -171,8 +171,8 @@ def plan_flight(
                     "country": arrive_airport.country,
                     "coordinates": {
                         "lat": arrive_airport.lat,
-                        "lon": arrive_airport.lon
-                    }
+                        "lon": arrive_airport.lon,
+                    },
                 }
             },
             "route": {
@@ -199,7 +199,9 @@ def plan_flight(
                 response["performance"] = performance
                 response["engine"] = engine_name
             except OpenAPError as e:
-                response["performance_note"] = f"Performance estimation failed: {str(e)}"
+                response["performance_note"] = (
+                    f"Performance estimation failed: {str(e)}"
+                )
         elif request.ac_type:
             response["performance_note"] = (
                 f"OpenAP not available - no performance estimates for {request.ac_type}"
@@ -212,9 +214,7 @@ def plan_flight(
         return f"Flight planning error: {str(e)}"
 
 
-def calculate_distance(
-    lat1: float, lon1: float, lat2: float, lon2: float
-) -> str:
+def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> str:
     """Calculate great circle distance between two points.
 
     Args:
@@ -228,27 +228,30 @@ def calculate_distance(
     """
     try:
         # Calculate great circle route
-        route = great_circle_points(lat1, lon1, lat2, lon2, step_km=1000000)  # Single segment
+        route = great_circle_points(
+            lat1, lon1, lat2, lon2, step_km=1000000
+        )  # Single segment
 
-        return json.dumps({
-            "distance_km": route["distance_km"],
-            "distance_nm": route["distance_nm"],
-            "initial_bearing_deg": route["initial_bearing_deg"],
-            "final_bearing_deg": route["final_bearing_deg"],
-            "coordinates": {
-                "start": {"lat": lat1, "lon": lon1},
-                "end": {"lat": lat2, "lon": lon2}
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "distance_km": route["distance_km"],
+                "distance_nm": route["distance_nm"],
+                "initial_bearing_deg": route["initial_bearing_deg"],
+                "final_bearing_deg": route["final_bearing_deg"],
+                "coordinates": {
+                    "start": {"lat": lat1, "lon": lon1},
+                    "end": {"lat": lat2, "lon": lon2},
+                },
+            },
+            indent=2,
+        )
 
     except Exception as e:
         return f"Distance calculation error: {str(e)}"
 
 
 def get_aircraft_performance(
-    aircraft_type: str,
-    distance_km: float,
-    cruise_altitude_ft: float = 35000
+    aircraft_type: str, distance_km: float, cruise_altitude_ft: float = 35000
 ) -> str:
     """Get performance estimates for an aircraft type (requires OpenAP).
 

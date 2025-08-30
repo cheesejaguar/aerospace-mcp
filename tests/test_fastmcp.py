@@ -46,16 +46,20 @@ class TestSearchAirportsTool:
     def test_search_airports_by_iata(self, mock_airport):
         """Test searching airports by IATA code."""
         # Mock airport data
-        mock_airport.return_value = type('Airport', (), {
-            'iata': 'SJC',
-            'icao': 'KSJC',
-            'name': 'San Jose International Airport',
-            'city': 'San Jose',
-            'country': 'US',
-            'lat': 37.3626,
-            'lon': -121.929,
-            'tz': 'America/Los_Angeles'
-        })()
+        mock_airport.return_value = type(
+            "Airport",
+            (),
+            {
+                "iata": "SJC",
+                "icao": "KSJC",
+                "name": "San Jose International Airport",
+                "city": "San Jose",
+                "country": "US",
+                "lat": 37.3626,
+                "lon": -121.929,
+                "tz": "America/Los_Angeles",
+            },
+        )()
 
         result = search_airports("SJC", query_type="iata")
 
@@ -69,16 +73,20 @@ class TestSearchAirportsTool:
         """Test searching airports by city name."""
         # Mock city search
         mock_find.return_value = [
-            type('Airport', (), {
-                'iata': 'SJC',
-                'icao': 'KSJC',
-                'name': 'San Jose International Airport',
-                'city': 'San Jose',
-                'country': 'US',
-                'lat': 37.3626,
-                'lon': -121.929,
-                'tz': 'America/Los_Angeles'
-            })()
+            type(
+                "Airport",
+                (),
+                {
+                    "iata": "SJC",
+                    "icao": "KSJC",
+                    "name": "San Jose International Airport",
+                    "city": "San Jose",
+                    "country": "US",
+                    "lat": 37.3626,
+                    "lon": -121.929,
+                    "tz": "America/Los_Angeles",
+                },
+            )()
         ]
 
         result = search_airports("San Jose", query_type="city")
@@ -113,18 +121,32 @@ class TestPlanFlightTool:
     def test_plan_flight_basic(self, mock_route, mock_resolve):
         """Test basic flight planning."""
         # Mock airport resolution
-        mock_departure = type('Airport', (), {
-            'iata': 'SJC', 'icao': 'KSJC',
-            'name': 'San Jose International Airport',
-            'city': 'San Jose', 'country': 'US',
-            'lat': 37.3626, 'lon': -121.929
-        })()
-        mock_arrival = type('Airport', (), {
-            'iata': 'NRT', 'icao': 'RJAA',
-            'name': 'Narita International Airport',
-            'city': 'Tokyo', 'country': 'JP',
-            'lat': 35.7647, 'lon': 140.386
-        })()
+        mock_departure = type(
+            "Airport",
+            (),
+            {
+                "iata": "SJC",
+                "icao": "KSJC",
+                "name": "San Jose International Airport",
+                "city": "San Jose",
+                "country": "US",
+                "lat": 37.3626,
+                "lon": -121.929,
+            },
+        )()
+        mock_arrival = type(
+            "Airport",
+            (),
+            {
+                "iata": "NRT",
+                "icao": "RJAA",
+                "name": "Narita International Airport",
+                "city": "Tokyo",
+                "country": "JP",
+                "lat": 35.7647,
+                "lon": 140.386,
+            },
+        )()
 
         mock_resolve.side_effect = [mock_departure, mock_arrival]
 
@@ -134,7 +156,7 @@ class TestPlanFlightTool:
             "distance_nm": 4471.1,
             "initial_bearing_deg": 295.2,
             "final_bearing_deg": 240.8,
-            "points": [[37.3626, -121.929, 0], [35.7647, 140.386, 8280.5]]
+            "points": [[37.3626, -121.929, 0], [35.7647, 140.386, 8280.5]],
         }
 
         departure = {"city": "San Jose"}
@@ -158,7 +180,7 @@ class TestCalculateDistanceTool:
             "distance_km": 100.0,
             "distance_nm": 54.0,
             "initial_bearing_deg": 45.0,
-            "final_bearing_deg": 45.0
+            "final_bearing_deg": 45.0,
         }
 
         result = calculate_distance(37.0, -122.0, 38.0, -121.0)
@@ -199,7 +221,7 @@ class TestAircraftPerformanceTool:
         mock_estimates.return_value = {
             "fuel_kg": 2500.0,
             "flight_time_minutes": 180.0,
-            "cruise_mach": 0.78
+            "cruise_mach": 0.78,
         }
 
         result = get_aircraft_performance("A320", 1000.0)

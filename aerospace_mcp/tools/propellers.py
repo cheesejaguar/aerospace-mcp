@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 def propeller_bemt_analysis(
     propeller_geometry: dict,
     operating_conditions: dict,
-    analysis_options: dict | None = None
+    analysis_options: dict | None = None,
 ) -> str:
     """Analyze propeller performance using Blade Element Momentum Theory.
 
@@ -46,7 +46,7 @@ def propeller_bemt_analysis(
             f"Propeller: {geometry.diameter_m:.2f}m dia, {geometry.pitch_m:.2f}m pitch, {geometry.num_blades} blades",
             f"Conditions: {velocity_ms:.1f} m/s @ {altitude_m:.0f}m altitude",
             "",
-            f"{'RPM':>6} {'Thrust (N)':>10} {'Power (W)':>9} {'Efficiency':>10} {'Adv Ratio':>10}"
+            f"{'RPM':>6} {'Thrust (N)':>10} {'Power (W)':>9} {'Efficiency':>10} {'Adv Ratio':>10}",
         ]
         result_lines.append("-" * 60)
 
@@ -57,19 +57,22 @@ def propeller_bemt_analysis(
             )
 
         # Add JSON data
-        json_data = json.dumps([
-            {
-                "rpm": r.rpm,
-                "thrust_n": r.thrust_n,
-                "torque_nm": r.torque_nm,
-                "power_w": r.power_w,
-                "efficiency": r.efficiency,
-                "advance_ratio": r.advance_ratio,
-                "thrust_coefficient": r.thrust_coefficient,
-                "power_coefficient": r.power_coefficient,
-            }
-            for r in results
-        ], indent=2)
+        json_data = json.dumps(
+            [
+                {
+                    "rpm": r.rpm,
+                    "thrust_n": r.thrust_n,
+                    "torque_nm": r.torque_nm,
+                    "power_w": r.power_w,
+                    "efficiency": r.efficiency,
+                    "advance_ratio": r.advance_ratio,
+                    "thrust_coefficient": r.thrust_coefficient,
+                    "power_coefficient": r.power_coefficient,
+                }
+                for r in results
+            ],
+            indent=2,
+        )
         result_lines.extend(["", "JSON Data:", json_data])
 
         return "\n".join(result_lines)
@@ -82,9 +85,7 @@ def propeller_bemt_analysis(
 
 
 def uav_energy_estimate(
-    uav_config: dict,
-    battery_config: dict,
-    mission_profile: dict | None = None
+    uav_config: dict, battery_config: dict, mission_profile: dict | None = None
 ) -> str:
     """Estimate UAV flight time and energy consumption for mission planning.
 
@@ -125,27 +126,33 @@ def uav_energy_estimate(
         ]
 
         if uav.wing_area_m2:
-            result_lines.extend([
-                f"Wing Area: {uav.wing_area_m2:.2f} m²",
-                f"Wing Loading: {uav.mass_kg * 9.81 / uav.wing_area_m2:.1f} N/m²",
-            ])
+            result_lines.extend(
+                [
+                    f"Wing Area: {uav.wing_area_m2:.2f} m²",
+                    f"Wing Loading: {uav.mass_kg * 9.81 / uav.wing_area_m2:.1f} N/m²",
+                ]
+            )
         elif uav.disk_area_m2:
-            result_lines.extend([
-                f"Rotor Disk Area: {uav.disk_area_m2:.2f} m²",
-                f"Disk Loading: {uav.mass_kg * 9.81 / uav.disk_area_m2:.1f} N/m²",
-            ])
+            result_lines.extend(
+                [
+                    f"Rotor Disk Area: {uav.disk_area_m2:.2f} m²",
+                    f"Disk Loading: {uav.mass_kg * 9.81 / uav.disk_area_m2:.1f} N/m²",
+                ]
+            )
 
-        result_lines.extend([
-            "",
-            "Energy Analysis:",
-            f"  Battery Energy: {result.battery_energy_wh:.0f} Wh",
-            f"  Usable Energy: {result.energy_consumed_wh:.0f} Wh",
-            f"  Power Required: {result.power_required_w:.0f} W",
-            f"  System Efficiency: {result.efficiency_overall:.1%}",
-            "",
-            "Mission Performance:",
-            f"  Flight Time: {result.flight_time_min:.1f} minutes ({result.flight_time_min / 60:.1f} hours)",
-        ])
+        result_lines.extend(
+            [
+                "",
+                "Energy Analysis:",
+                f"  Battery Energy: {result.battery_energy_wh:.0f} Wh",
+                f"  Usable Energy: {result.energy_consumed_wh:.0f} Wh",
+                f"  Power Required: {result.power_required_w:.0f} W",
+                f"  System Efficiency: {result.efficiency_overall:.1%}",
+                "",
+                "Mission Performance:",
+                f"  Flight Time: {result.flight_time_min:.1f} minutes ({result.flight_time_min / 60:.1f} hours)",
+            ]
+        )
 
         if result.range_km:
             result_lines.append(f"  Range: {result.range_km:.1f} km")
@@ -157,11 +164,17 @@ def uav_energy_estimate(
         result_lines.extend(["", "Recommendations:"])
 
         if result.flight_time_min < 10:
-            result_lines.append("  ⚠ Very short flight time - consider larger battery or lighter aircraft")
+            result_lines.append(
+                "  ⚠ Very short flight time - consider larger battery or lighter aircraft"
+            )
         elif result.flight_time_min < 20:
-            result_lines.append("  ⚠ Short flight time - optimize for efficiency or add battery capacity")
+            result_lines.append(
+                "  ⚠ Short flight time - optimize for efficiency or add battery capacity"
+            )
         elif result.flight_time_min > 120:
-            result_lines.append("  ✓ Excellent endurance - well optimized configuration")
+            result_lines.append(
+                "  ✓ Excellent endurance - well optimized configuration"
+            )
         else:
             result_lines.append("  ✓ Good flight time for mission requirements")
 
@@ -171,15 +184,18 @@ def uav_energy_estimate(
             result_lines.append("  ✓ Good system efficiency")
 
         # Add JSON data
-        json_data = json.dumps({
-            "flight_time_min": result.flight_time_min,
-            "range_km": result.range_km,
-            "hover_time_min": result.hover_time_min,
-            "power_required_w": result.power_required_w,
-            "energy_consumed_wh": result.energy_consumed_wh,
-            "battery_energy_wh": result.battery_energy_wh,
-            "efficiency_overall": result.efficiency_overall,
-        }, indent=2)
+        json_data = json.dumps(
+            {
+                "flight_time_min": result.flight_time_min,
+                "range_km": result.range_km,
+                "hover_time_min": result.hover_time_min,
+                "power_required_w": result.power_required_w,
+                "energy_consumed_wh": result.energy_consumed_wh,
+                "battery_energy_wh": result.battery_energy_wh,
+                "efficiency_overall": result.efficiency_overall,
+            },
+            indent=2,
+        )
         result_lines.extend(["", "JSON Data:", json_data])
 
         return "\n".join(result_lines)

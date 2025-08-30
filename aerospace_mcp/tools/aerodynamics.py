@@ -7,9 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 def wing_vlm_analysis(
-    wing_config: dict,
-    flight_conditions: dict,
-    analysis_options: dict | None = None
+    wing_config: dict, flight_conditions: dict, analysis_options: dict | None = None
 ) -> str:
     """Analyze wing aerodynamics using Vortex Lattice Method or simplified lifting line theory.
 
@@ -30,34 +28,40 @@ def wing_vlm_analysis(
         result_lines = ["Wing Aerodynamic Analysis (VLM)", "=" * 50]
 
         # Wing configuration
-        result_lines.extend([
-            "Configuration:",
-            f"  Span: {wing_config.get('span_m', 0):.1f} m",
-            f"  Chord: {wing_config.get('chord_m', 0):.1f} m",
-            f"  Aspect Ratio: {result.get('aspect_ratio', 0):.1f}",
-            f"  Sweep: {wing_config.get('sweep_deg', 0):.1f}°",
-            ""
-        ])
+        result_lines.extend(
+            [
+                "Configuration:",
+                f"  Span: {wing_config.get('span_m', 0):.1f} m",
+                f"  Chord: {wing_config.get('chord_m', 0):.1f} m",
+                f"  Aspect Ratio: {result.get('aspect_ratio', 0):.1f}",
+                f"  Sweep: {wing_config.get('sweep_deg', 0):.1f}°",
+                "",
+            ]
+        )
 
         # Flight conditions
-        result_lines.extend([
-            "Flight Conditions:",
-            f"  Airspeed: {flight_conditions.get('airspeed_ms', 0):.1f} m/s",
-            f"  Altitude: {flight_conditions.get('altitude_m', 0):.0f} m",
-            f"  Angle of Attack: {flight_conditions.get('alpha_deg', 0):.1f}°",
-            ""
-        ])
+        result_lines.extend(
+            [
+                "Flight Conditions:",
+                f"  Airspeed: {flight_conditions.get('airspeed_ms', 0):.1f} m/s",
+                f"  Altitude: {flight_conditions.get('altitude_m', 0):.0f} m",
+                f"  Angle of Attack: {flight_conditions.get('alpha_deg', 0):.1f}°",
+                "",
+            ]
+        )
 
         # Results
-        result_lines.extend([
-            "Aerodynamic Results:",
-            f"  Lift Coefficient: {result.get('cl', 0):.3f}",
-            f"  Drag Coefficient: {result.get('cd', 0):.4f}",
-            f"  L/D Ratio: {result.get('cl_cd_ratio', 0):.1f}",
-            f"  Lift (N): {result.get('lift_n', 0):.0f}",
-            f"  Drag (N): {result.get('drag_n', 0):.0f}",
-            ""
-        ])
+        result_lines.extend(
+            [
+                "Aerodynamic Results:",
+                f"  Lift Coefficient: {result.get('cl', 0):.3f}",
+                f"  Drag Coefficient: {result.get('cd', 0):.4f}",
+                f"  L/D Ratio: {result.get('cl_cd_ratio', 0):.1f}",
+                f"  Lift (N): {result.get('lift_n', 0):.0f}",
+                f"  Drag (N): {result.get('drag_n', 0):.0f}",
+                "",
+            ]
+        )
 
         # Add JSON data
         json_data = json.dumps(result, indent=2)
@@ -76,7 +80,7 @@ def airfoil_polar_analysis(
     airfoil_name: str,
     reynolds_number: float = 1000000,
     mach_number: float = 0.1,
-    alpha_range_deg: list[float] | None = None
+    alpha_range_deg: list[float] | None = None,
 ) -> str:
     """Generate airfoil polar data (CL, CD, CM vs alpha) using database or advanced methods.
 
@@ -94,19 +98,23 @@ def airfoil_polar_analysis(
 
         alpha_range_deg = alpha_range_deg or list(range(-10, 21, 2))
 
-        result = _airfoil_analysis(airfoil_name, reynolds_number, mach_number, alpha_range_deg)
+        result = _airfoil_analysis(
+            airfoil_name, reynolds_number, mach_number, alpha_range_deg
+        )
 
         # Format response
         result_lines = [f"Airfoil Polar Analysis: {airfoil_name}", "=" * 60]
-        result_lines.extend([
-            f"Reynolds Number: {reynolds_number:.0e}",
-            f"Mach Number: {mach_number:.3f}",
-            "",
-            f"{'Alpha (°)':>8} {'CL':>8} {'CD':>8} {'CM':>8} {'L/D':>8}"
-        ])
+        result_lines.extend(
+            [
+                f"Reynolds Number: {reynolds_number:.0e}",
+                f"Mach Number: {mach_number:.3f}",
+                "",
+                f"{'Alpha (°)':>8} {'CL':>8} {'CD':>8} {'CM':>8} {'L/D':>8}",
+            ]
+        )
         result_lines.append("-" * 50)
 
-        for point in result.get('polar_data', []):
+        for point in result.get("polar_data", []):
             result_lines.append(
                 f"{point.get('alpha_deg', 0):8.1f} {point.get('cl', 0):8.4f} "
                 f"{point.get('cd', 0):8.5f} {point.get('cm', 0):8.4f} "
@@ -126,10 +134,7 @@ def airfoil_polar_analysis(
         return f"Airfoil analysis error: {str(e)}"
 
 
-def calculate_stability_derivatives(
-    wing_config: dict,
-    flight_conditions: dict
-) -> str:
+def calculate_stability_derivatives(wing_config: dict, flight_conditions: dict) -> str:
     """Calculate basic longitudinal stability derivatives for a wing.
 
     Args:

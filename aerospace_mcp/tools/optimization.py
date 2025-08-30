@@ -12,7 +12,9 @@ def optimize_thrust_profile(
     burn_time_s: float,
     total_impulse_target: float,
     n_segments: int = 5,
-    objective: Literal["max_altitude", "min_max_q", "min_gravity_loss"] = "max_altitude"
+    objective: Literal[
+        "max_altitude", "min_max_q", "min_gravity_loss"
+    ] = "max_altitude",
 ) -> str:
     """Optimize rocket thrust profile for better performance using trajectory optimization.
 
@@ -36,19 +38,24 @@ def optimize_thrust_profile(
 
         geometry = RocketGeometry(**rocket_geometry)
 
-        result = _optimize(geometry, burn_time_s, total_impulse_target, n_segments, objective)
+        result = _optimize(
+            geometry, burn_time_s, total_impulse_target, n_segments, objective
+        )
 
-        return json.dumps({
-            "optimization_result": result.optimization_result,
-            "optimal_objective": result.optimal_objective,
-            "optimal_parameters": result.optimal_parameters,
-            "performance": {
-                "max_altitude_m": result.performance.max_altitude_m,
-                "max_velocity_ms": result.performance.max_velocity_ms,
-                "total_impulse_ns": result.performance.total_impulse_ns,
-                "apogee_time_s": result.performance.apogee_time_s,
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "optimization_result": result.optimization_result,
+                "optimal_objective": result.optimal_objective,
+                "optimal_parameters": result.optimal_parameters,
+                "performance": {
+                    "max_altitude_m": result.performance.max_altitude_m,
+                    "max_velocity_ms": result.performance.max_velocity_ms,
+                    "total_impulse_ns": result.performance.total_impulse_ns,
+                    "apogee_time_s": result.performance.apogee_time_s,
+                },
+            },
+            indent=2,
+        )
 
     except ImportError:
         return "Trajectory optimization not available - install optimization packages"
@@ -60,7 +67,7 @@ def optimize_thrust_profile(
 def trajectory_sensitivity_analysis(
     rocket_geometry: dict,
     parameter_variations: dict,
-    analysis_options: dict | None = None
+    analysis_options: dict | None = None,
 ) -> str:
     """Perform sensitivity analysis on rocket trajectory parameters.
 
@@ -94,8 +101,7 @@ def trajectory_sensitivity_analysis(
 
 
 def genetic_algorithm_optimization(
-    optimization_problem: dict,
-    ga_parameters: dict | None = None
+    optimization_problem: dict, ga_parameters: dict | None = None
 ) -> str:
     """Optimize spacecraft trajectory using genetic algorithm.
 
@@ -123,8 +129,7 @@ def genetic_algorithm_optimization(
 
 
 def particle_swarm_optimization(
-    optimization_problem: dict,
-    pso_parameters: dict | None = None
+    optimization_problem: dict, pso_parameters: dict | None = None
 ) -> str:
     """Optimize spacecraft trajectory using particle swarm optimization.
 
@@ -143,7 +148,9 @@ def particle_swarm_optimization(
         return json.dumps(result, indent=2)
 
     except ImportError:
-        return "Particle swarm optimization not available - install optimization packages"
+        return (
+            "Particle swarm optimization not available - install optimization packages"
+        )
     except Exception as e:
         logger.error(f"PSO optimization error: {str(e)}", exc_info=True)
         return f"PSO optimization error: {str(e)}"
@@ -154,7 +161,7 @@ def porkchop_plot_analysis(
     arrival_body: str,
     departure_date_range: list[str],
     arrival_date_range: list[str],
-    analysis_options: dict | None = None
+    analysis_options: dict | None = None,
 ) -> str:
     """Generate porkchop plot for interplanetary transfer opportunities.
 
@@ -176,13 +183,15 @@ def porkchop_plot_analysis(
             arrival_body,
             departure_date_range,
             arrival_date_range,
-            analysis_options or {}
+            analysis_options or {},
         )
 
         return json.dumps(result, indent=2)
 
     except ImportError:
-        return "Porkchop plot analysis not available - install space trajectory packages"
+        return (
+            "Porkchop plot analysis not available - install space trajectory packages"
+        )
     except Exception as e:
         logger.error(f"Porkchop plot error: {str(e)}", exc_info=True)
         return f"Porkchop plot error: {str(e)}"
@@ -192,7 +201,7 @@ def monte_carlo_uncertainty_analysis(
     nominal_trajectory: dict,
     uncertainty_parameters: dict,
     n_samples: int = 1000,
-    analysis_options: dict | None = None
+    analysis_options: dict | None = None,
 ) -> str:
     """Perform Monte Carlo uncertainty analysis on spacecraft trajectory.
 
@@ -214,7 +223,7 @@ def monte_carlo_uncertainty_analysis(
             nominal_trajectory,
             uncertainty_parameters,
             n_samples,
-            analysis_options or {}
+            analysis_options or {},
         )
 
         return json.dumps(result, indent=2)

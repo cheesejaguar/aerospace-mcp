@@ -8,8 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_atmosphere_profile(
-    altitudes_m: list[float],
-    model_type: Literal["ISA", "enhanced"] = "ISA"
+    altitudes_m: list[float], model_type: Literal["ISA", "enhanced"] = "ISA"
 ) -> str:
     """Get atmospheric properties (pressure, temperature, density) at specified altitudes using ISA model.
 
@@ -56,7 +55,7 @@ def wind_model_simple(
     surface_wind_speed_ms: float = 5.0,
     surface_wind_direction_deg: float = 270.0,
     model_type: Literal["logarithmic", "power_law"] = "logarithmic",
-    roughness_length_m: float = 0.03
+    roughness_length_m: float = 0.03,
 ) -> str:
     """Calculate wind speeds at different altitudes using logarithmic or power law models.
 
@@ -78,17 +77,19 @@ def wind_model_simple(
             surface_wind_speed_ms,
             surface_wind_direction_deg,
             model_type,
-            roughness_length_m
+            roughness_length_m,
         )
 
         # Format response
         result_lines = [f"Wind Profile ({model_type} model)", "=" * 50]
-        result_lines.extend([
-            f"Surface Reference: {surface_wind_speed_ms:.1f} m/s @ {surface_wind_direction_deg:.0f}° (10m height)",
-            f"Roughness Length: {roughness_length_m:.3f} m",
-            "",
-            f"{'Alt (m)':>8} {'Speed (m/s)':>12} {'Dir (deg)':>10} {'Gust Factor':>12}"
-        ])
+        result_lines.extend(
+            [
+                f"Surface Reference: {surface_wind_speed_ms:.1f} m/s @ {surface_wind_direction_deg:.0f}° (10m height)",
+                f"Roughness Length: {roughness_length_m:.3f} m",
+                "",
+                f"{'Alt (m)':>8} {'Speed (m/s)':>12} {'Dir (deg)':>10} {'Gust Factor':>12}",
+            ]
+        )
         result_lines.append("-" * 50)
 
         for point in wind_profile:
