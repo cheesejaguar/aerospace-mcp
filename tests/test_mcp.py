@@ -42,7 +42,8 @@ class TestMCPServerInitialization:
         for expected_tool in expected_tools:
             assert expected_tool in tool_names
 
-        assert len(TOOLS) == len(expected_tools)
+# Updated for Phase 4 - now we have many more tools, just check required ones exist
+        assert len(TOOLS) >= len(expected_tools)
 
     @pytest.mark.unit
     def test_tool_schemas_valid(self):
@@ -471,7 +472,7 @@ class TestGetSystemStatusTool:
     async def test_get_system_status_with_openap(self):
         """Test system status when OpenAP is available."""
         with patch("aerospace_mcp.server.OPENAP_AVAILABLE", True):
-            with patch("aerospace_mcp.server._AIRPORTS_IATA", {"SJC": {}, "NRT": {}}):
+            with patch("aerospace_mcp.core._AIRPORTS_IATA", {"SJC": {}, "NRT": {}}):
                 result = await _handle_get_system_status({})
 
                 assert len(result) == 1
@@ -487,7 +488,7 @@ class TestGetSystemStatusTool:
     async def test_get_system_status_without_openap(self):
         """Test system status when OpenAP is not available."""
         with patch("aerospace_mcp.server.OPENAP_AVAILABLE", False):
-            with patch("aerospace_mcp.server._AIRPORTS_IATA", {"SJC": {}}):
+            with patch("aerospace_mcp.core._AIRPORTS_IATA", {"SJC": {}}):
                 result = await _handle_get_system_status({})
 
                 assert len(result) == 1
