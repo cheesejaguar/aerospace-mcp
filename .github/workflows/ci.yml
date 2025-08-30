@@ -45,7 +45,7 @@ jobs:
           uv-${{ runner.os }}-
 
     - name: Install dependencies (minimal for linting)
-      run: uv sync --dev --no-install-project
+      run: uv sync --dev
 
     - name: Run ruff linter (fast fail)
       run: uv run ruff check --output-format=github .
@@ -151,7 +151,7 @@ jobs:
           uv-${{ runner.os }}-
 
     - name: Install dependencies (minimal for security)
-      run: uv sync --dev --no-install-project
+      run: uv sync --dev
 
     - name: Run bandit security checks
       run: |
