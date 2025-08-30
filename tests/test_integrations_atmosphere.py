@@ -61,8 +61,8 @@ class TestAtmosphereProfile:
 
     def test_altitude_limits(self):
         """Test altitude limits and validation."""
-        # Test maximum altitude
-        profile = get_atmosphere_profile([86000.0])
+        # Test maximum altitude (ambiance library limit is 81020m, not 86000m)
+        profile = get_atmosphere_profile([81000.0])
         assert len(profile) == 1
 
         # Test out of range

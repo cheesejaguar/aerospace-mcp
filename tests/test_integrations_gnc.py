@@ -4,8 +4,10 @@ import pytest
 
 from aerospace_mcp.integrations.gnc import (
     GeneticAlgorithm,
+    GeneticAlgorithmParams,
     OptimizationResult,
     ParticleSwarmOptimizer,
+    ParticleSwarmParams,
     TrajectoryWaypoint,
 )
 
@@ -45,7 +47,7 @@ class TestGeneticAlgorithm:
 
     def test_ga_initialization(self):
         """Test GA initialization."""
-        ga = GeneticAlgorithm()
+        ga = GeneticAlgorithm(GeneticAlgorithmParams())
 
         # Check that GA instance was created
         assert ga is not None
@@ -57,7 +59,7 @@ class TestParticleSwarmOptimizer:
 
     def test_pso_initialization(self):
         """Test PSO initialization."""
-        pso = ParticleSwarmOptimizer()
+        pso = ParticleSwarmOptimizer(ParticleSwarmParams())
 
         # Check that PSO instance was created
         assert pso is not None
@@ -82,16 +84,18 @@ class TestOptimizationResult:
 
         result = OptimizationResult(
             optimal_trajectory=waypoints,
-            total_delta_v_ms=150.0,
-            flight_time_s=3600.0,
-            objective_value=1000.0,
-            convergence_iterations=50,
-            success=True,
+            optimal_cost=1000.0,
+            delta_v_total_ms=150.0,
+            fuel_mass_kg=10.0,
+            converged=True,
+            iterations=50,
+            computation_time_s=1.5,
+            algorithm="test",
         )
 
         assert len(result.optimal_trajectory) == 2
-        assert result.total_delta_v_ms == 150.0
-        assert result.success
+        assert result.delta_v_total_ms == 150.0
+        assert result.converged
 
 
 class TestModuleImports:
@@ -104,8 +108,8 @@ class TestModuleImports:
             time_s=0.0, position_m=[0.0, 0.0, 0.0], velocity_ms=[0.0, 0.0, 0.0]
         )
 
-        ga = GeneticAlgorithm()
-        pso = ParticleSwarmOptimizer()
+        ga = GeneticAlgorithm(GeneticAlgorithmParams())
+        pso = ParticleSwarmOptimizer(ParticleSwarmParams())
 
         assert waypoint is not None
         assert ga is not None

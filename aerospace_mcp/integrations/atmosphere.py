@@ -113,7 +113,7 @@ def get_atmosphere_profile(
     Get atmospheric properties at specified altitudes.
 
     Args:
-        altitudes_m: List of geometric altitudes in meters (0-86000m)
+        altitudes_m: List of geometric altitudes in meters (0-81020m when using ambiance, 0-86000m for manual ISA)
         model_type: Atmosphere model ("ISA", "COESA") - currently only ISA supported
 
     Returns:
@@ -125,8 +125,11 @@ def get_atmosphere_profile(
     results = []
 
     for altitude in altitudes_m:
-        if altitude < 0 or altitude > 86000:
-            raise ValueError(f"Altitude {altitude}m out of ISA range (0-86000m)")
+        # Use appropriate limits based on availability of ambiance library
+        max_altitude = 81020 if AMBIANCE_AVAILABLE else 86000
+        if altitude < 0 or altitude > max_altitude:
+            range_str = f"0-{max_altitude}m"
+            raise ValueError(f"Altitude {altitude}m out of ISA range ({range_str})")
 
         if AMBIANCE_AVAILABLE and model_type == "ISA":
             # Use ambiance library if available
