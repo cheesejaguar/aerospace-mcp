@@ -1,0 +1,136 @@
+# Git and version control
+.git
+.gitignore
+.gitmodules
+
+# Python cache and build files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Testing and coverage
+.tox/
+.nox/
+.coverage
+.pytest_cache/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Documentation (exclude from production build)
+docs/
+*.md
+!README.md
+*.rst
+
+# Development and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+logs/
+*.tmp
+*.temp
+
+# Development tools configuration
+.flake8
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+pyrightconfig.json
+
+# Docker files (prevent recursion)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+azure-pipelines.yml
+
+# Local configuration and secrets
+.env.local
+.env.development
+.env.test
+.env.production
+secrets/
+config.local.*
+
+# Backup and temporary files
+*.bak
+*.backup
+*.orig
+*~
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Node modules (if any frontend assets)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Data files (exclude large datasets from image)
+data/
+*.csv
+*.json
+*.xml
+*.parquet
+
+# Local development scripts
+run_*.py
+dev_*.py
+test_local.py

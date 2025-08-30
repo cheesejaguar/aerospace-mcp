@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  aerospace-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aerospace-mcp:latest
+    container_name: aerospace-mcp
+    
+    # Port mapping - expose 8080 internally to 8080 externally (configurable)
+    ports:
+      - "${AEROSPACE_PORT:-8080}:8080"
+    
+    # Environment variables for configuration
+    environment:
+      - AEROSPACE_MCP_HOST=0.0.0.0
+      - AEROSPACE_MCP_PORT=8080
+      - AEROSPACE_MCP_MODE=${AEROSPACE_MODE:-http}  # 'http' or 'mcp'
+      - AEROSPACE_MCP_LOG_LEVEL=${LOG_LEVEL:-info}
+      # Optional: Override default mass calculations
+      - AEROSPACE_DEFAULT_MASS_FACTOR=${MASS_FACTOR:-0.85}
+    
+    # Health check configuration
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    
+    # Restart policy for reliability
+    restart: unless-stopped
+    
+    # Resource limits (adjust based on your home server capabilities)
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    
+    # Optional volume mounts for logs and persistent data
+    volumes:
+      - ./logs:/app/logs:rw
+      # Uncomment if you need persistent data storage
+      # - ./data:/app/data:rw
+      # Uncomment if you want to mount custom configuration
+      # - ./config:/app/config:ro
+    
+    # Network configuration (optional - creates isolated network)
+    networks:
+      - aerospace-net
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Read-only filesystem with specific writable mounts
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /var/tmp:rw,noexec,nosuid,size=32m
+
+# Optional: Separate network for service isolation
+networks:
+  aerospace-net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+
+# Optional: Named volumes for better management
+volumes:
+  aerospace-logs:
+    driver: local
+  aerospace-data:
+    driver: local

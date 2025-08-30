@@ -1,0 +1,155 @@
+# Ingress for external access - adjust based on your ingress controller
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aerospace-mcp-ingress
+  namespace: default
+  labels:
+    app: aerospace-mcp
+    component: ingress
+  annotations:
+    # Nginx ingress controller annotations
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+    
+    # Rate limiting
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    
+    # CORS configuration
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization"
+    
+    # Connection and timeout settings
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    
+    # Optional: Certificate manager for HTTPS (if using cert-manager)
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    
+    # Traefik annotations (alternative to nginx)
+    # traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    # traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt
+    
+spec:
+  # Optional: TLS configuration
+  # tls:
+  # - hosts:
+  #   - aerospace-mcp.yourdomain.com
+  #   secretName: aerospace-mcp-tls
+  
+  rules:
+  # Local/internal access (adjust hostname for your setup)
+  - host: aerospace-mcp.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: aerospace-mcp-service
+            port:
+              number: 80
+  
+  # Optional: External domain access
+  # - host: aerospace-mcp.yourdomain.com
+  #   http:
+  #     paths:
+  #     - path: /
+  #       pathType: Prefix
+  #       backend:
+  #         service:
+  #           name: aerospace-mcp-service
+  #           port:
+  #             number: 80
+  
+  ingressClassName: nginx  # or traefik, or your ingress controller
+
+---
+# Alternative: Traefik IngressRoute (if using Traefik)
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: aerospace-mcp-traefik
+  namespace: default
+  labels:
+    app: aerospace-mcp
+    component: ingress-traefik
+spec:
+  entryPoints:
+  - web
+  - websecure
+  
+  routes:
+  - match: Host(`aerospace-mcp.local`)
+    kind: Rule
+    services:
+    - name: aerospace-mcp-service
+      port: 80
+    
+    # Optional: middleware for rate limiting, auth, etc.
+    # middlewares:
+    # - name: aerospace-mcp-ratelimit
+    # - name: aerospace-mcp-auth
+  
+  # Optional: TLS configuration
+  # tls:
+  #   certResolver: letsencrypt
+
+---
+# NetworkPolicy for security (optional but recommended)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aerospace-mcp-network-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: aerospace-mcp
+  
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Allow ingress from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx  # Adjust based on your setup
+    ports:
+    - protocol: TCP
+      port: 8080
+  
+  # Allow ingress from same namespace (for service discovery)
+  - from:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 8080
+  
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  
+  # Allow HTTPS for external API calls (if needed)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # Allow HTTP for health checks and internal communication
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80

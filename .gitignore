@@ -173,7 +173,10 @@ cython_debug/
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+.idea/
+*.iml
+*.ipr
+*.iws
 
 # Abstra
 # Abstra is an AI-powered process automation framework.
@@ -186,7 +189,12 @@ cython_debug/
 #  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
 #  and can be added to the global gitignore or merged into this file. However, if you prefer, 
 #  you could uncomment the following to ignore the entire vscode folder
-# .vscode/
+.vscode/
+*.code-workspace
+
+# VS Code extensions
+.vscode-server/
+.vscode-test/
 
 # Ruff stuff:
 .ruff_cache/
@@ -205,3 +213,141 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Docker
+# Dockerfile.*  # Keep our Dockerfile and docker-compose files in version control
+# docker-compose*.yml  # These are needed for deployment
+# .dockerignore  # This is needed for Docker builds
+
+# OS-specific files
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Atom
+.atom/
+
+# Additional IDE files
+.nova/
+.fleet/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage and test artifacts
+.coverage.*
+coverage.xml
+*.cover
+.nyc_output
+.pytest_cache/
+htmlcov/
+
+# Security and secrets
+.env.local
+.env.*.local
+secrets.json
+*.pem
+*.key
+*.crt
+*.cert
+
+# Aerospace MCP specific
+# Runtime data directories
+data/
+logs/
+cache/
+
+# FastAPI specific
+.openapi_cache/
+static/uploads/
+
+# MCP server runtime
+mcp_server.log
+mcp_client.log
+
+# OpenAP cache and data
+openap_cache/
+aircraft_data/
+
+# UV specific additions
+.uv/
+uv.lock.bak
+.python-version.local
+
+# Testing artifacts
+test-results/
+test_output/
+.testmon/
+.pytest_cache_backup/
+
+# Development tools
+.pre-commit-cache/
+.mypy_cache_backup/
+
+# IDE workspace files specific to this project
+.vscode/settings.json
+.vscode/launch.json
+*.code-workspace.local
+
+# Benchmark and profiling
+benchmarks/output/
+profile_*.prof
+*.flame
+
+# Documentation build artifacts
+docs/_build/
+docs/site/
+*.doctree
+
+# Local configuration overrides
+config.local.toml
+.env.production
+.env.staging
+docker-compose.override.local.yml

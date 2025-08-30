@@ -1,0 +1,171 @@
+# Ruff configuration for aerospace-mcp
+# https://docs.astral.sh/ruff/configuration/
+
+[lint]
+# Enable a comprehensive set of rules
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "D",   # pydocstyle
+    "UP",  # pyupgrade
+    "YTT", # flake8-2020
+    "ANN", # flake8-annotations
+    "S",   # flake8-bandit
+    "BLE", # flake8-blind-except
+    "FBT", # flake8-boolean-trap
+    "B",   # flake8-bugbear
+    "A",   # flake8-builtins
+    "COM", # flake8-commas
+    "C4",  # flake8-comprehensions
+    "DTZ", # flake8-datetimez
+    "T10", # flake8-debugger
+    "EM",  # flake8-errmsg
+    "EXE", # flake8-executable
+    "FA",  # flake8-future-annotations
+    "ISC", # flake8-implicit-str-concat
+    "ICN", # flake8-import-conventions
+    "G",   # flake8-logging-format
+    "INP", # flake8-no-pep420
+    "PIE", # flake8-pie
+    "T20", # flake8-print
+    "PYI", # flake8-pyi
+    "PT",  # flake8-pytest-style
+    "Q",   # flake8-quotes
+    "RSE", # flake8-raise
+    "RET", # flake8-return
+    "SLF", # flake8-self
+    "SLOT", # flake8-slots
+    "SIM", # flake8-simplify
+    "TID", # flake8-tidy-imports
+    "TCH", # flake8-type-checking
+    "INT", # flake8-gettext
+    "ARG", # flake8-unused-arguments
+    "PTH", # flake8-use-pathlib
+    "TD",  # flake8-todos
+    "FIX", # flake8-fixme
+    "ERA", # eradicate
+    "PGH", # pygrep-hooks
+    "PL",  # Pylint
+    "TRY", # tryceratops
+    "FLY", # flynt
+    "NPY", # NumPy-specific rules
+    "PERF", # Perflint
+    "FURB", # refurb
+    "LOG", # flake8-logging
+    "RUF", # Ruff-specific rules
+]
+
+# Ignore specific rules that might be too strict for this project
+ignore = [
+    "D100",   # Missing docstring in public module
+    "D101",   # Missing docstring in public class
+    "D102",   # Missing docstring in public method
+    "D103",   # Missing docstring in public function
+    "D104",   # Missing docstring in public package
+    "D105",   # Missing docstring in magic method
+    "D107",   # Missing docstring in __init__
+    "ANN101", # Missing type annotation for self in method
+    "ANN102", # Missing type annotation for cls in classmethod
+    "ANN401", # Dynamically typed expressions (Any) are disallowed
+    "S101",   # Use of assert detected
+    "S104",   # Possible binding to all interfaces
+    "S105",   # Possible hardcoded password
+    "S106",   # Possible hardcoded password
+    "S107",   # Possible hardcoded password
+    "S108",   # Probable insecure usage of temp file/directory
+    "COM812", # Trailing comma missing (conflicts with formatter)
+    "COM819", # Trailing comma prohibited (conflicts with formatter)
+    "ISC001", # Implicit string concatenation on one line (conflicts with formatter)
+    "Q000",   # Single quotes found but double quotes preferred (handled by formatter)
+    "Q001",   # Single quote docstrings found but double quotes preferred
+    "Q002",   # Docstring does not fit on one line
+    "Q003",   # Change outer quotes to avoid escaping inner quotes
+    "W191",   # Indentation contains tabs (handled by formatter)
+    "E111",   # Indentation is not a multiple of four (handled by formatter)
+    "E114",   # Indentation is not a multiple of four (comment) (handled by formatter)
+    "E117",   # Over-indented (handled by formatter)
+    "D206",   # Docstring should be indented with spaces, not tabs (handled by formatter)
+    "D300",   # Use """triple double quotes""" (handled by formatter)
+    "TD002",  # Missing author in TODO
+    "TD003",  # Missing issue link on the line following this TODO
+    "FIX002", # Line contains TODO, consider resolving the issue
+]
+
+# Allow fix for all enabled rules (when using --fix)
+fixable = ["ALL"]
+unfixable = []
+
+# Exclude a variety of commonly ignored directories
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+
+# Same as Black
+line-length = 100
+indent-width = 4
+
+# Assume Python 3.11
+target-version = "py311"
+
+[lint.per-file-ignores]
+# Tests can use magic values, assertions, and print statements
+"tests/**/*" = ["PLR2004", "S101", "T201"]
+# Scripts can use print statements
+"scripts/**/*" = ["T201"]
+
+[lint.flake8-quotes]
+docstring-quotes = "double"
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[lint.isort]
+known-first-party = ["aerospace_mcp"]
+
+[lint.pydocstyle]
+convention = "google"
+
+[format]
+# Like Black, use double quotes for strings
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs
+indent-style = "space"
+
+# Like Black, respect magic trailing commas
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending
+line-ending = "auto"
+
+# Enable auto-formatting of code examples in docstrings
+docstring-code-format = true
+
+# Set the line length limit used by the formatter
+line-length = 100
+
+# Set the tab size for indentation
+indent-width = 4

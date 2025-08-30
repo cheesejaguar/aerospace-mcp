@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aerospace-mcp-config
+  namespace: default
+  labels:
+    app: aerospace-mcp
+    component: config
+data:
+  # Application mode: 'http' for REST API, 'mcp' for MCP server
+  mode: "http"
+  
+  # Log level configuration
+  log_level: "info"
+  
+  # Host and port configuration (usually don't need to change in k8s)
+  host: "0.0.0.0"
+  port: "8080"
+  
+  # Performance tuning parameters
+  mass_factor: "0.85"  # Default mass factor for aircraft calculations
+  
+  # OpenAP configuration
+  openap_cache_size: "1000"  # Number of aircraft performance profiles to cache
+  
+  # Route calculation parameters
+  default_step_km: "25.0"     # Default step size for route polylines
+  max_step_km: "100.0"        # Maximum allowed step size
+  min_step_km: "1.0"          # Minimum allowed step size
+  
+  # API rate limiting (if implemented)
+  rate_limit_per_minute: "60"
+  rate_limit_burst: "10"
+  
+  # Health check configuration
+  health_check_timeout: "5"
+  
+  # Feature flags
+  enable_performance_estimates: "true"
+  enable_route_optimization: "false"  # Future feature
+  enable_weather_integration: "false" # Future feature
+  
+  # Logging configuration (JSON format for k8s)
+  log_format: "json"
+  log_timestamps: "true"
+  
+  # CORS configuration (if needed)
+  cors_origins: "*"  # Restrict in production
+  cors_methods: "GET,POST,OPTIONS"
+  cors_headers: "Content-Type,Authorization"
+
+---
+# Optional: Secret for sensitive configuration
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aerospace-mcp-secrets
+  namespace: default
+  labels:
+    app: aerospace-mcp
+    component: secrets
+type: Opaque
+data:
+  # Base64 encoded values - replace with actual secrets if needed
+  # Example API keys or database credentials would go here
+  
+  # Example (base64 encoded "your-api-key"):
+  # weather_api_key: eW91ci1hcGkta2V5
+  
+  # Example database URL (base64 encoded):
+  # database_url: cG9zdGdyZXNxbDovL3VzZXI6cGFzc0Bkbi9kYg==
+  
+stringData:
+  # Use stringData for plain text that gets auto-encoded
+  # example_key: "plain-text-value"
