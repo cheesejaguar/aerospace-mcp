@@ -224,8 +224,8 @@ class TestPlanEndpoint:
                         assert data["arrive"]["iata"] == "NRT"
 
                         # Check distance reasonableness
-                        assert 8500 < data["distance_km"] < 9500
-                        assert 4500 < data["distance_nm"] < 5200  # km * NM_PER_KM
+                        assert 8200 < data["distance_km"] < 8400
+                        assert 4400 < data["distance_nm"] < 4550  # km * NM_PER_KM
 
                         # Check polyline
                         assert isinstance(data["polyline"], list)

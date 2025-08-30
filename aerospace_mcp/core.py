@@ -108,6 +108,8 @@ def _airport_from_iata(iata: str) -> AirportOut | None:
 
 def _find_city_airports(city: str, country: str | None = None) -> list[AirportOut]:
     city_l = city.strip().lower()
+    if not city_l:  # Return empty list for empty city names
+        return []
     out = []
     for iata, ap in _AIRPORTS_IATA.items():
         if not iata or not ap.get("iata"):
