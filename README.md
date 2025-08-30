@@ -35,10 +35,10 @@ uv venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 uv add fastapi uvicorn airportsdata geographiclib openap
 
 # Run HTTP server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8080
 
 # Test the API
-curl "http://localhost:8000/health"
+curl "http://localhost:8080/health"
 ```
 
 ### Option 2: Docker
@@ -47,10 +47,10 @@ curl "http://localhost:8000/health"
 git clone https://github.com/username/aerospace-mcp.git
 cd aerospace-mcp
 docker build -t aerospace-mcp .
-docker run -p 8000:8000 aerospace-mcp
+docker run -p 8080:8080 aerospace-mcp
 
 # Test the API
-curl "http://localhost:8000/health"
+curl "http://localhost:8080/health"
 ```
 
 ### Option 3: MCP Client (Claude Desktop)
@@ -232,10 +232,10 @@ cd aerospace-mcp
 docker build -t aerospace-mcp .
 
 # Run container
-docker run -d -p 8000:8000 --name aerospace-mcp aerospace-mcp
+docker run -d -p 8080:8080 --name aerospace-mcp aerospace-mcp
 
 # Health check
-curl http://localhost:8000/health
+curl http://localhost:8080/health
 
 # View logs
 docker logs aerospace-mcp
@@ -307,7 +307,7 @@ python -c "import openap; print('OpenAP OK')" || echo "OpenAP not available (opt
 
 ```bash
 # Plan a simple flight
-curl -X POST "http://localhost:8000/plan" \
+curl -X POST "http://localhost:8080/plan" \
   -H "Content-Type: application/json" \
   -d '{
     "depart_city": "San Francisco",
@@ -322,20 +322,20 @@ curl -X POST "http://localhost:8000/plan" \
 
 ```bash
 # Find airports by city
-curl "http://localhost:8000/airports/by_city?city=Tokyo"
+curl "http://localhost:8080/airports/by_city?city=Tokyo"
 
 # Filter by country
-curl "http://localhost:8000/airports/by_city?city=London&country=GB"
+curl "http://localhost:8080/airports/by_city?city=London&country=GB"
 
 # Multiple results
-curl "http://localhost:8000/airports/by_city?city=Paris"
+curl "http://localhost:8080/airports/by_city?city=Paris"
 ```
 
 #### Advanced Flight Planning
 
 ```bash
 # Specify exact airports and aircraft mass
-curl -X POST "http://localhost:8000/plan" \
+curl -X POST "http://localhost:8080/plan" \
   -H "Content-Type: application/json" \
   -d '{
     "depart_city": "Los Angeles",
@@ -359,7 +359,7 @@ import requests
 import json
 
 class AerospaceClient:
-    def __init__(self, base_url="http://localhost:8000"):
+    def __init__(self, base_url="http://localhost:8080"):
         self.base_url = base_url
 
     def plan_flight(self, departure, arrival, aircraft="A320", altitude=35000):
@@ -415,7 +415,7 @@ async def plan_multiple_flights(flights: List[Dict]) -> List[Dict]:
 async def plan_single_flight(session, flight_data):
     """Plan a single flight."""
     async with session.post(
-        "http://localhost:8000/plan",
+        "http://localhost:8080/plan",
         json=flight_data
     ) as response:
         return await response.json()
@@ -442,7 +442,7 @@ for i, result in enumerate(results):
 import requests
 
 class OrbitalMechanicsClient:
-    def __init__(self, base_url="http://localhost:8000"):
+    def __init__(self, base_url="http://localhost:8080"):
         self.base_url = base_url
 
     def plan_hohmann_transfer(self, r1_km, r2_km):
@@ -510,7 +510,7 @@ def optimize_lunar_transfer():
         }
     ]
     
-    response = requests.post("http://localhost:8000/genetic_algorithm_optimization", json={
+    response = requests.post("http://localhost:8080/genetic_algorithm_optimization", json={
         "initial_trajectory": initial_trajectory,
         "objective": "minimize_delta_v",
         "constraints": {
@@ -528,7 +528,7 @@ optimized_trajectory = optimize_lunar_transfer()
 
 # Generate porkchop plot for Mars mission planning
 def plan_mars_mission():
-    response = requests.post("http://localhost:8000/porkchop_plot_analysis", json={
+    response = requests.post("http://localhost:8080/porkchop_plot_analysis", json={
         "departure_body": "Earth",
         "arrival_body": "Mars", 
         "min_tof_days": 200,
@@ -562,7 +562,7 @@ interface FlightPlan {
 }
 
 class AerospaceAPI {
-  constructor(private baseUrl: string = "http://localhost:8000") {}
+  constructor(private baseUrl: string = "http://localhost:8080") {}
 
   async planFlight(request: FlightPlan) {
     const response = await fetch(`${this.baseUrl}/plan`, {
@@ -695,9 +695,9 @@ graph TB
 ### Interactive Documentation
 
 When running the server, comprehensive API documentation is available at:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **OpenAPI Schema**: http://localhost:8000/openapi.json
+- **Swagger UI**: http://localhost:8080/docs
+- **ReDoc**: http://localhost:8080/redoc
+- **OpenAPI Schema**: http://localhost:8080/openapi.json
 
 ### Core Endpoints
 
