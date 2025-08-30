@@ -18,13 +18,13 @@ MACHUPX_AVAILABLE = False
 
 try:
     import aerosandbox as asb
-    import aerosandbox.numpy as anp
+    # import aerosandbox.numpy as anp  # Available if needed
 
     AEROSANDBOX_AVAILABLE = True
     update_availability("aero", True, {"aerosandbox": asb.__version__})
 except ImportError:
     try:
-        import machupx as mx
+        # import machupx as mx  # Available if needed
 
         MACHUPX_AVAILABLE = True
         update_availability("aero", True, {"machupx": "unknown"})

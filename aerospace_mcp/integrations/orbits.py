@@ -384,7 +384,7 @@ def propagate_orbit_j2(
     # Parse initial epoch
     try:
         epoch = datetime.fromisoformat(initial_state.epoch_utc.replace("Z", "+00:00"))
-    except:
+    except (ValueError, TypeError):
         epoch = datetime.now(UTC)
 
     # Numerical integration (RK4)
@@ -465,7 +465,7 @@ def calculate_ground_track(
             datetime.fromisoformat(state.epoch_utc.replace("Z", "+00:00"))
             t_since_epoch = i * time_step_s
             lon = math.atan2(r_vec[1], r_vec[0]) - OMEGA_EARTH * t_since_epoch
-        except:
+        except Exception:
             lon = math.atan2(r_vec[1], r_vec[0])
 
         # Normalize longitude to [-180, 180] degrees
@@ -771,7 +771,7 @@ def porkchop_plot_analysis(
 
         try:
             dt = datetime.datetime.fromisoformat(date_iso.replace("Z", "+00:00"))
-        except:
+        except Exception:
             dt = datetime.datetime.fromisoformat(date_iso)
 
         # Days since J2000
@@ -809,14 +809,14 @@ def porkchop_plot_analysis(
                 dep_dt = datetime.datetime.fromisoformat(
                     dep_date.replace("Z", "+00:00")
                 )
-            except:
+            except Exception:
                 dep_dt = datetime.datetime.fromisoformat(dep_date)
 
             try:
                 arr_dt = datetime.datetime.fromisoformat(
                     arr_date.replace("Z", "+00:00")
                 )
-            except:
+            except Exception:
                 arr_dt = datetime.datetime.fromisoformat(arr_date)
 
             tof_days = (arr_dt - dep_dt).total_seconds() / 86400
@@ -962,7 +962,7 @@ def get_ephemeris_position(
 
     try:
         dt = datetime.datetime.fromisoformat(epoch_utc.replace("Z", "+00:00"))
-    except:
+    except Exception:
         dt = datetime.datetime.fromisoformat(epoch_utc)
 
     # Days since J2000.0 epoch

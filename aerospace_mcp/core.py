@@ -4,6 +4,7 @@ import math
 from typing import Literal
 
 import airportsdata
+from geographiclib.geodesic import Geodesic
 from pydantic import BaseModel, Field
 
 # Optional / graceful import for OpenAP (perf + fuel)
@@ -13,9 +14,6 @@ try:
     from openap.gen import FlightGenerator
 except Exception:
     OPENAP_AVAILABLE = False
-
-# Great-circle sampling
-from geographiclib.geodesic import Geodesic
 
 # Constants
 NM_PER_KM = 0.539956803

@@ -165,7 +165,6 @@ def evaluate_trajectory_cost(
     elif objective.type == "minimize_delta_v":
         cost = total_delta_v
     elif objective.type == "maximize_payload":
-        trajectory[0].mass_kg
         final_mass = trajectory[-1].mass_kg
         cost = -(final_mass - total_fuel)  # Negative for maximization
     else:
@@ -319,7 +318,7 @@ class GeneticAlgorithm:
         best_trajectory = initial_trajectory
         generations_without_improvement = 0
 
-        for generation in range(self.params.generations):
+        for _generation in range(self.params.generations):
             # Evaluate fitness
             self.fitness_scores = [
                 evaluate_trajectory_cost(traj, objective, constraints)

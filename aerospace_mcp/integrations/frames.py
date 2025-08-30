@@ -34,8 +34,8 @@ except ImportError:
 
 try:
     import skyfield
-    from skyfield.api import load, utc
-    from skyfield.positionlib import position_of_radec
+    # from skyfield.api import load, utc  # Available if needed
+    # from skyfield.positionlib import position_of_radec  # Available if needed
 
     SKYFIELD_AVAILABLE = True
     if not ASTROPY_AVAILABLE:  # Only set if astropy not available

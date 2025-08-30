@@ -694,7 +694,7 @@ class TestMCPServerTransports:
             with patch.object(sys, "argv", ["server.py"]):
                 try:
                     run()
-                except:
+                except Exception:
                     pass  # run_stdio will fail in test, but we just want to check it's called
                 mock_stdio.assert_called_once()
 
@@ -703,6 +703,6 @@ class TestMCPServerTransports:
             with patch.object(sys, "argv", ["server.py", "sse"]):
                 try:
                     run()
-                except:
+                except Exception:
                     pass  # run_sse will fail in test, but we just want to check it's called
                 mock_sse.assert_called_once_with("localhost", 8001)

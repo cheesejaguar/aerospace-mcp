@@ -29,6 +29,7 @@ from .core import (
     estimates_openap,
     great_circle_points,
 )
+from .integrations.orbits import vector_magnitude
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

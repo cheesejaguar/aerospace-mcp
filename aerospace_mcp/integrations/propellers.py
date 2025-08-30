@@ -24,7 +24,7 @@ try:
     update_availability("propellers", True, {"aerosandbox": asb.__version__})
 except ImportError:
     try:
-        import pybemt
+        # import pybemt  # Available if needed
 
         PYBEMT_AVAILABLE = True
         update_availability("propellers", True, {"pybemt": "unknown"})
