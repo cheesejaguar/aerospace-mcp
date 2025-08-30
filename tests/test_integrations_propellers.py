@@ -321,7 +321,7 @@ class TestUAVEnergyAnalysis:
         """Test how energy consumption scales with aircraft parameters."""
         base_uav = UAVConfiguration(
             mass_kg=2.0, wing_area_m2=0.5, cd0=0.03
-            # Don't specify cl_cruise so it gets calculated from weight  
+            # Don't specify cl_cruise so it gets calculated from weight
         )
 
         base_battery = BatteryConfiguration(
