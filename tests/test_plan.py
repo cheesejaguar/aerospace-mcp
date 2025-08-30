@@ -78,7 +78,7 @@ class TestGreatCirclePoints:
     def test_different_step_sizes(self, step_km):
         """Test different step sizes for polyline generation."""
         lat1, lon1 = 37.3626, -121.929  # SJC
-        lat2, lon2 = 35.7647, 140.386   # NRT
+        lat2, lon2 = 35.7647, 140.386  # NRT
 
         polyline, distance_km = great_circle_points(lat1, lon1, lat2, lon2, step_km)
 
@@ -110,19 +110,29 @@ class TestOpenAPEstimates:
     @pytest.mark.unit
     def test_openap_unavailable_error(self):
         """Test error when OpenAP is not available."""
-        with patch('aerospace_mcp.core.OPENAP_AVAILABLE', False):
+        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", False):
             with pytest.raises(OpenAPError, match="OpenAP backend unavailable"):
                 estimates_openap("A320", 35000, None, 1000.0)
 
     @pytest.mark.unit
-    @patch('aerospace_mcp.core.OPENAP_AVAILABLE', True)
-    def test_openap_estimates_a359(self, mock_openap_flight_generator, mock_openap_fuel_flow, mock_openap_props):
+    @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
+    def test_openap_estimates_a359(
+        self, mock_openap_flight_generator, mock_openap_fuel_flow, mock_openap_props
+    ):
         """Test OpenAP estimates for A359."""
-        with patch('aerospace_mcp.core.FlightGenerator', return_value=mock_openap_flight_generator):
-            with patch('aerospace_mcp.core.FuelFlow', return_value=mock_openap_fuel_flow):
-                with patch('aerospace_mcp.core.prop.aircraft', return_value=mock_openap_props):
-
-                    estimates, engine_name = estimates_openap("A359", 35000, None, 9000.0)
+        with patch(
+            "aerospace_mcp.core.FlightGenerator",
+            return_value=mock_openap_flight_generator,
+        ):
+            with patch(
+                "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+            ):
+                with patch(
+                    "aerospace_mcp.core.prop.aircraft", return_value=mock_openap_props
+                ):
+                    estimates, engine_name = estimates_openap(
+                        "A359", 35000, None, 9000.0
+                    )
 
                     assert engine_name == "openap"
                     assert "block" in estimates
@@ -153,41 +163,65 @@ class TestOpenAPEstimates:
                     assert "mass_kg" in assumptions
 
     @pytest.mark.unit
-    @patch('aerospace_mcp.core.OPENAP_AVAILABLE', True)
-    def test_openap_with_explicit_mass(self, mock_openap_flight_generator, mock_openap_fuel_flow):
+    @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
+    def test_openap_with_explicit_mass(
+        self, mock_openap_flight_generator, mock_openap_fuel_flow
+    ):
         """Test OpenAP estimates with explicit mass."""
-        with patch('aerospace_mcp.core.FlightGenerator', return_value=mock_openap_flight_generator):
-            with patch('aerospace_mcp.core.FuelFlow', return_value=mock_openap_fuel_flow):
-
+        with patch(
+            "aerospace_mcp.core.FlightGenerator",
+            return_value=mock_openap_flight_generator,
+        ):
+            with patch(
+                "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+            ):
                 test_mass = 75000.0  # kg
                 estimates, _ = estimates_openap("A320", 35000, test_mass, 5000.0)
 
                 assert estimates["assumptions"]["mass_kg"] == test_mass
 
     @pytest.mark.unit
-    @patch('aerospace_mcp.core.OPENAP_AVAILABLE', True)
-    def test_openap_fallback_mass(self, mock_openap_flight_generator, mock_openap_fuel_flow):
+    @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
+    def test_openap_fallback_mass(
+        self, mock_openap_flight_generator, mock_openap_fuel_flow
+    ):
         """Test OpenAP estimates with fallback mass when aircraft props fail."""
-        with patch('aerospace_mcp.core.FlightGenerator', return_value=mock_openap_flight_generator):
-            with patch('aerospace_mcp.core.FuelFlow', return_value=mock_openap_fuel_flow):
-                with patch('aerospace_mcp.core.prop.aircraft', side_effect=Exception("Aircraft not found")):
-
+        with patch(
+            "aerospace_mcp.core.FlightGenerator",
+            return_value=mock_openap_flight_generator,
+        ):
+            with patch(
+                "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+            ):
+                with patch(
+                    "aerospace_mcp.core.prop.aircraft",
+                    side_effect=Exception("Aircraft not found"),
+                ):
                     estimates, _ = estimates_openap("UNKNOWN", 35000, None, 5000.0)
 
                     # Should use fallback mass
                     assert estimates["assumptions"]["mass_kg"] == 60000.0
 
     @pytest.mark.unit
-    @patch('aerospace_mcp.core.OPENAP_AVAILABLE', True)
-    def test_openap_cruise_altitude_handling(self, mock_openap_flight_generator, mock_openap_fuel_flow):
+    @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
+    def test_openap_cruise_altitude_handling(
+        self, mock_openap_flight_generator, mock_openap_fuel_flow
+    ):
         """Test OpenAP estimates with different cruise altitudes."""
         mock_gen = mock_openap_flight_generator
-        mock_gen.climb.side_effect = [TypeError("alt_cr not supported"), mock_gen.climb.return_value]
-        mock_gen.descent.side_effect = [TypeError("alt_cr not supported"), mock_gen.descent.return_value]
+        mock_gen.climb.side_effect = [
+            TypeError("alt_cr not supported"),
+            mock_gen.climb.return_value,
+        ]
+        mock_gen.descent.side_effect = [
+            TypeError("alt_cr not supported"),
+            mock_gen.descent.return_value,
+        ]
 
-        with patch('aerospace_mcp.core.FlightGenerator', return_value=mock_gen):
-            with patch('aerospace_mcp.core.FuelFlow', return_value=mock_openap_fuel_flow):
-
+        with patch("aerospace_mcp.core.FlightGenerator", return_value=mock_gen):
+            with patch(
+                "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+            ):
                 # Should handle TypeError gracefully and call without alt_cr
                 estimates, _ = estimates_openap("A320", 45000, None, 5000.0)
 
@@ -196,7 +230,7 @@ class TestOpenAPEstimates:
                 assert mock_gen.descent.call_count == 2
 
     @pytest.mark.unit
-    @patch('aerospace_mcp.core.OPENAP_AVAILABLE', True)
+    @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
     def test_openap_short_route(self, mock_openap_fuel_flow):
         """Test OpenAP estimates for very short routes."""
         # Create a mock generator with long climb/descent distances
@@ -205,23 +239,42 @@ class TestOpenAPEstimates:
         import pandas as pd
 
         # Mock segments where climb + descent > total route distance
-        climb_data = pd.DataFrame({
-            't': [60], 's': [100000], 'altitude': [25000], 'groundspeed': [300], 'vertical_rate': [1500]
-        })
-        cruise_data = pd.DataFrame({
-            't': [30], 's': [15000], 'altitude': [35000], 'groundspeed': [450], 'vertical_rate': [0]
-        })
-        descent_data = pd.DataFrame({
-            't': [60], 's': [120000], 'altitude': [15000], 'groundspeed': [350], 'vertical_rate': [-1200]
-        })
+        climb_data = pd.DataFrame(
+            {
+                "t": [60],
+                "s": [100000],
+                "altitude": [25000],
+                "groundspeed": [300],
+                "vertical_rate": [1500],
+            }
+        )
+        cruise_data = pd.DataFrame(
+            {
+                "t": [30],
+                "s": [15000],
+                "altitude": [35000],
+                "groundspeed": [450],
+                "vertical_rate": [0],
+            }
+        )
+        descent_data = pd.DataFrame(
+            {
+                "t": [60],
+                "s": [120000],
+                "altitude": [15000],
+                "groundspeed": [350],
+                "vertical_rate": [-1200],
+            }
+        )
 
         mock_gen.climb.return_value = climb_data
         mock_gen.cruise.return_value = cruise_data
         mock_gen.descent.return_value = descent_data
 
-        with patch('aerospace_mcp.core.FlightGenerator', return_value=mock_gen):
-            with patch('aerospace_mcp.core.FuelFlow', return_value=mock_openap_fuel_flow):
-
+        with patch("aerospace_mcp.core.FlightGenerator", return_value=mock_gen):
+            with patch(
+                "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+            ):
                 # Very short route - 200km, but climb+descent = 220km
                 estimates, _ = estimates_openap("A320", 35000, None, 200.0)
 
@@ -237,10 +290,7 @@ class TestSegmentEst:
     def test_segment_est_creation(self):
         """Test SegmentEst model creation."""
         segment = SegmentEst(
-            time_min=120.5,
-            distance_km=850.0,
-            avg_gs_kts=420.0,
-            fuel_kg=2500.0
+            time_min=120.5, distance_km=850.0, avg_gs_kts=420.0, fuel_kg=2500.0
         )
 
         assert segment.time_min == 120.5
@@ -252,10 +302,7 @@ class TestSegmentEst:
     def test_segment_est_serialization(self):
         """Test SegmentEst model serialization."""
         segment = SegmentEst(
-            time_min=60.0,
-            distance_km=500.0,
-            avg_gs_kts=400.0,
-            fuel_kg=1200.0
+            time_min=60.0, distance_km=500.0, avg_gs_kts=400.0, fuel_kg=1200.0
         )
 
         data = segment.model_dump()
@@ -307,7 +354,7 @@ class TestPlanRequestValidation:
             arrive_country="JP",
             ac_type="A359",
             cruise_alt_ft=35000,
-            route_step_km=25.0
+            route_step_km=25.0,
         )
 
         assert request.depart_city == "San Jose"
@@ -320,16 +367,14 @@ class TestPlanRequestValidation:
     def test_plan_request_defaults(self):
         """Test PlanRequest default values."""
         request = PlanRequest(
-            depart_city="San Jose",
-            arrive_city="Tokyo",
-            ac_type="A320"
+            depart_city="San Jose", arrive_city="Tokyo", ac_type="A320"
         )
 
         assert request.cruise_alt_ft == 35000  # default
-        assert request.route_step_km == 25.0   # default
-        assert request.backend == "openap"     # default
-        assert request.depart_country is None # default
-        assert request.arrive_country is None # default
+        assert request.route_step_km == 25.0  # default
+        assert request.backend == "openap"  # default
+        assert request.depart_country is None  # default
+        assert request.arrive_country is None  # default
 
     @pytest.mark.unit
     def test_plan_request_altitude_validation(self):
@@ -339,7 +384,7 @@ class TestPlanRequestValidation:
             depart_city="San Jose",
             arrive_city="Tokyo",
             ac_type="A320",
-            cruise_alt_ft=35000
+            cruise_alt_ft=35000,
         )
         assert request.cruise_alt_ft == 35000
 
@@ -348,7 +393,7 @@ class TestPlanRequestValidation:
             depart_city="San Jose",
             arrive_city="Tokyo",
             ac_type="A320",
-            cruise_alt_ft=8000
+            cruise_alt_ft=8000,
         )
         assert request_min.cruise_alt_ft == 8000
 
@@ -356,7 +401,7 @@ class TestPlanRequestValidation:
             depart_city="San Jose",
             arrive_city="Tokyo",
             ac_type="A320",
-            cruise_alt_ft=45000
+            cruise_alt_ft=45000,
         )
         assert request_max.cruise_alt_ft == 45000
 
@@ -368,7 +413,7 @@ class TestPlanRequestValidation:
             depart_city="San Jose",
             arrive_city="Tokyo",
             ac_type="A320",
-            route_step_km=50.0
+            route_step_km=50.0,
         )
         assert request.route_step_km == 50.0
 
@@ -378,13 +423,26 @@ class TestFlightPlanningIntegration:
 
     @pytest.mark.integration
     @pytest.mark.slow
-    def test_complete_flight_plan_sjc_nrt(self, mock_airports_iata, mock_openap_flight_generator, mock_openap_fuel_flow, mock_openap_props):
+    def test_complete_flight_plan_sjc_nrt(
+        self,
+        mock_airports_iata,
+        mock_openap_flight_generator,
+        mock_openap_fuel_flow,
+        mock_openap_props,
+    ):
         """Test complete flight planning from SJC to NRT."""
-        with patch('aerospace_mcp.core.OPENAP_AVAILABLE', True):
-            with patch('aerospace_mcp.core.FlightGenerator', return_value=mock_openap_flight_generator):
-                with patch('aerospace_mcp.core.FuelFlow', return_value=mock_openap_fuel_flow):
-                    with patch('aerospace_mcp.core.prop.aircraft', return_value=mock_openap_props):
-
+        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", True):
+            with patch(
+                "aerospace_mcp.core.FlightGenerator",
+                return_value=mock_openap_flight_generator,
+            ):
+                with patch(
+                    "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+                ):
+                    with patch(
+                        "aerospace_mcp.core.prop.aircraft",
+                        return_value=mock_openap_props,
+                    ):
                         # Test the individual components that would be used in the full API
                         from aerospace_mcp.core import _resolve_endpoint
 
@@ -401,10 +459,12 @@ class TestFlightPlanningIntegration:
                         )
 
                         assert 8500 < distance_km < 9500  # Reasonable distance
-                        assert len(polyline) > 300       # Should have many points
+                        assert len(polyline) > 300  # Should have many points
 
                         # Get performance estimates
-                        estimates, engine_name = estimates_openap("A359", 35000, None, distance_km)
+                        estimates, engine_name = estimates_openap(
+                            "A359", 35000, None, distance_km
+                        )
 
                         assert engine_name == "openap"
                         assert estimates["block"]["time_min"] > 0
@@ -417,10 +477,12 @@ class TestFlightPlanningIntegration:
         test_routes = [
             # (lat1, lon1, lat2, lon2, expected_km_range)
             (37.3626, -121.929, 35.7647, 140.386, (8500, 9500)),  # SJC-NRT
-            (37.3626, -121.929, 37.6213, -122.379, (50, 100)),    # SJC-SFO
+            (37.3626, -121.929, 37.6213, -122.379, (50, 100)),  # SJC-SFO
             (40.6398, -73.7789, 51.4700, -0.4543, (5500, 5600)),  # JFK-LHR
         ]
 
         for lat1, lon1, lat2, lon2, (min_km, max_km) in test_routes:
             polyline, distance_km = great_circle_points(lat1, lon1, lat2, lon2, 100.0)
-            assert min_km < distance_km < max_km, f"Distance {distance_km} not in range {min_km}-{max_km}"
+            assert min_km < distance_km < max_km, (
+                f"Distance {distance_km} not in range {min_km}-{max_km}"
+            )

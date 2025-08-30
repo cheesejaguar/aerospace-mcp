@@ -33,7 +33,7 @@ def run() -> None:
         access_log=True,
         # Additional production settings
         workers=1 if reload else None,  # Single worker when reloading
-        loop="uvloop" if not reload else "auto"  # Use uvloop for better performance
+        loop="uvloop" if not reload else "auto",  # Use uvloop for better performance
     )
 
 

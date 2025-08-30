@@ -28,7 +28,7 @@ class TestOrbitElements:
             raan_deg=0.0,
             arg_periapsis_deg=0.0,
             true_anomaly_deg=0.0,
-            epoch_utc="2000-01-01T12:00:00"
+            epoch_utc="2000-01-01T12:00:00",
         )
         assert elements.semi_major_axis_m == 7000000.0
         assert elements.eccentricity == 0.001
@@ -43,7 +43,7 @@ class TestStateVector:
         state = StateVector(
             position_m=[7000000.0, 0.0, 0.0],
             velocity_ms=[0.0, 7546.0, 0.0],
-            epoch_utc="2000-01-01T12:00:00"
+            epoch_utc="2000-01-01T12:00:00",
         )
         assert state.position_m[0] == 7000000.0
         assert state.velocity_ms[1] == 7546.0
@@ -62,7 +62,7 @@ class TestElementsToStateVector:
             raan_deg=0.0,
             arg_periapsis_deg=0.0,
             true_anomaly_deg=0.0,
-            epoch_utc="2000-01-01T12:00:00"
+            epoch_utc="2000-01-01T12:00:00",
         )
 
         state = elements_to_state_vector(elements)
@@ -87,7 +87,7 @@ class TestElementsToStateVector:
             raan_deg=0.0,
             arg_periapsis_deg=0.0,
             true_anomaly_deg=0.0,
-            epoch_utc="2000-01-01T12:00:00"
+            epoch_utc="2000-01-01T12:00:00",
         )
 
         state = elements_to_state_vector(elements)
@@ -111,7 +111,7 @@ class TestStateVectorToElements:
             raan_deg=30.0,
             arg_periapsis_deg=60.0,
             true_anomaly_deg=90.0,
-            epoch_utc="2000-01-01T12:00:00"
+            epoch_utc="2000-01-01T12:00:00",
         )
 
         # Convert to state vector and back
@@ -119,9 +119,21 @@ class TestStateVectorToElements:
         recovered_elements = state_vector_to_elements(state)
 
         # Check that we get back approximately the same elements
-        assert abs(recovered_elements.semi_major_axis_m - original_elements.semi_major_axis_m) < 1000.0
-        assert abs(recovered_elements.eccentricity - original_elements.eccentricity) < 0.001
-        assert abs(recovered_elements.inclination_deg - original_elements.inclination_deg) < 0.1
+        assert (
+            abs(
+                recovered_elements.semi_major_axis_m
+                - original_elements.semi_major_axis_m
+            )
+            < 1000.0
+        )
+        assert (
+            abs(recovered_elements.eccentricity - original_elements.eccentricity)
+            < 0.001
+        )
+        assert (
+            abs(recovered_elements.inclination_deg - original_elements.inclination_deg)
+            < 0.1
+        )
 
     def test_circular_orbit_conversion(self):
         """Test conversion of circular orbit."""
@@ -133,7 +145,7 @@ class TestStateVectorToElements:
         state = StateVector(
             position_m=[r, 0.0, 0.0],
             velocity_ms=[0.0, v, 0.0],
-            epoch_utc="2000-01-01T12:00:00"
+            epoch_utc="2000-01-01T12:00:00",
         )
 
         elements = state_vector_to_elements(state)
@@ -151,7 +163,7 @@ class TestOrbitPropagation:
         initial_state = StateVector(
             position_m=[7000000.0, 0.0, 0.0],
             velocity_ms=[0.0, 7546.0, 0.0],
-            epoch_utc="2000-01-01T12:00:00"
+            epoch_utc="2000-01-01T12:00:00",
         )
 
         # Propagate for one hour
@@ -169,7 +181,7 @@ class TestOrbitPropagation:
         initial_state = StateVector(
             position_m=[7000000.0, 0.0, 0.0],
             velocity_ms=[0.0, 7546.0, 0.0],
-            epoch_utc="2000-01-01T12:00:00"
+            epoch_utc="2000-01-01T12:00:00",
         )
 
         # Propagate for 1 hour with 1-minute steps
@@ -202,11 +214,13 @@ class TestGroundTrack:
             vx = -v * np.sin(angle)
             vy = v * np.cos(angle)
 
-            states.append(StateVector(
-                position_m=[x, y, 0.0],
-                velocity_ms=[vx, vy, 0.0],
-                epoch_utc="2000-01-01T12:00:00"
-            ))
+            states.append(
+                StateVector(
+                    position_m=[x, y, 0.0],
+                    velocity_ms=[vx, vy, 0.0],
+                    epoch_utc="2000-01-01T12:00:00",
+                )
+            )
 
         ground_track = calculate_ground_track(states, 600.0)
 
@@ -240,7 +254,7 @@ class TestHohmannTransfer:
     def test_higher_to_lower_orbit(self):
         """Test Hohmann transfer to lower orbit."""
         r1 = 10000000.0  # Initial orbit radius (m)
-        r2 = 7000000.0   # Final orbit radius (m)
+        r2 = 7000000.0  # Final orbit radius (m)
 
         transfer = hohmann_transfer(r1, r2)
 
@@ -263,7 +277,7 @@ class TestOrbitalRendezvous:
             raan_deg=0.0,
             arg_periapsis_deg=0.0,
             true_anomaly_deg=0.0,
-            epoch_utc="2000-01-01T12:00:00"
+            epoch_utc="2000-01-01T12:00:00",
         )
 
         target = OrbitElements(
@@ -273,7 +287,7 @@ class TestOrbitalRendezvous:
             raan_deg=0.0,
             arg_periapsis_deg=0.0,
             true_anomaly_deg=90.0,  # Different position
-            epoch_utc="2000-01-01T12:00:00"
+            epoch_utc="2000-01-01T12:00:00",
         )
 
         plan = orbital_rendezvous_planning(chaser, target)
@@ -297,7 +311,7 @@ class TestLambertProblem:
 
         # Half orbital period for circular orbit
         mu = 3.986004418e14
-        period = 2 * np.pi * np.sqrt((7000000.0)**3 / mu)
+        period = 2 * np.pi * np.sqrt((7000000.0) ** 3 / mu)
         tof = period / 2
 
         try:

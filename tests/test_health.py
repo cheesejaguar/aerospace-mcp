@@ -11,8 +11,10 @@ class TestHealthEndpoint:
     @pytest.mark.unit
     def test_health_endpoint_with_openap(self, client):
         """Test health endpoint when OpenAP is available."""
-        with patch('main.OPENAP_AVAILABLE', True):
-            with patch('main._AIRPORTS_IATA', {"SJC": {"iata": "SJC"}, "NRT": {"iata": "NRT"}}):
+        with patch("main.OPENAP_AVAILABLE", True):
+            with patch(
+                "main._AIRPORTS_IATA", {"SJC": {"iata": "SJC"}, "NRT": {"iata": "NRT"}}
+            ):
                 response = client.get("/health")
 
                 assert response.status_code == 200
@@ -29,8 +31,8 @@ class TestHealthEndpoint:
     @pytest.mark.unit
     def test_health_endpoint_without_openap(self, client):
         """Test health endpoint when OpenAP is not available."""
-        with patch('main.OPENAP_AVAILABLE', False):
-            with patch('main._AIRPORTS_IATA', {"SJC": {"iata": "SJC"}}):
+        with patch("main.OPENAP_AVAILABLE", False):
+            with patch("main._AIRPORTS_IATA", {"SJC": {"iata": "SJC"}}):
                 response = client.get("/health")
 
                 assert response.status_code == 200
@@ -43,8 +45,8 @@ class TestHealthEndpoint:
     @pytest.mark.unit
     def test_health_endpoint_empty_airports(self, client):
         """Test health endpoint with no airports loaded."""
-        with patch('main.OPENAP_AVAILABLE', True):
-            with patch('main._AIRPORTS_IATA', {}):
+        with patch("main.OPENAP_AVAILABLE", True):
+            with patch("main._AIRPORTS_IATA", {}):
                 response = client.get("/health")
 
                 assert response.status_code == 200
@@ -174,13 +176,21 @@ class TestPlanEndpoint:
     """Tests for the /plan endpoint."""
 
     @pytest.mark.unit
-    def test_plan_endpoint_success(self, client, mock_airports_iata, mock_openap_flight_generator, mock_openap_fuel_flow, mock_openap_props):
+    def test_plan_endpoint_success(
+        self,
+        client,
+        mock_airports_iata,
+        mock_openap_flight_generator,
+        mock_openap_fuel_flow,
+        mock_openap_props,
+    ):
         """Test successful flight planning."""
-        with patch('main.OPENAP_AVAILABLE', True):
-            with patch('main.FlightGenerator', return_value=mock_openap_flight_generator):
-                with patch('main.FuelFlow', return_value=mock_openap_fuel_flow):
-                    with patch('main.prop.aircraft', return_value=mock_openap_props):
-
+        with patch("main.OPENAP_AVAILABLE", True):
+            with patch(
+                "main.FlightGenerator", return_value=mock_openap_flight_generator
+            ):
+                with patch("main.FuelFlow", return_value=mock_openap_fuel_flow):
+                    with patch("main.prop.aircraft", return_value=mock_openap_props):
                         request_data = {
                             "depart_city": "San Jose",
                             "arrive_city": "Tokyo",
@@ -188,7 +198,7 @@ class TestPlanEndpoint:
                             "arrive_country": "JP",
                             "ac_type": "A359",
                             "cruise_alt_ft": 35000,
-                            "route_step_km": 50.0
+                            "route_step_km": 50.0,
                         }
 
                         response = client.post("/plan", json=request_data)
@@ -197,7 +207,15 @@ class TestPlanEndpoint:
                         data = response.json()
 
                         # Check response structure
-                        required_fields = ["engine", "depart", "arrive", "distance_km", "distance_nm", "polyline", "estimates"]
+                        required_fields = [
+                            "engine",
+                            "depart",
+                            "arrive",
+                            "distance_km",
+                            "distance_nm",
+                            "polyline",
+                            "estimates",
+                        ]
                         for field in required_fields:
                             assert field in data
 
@@ -226,7 +244,7 @@ class TestPlanEndpoint:
         request_data = {
             "depart_city": "San Jose",
             "arrive_city": "San Jose",
-            "ac_type": "A320"
+            "ac_type": "A320",
         }
 
         response = client.post("/plan", json=request_data)
@@ -241,7 +259,7 @@ class TestPlanEndpoint:
         request_data = {
             "depart_city": "NonexistentCity",
             "arrive_city": "Tokyo",
-            "ac_type": "A320"
+            "ac_type": "A320",
         }
 
         response = client.post("/plan", json=request_data)
@@ -251,19 +269,27 @@ class TestPlanEndpoint:
         assert "no airport" in data["detail"].lower()
 
     @pytest.mark.unit
-    def test_plan_endpoint_preferred_iata(self, client, mock_airports_iata, mock_openap_flight_generator, mock_openap_fuel_flow, mock_openap_props):
+    def test_plan_endpoint_preferred_iata(
+        self,
+        client,
+        mock_airports_iata,
+        mock_openap_flight_generator,
+        mock_openap_fuel_flow,
+        mock_openap_props,
+    ):
         """Test planning with preferred IATA codes."""
-        with patch('main.OPENAP_AVAILABLE', True):
-            with patch('main.FlightGenerator', return_value=mock_openap_flight_generator):
-                with patch('main.FuelFlow', return_value=mock_openap_fuel_flow):
-                    with patch('main.prop.aircraft', return_value=mock_openap_props):
-
+        with patch("main.OPENAP_AVAILABLE", True):
+            with patch(
+                "main.FlightGenerator", return_value=mock_openap_flight_generator
+            ):
+                with patch("main.FuelFlow", return_value=mock_openap_fuel_flow):
+                    with patch("main.prop.aircraft", return_value=mock_openap_props):
                         request_data = {
                             "depart_city": "Any City",  # This would normally fail
                             "arrive_city": "Any City",
                             "prefer_depart_iata": "SJC",
                             "prefer_arrive_iata": "NRT",
-                            "ac_type": "A359"
+                            "ac_type": "A359",
                         }
 
                         response = client.post("/plan", json=request_data)
@@ -281,7 +307,7 @@ class TestPlanEndpoint:
             "depart_city": "San Jose",
             "arrive_city": "Tokyo",
             "prefer_depart_iata": "INVALID",
-            "ac_type": "A320"
+            "ac_type": "A320",
         }
 
         response = client.post("/plan", json=request_data)
@@ -293,11 +319,11 @@ class TestPlanEndpoint:
     @pytest.mark.unit
     def test_plan_endpoint_openap_unavailable(self, client, mock_airports_iata):
         """Test error when OpenAP is unavailable."""
-        with patch('main.OPENAP_AVAILABLE', False):
+        with patch("main.OPENAP_AVAILABLE", False):
             request_data = {
                 "depart_city": "San Jose",
                 "arrive_city": "Tokyo",
-                "ac_type": "A320"
+                "ac_type": "A320",
             }
 
             response = client.post("/plan", json=request_data)
@@ -310,45 +336,62 @@ class TestPlanEndpoint:
     def test_plan_endpoint_validation_errors(self, client):
         """Test various validation errors."""
         # Missing required field
-        response = client.post("/plan", json={
-            "depart_city": "San Jose",
-            # Missing arrive_city and ac_type
-        })
+        response = client.post(
+            "/plan",
+            json={
+                "depart_city": "San Jose",
+                # Missing arrive_city and ac_type
+            },
+        )
         assert response.status_code == 422
 
         # Invalid altitude
-        response = client.post("/plan", json={
-            "depart_city": "San Jose",
-            "arrive_city": "Tokyo",
-            "ac_type": "A320",
-            "cruise_alt_ft": 100000  # Too high
-        })
+        response = client.post(
+            "/plan",
+            json={
+                "depart_city": "San Jose",
+                "arrive_city": "Tokyo",
+                "ac_type": "A320",
+                "cruise_alt_ft": 100000,  # Too high
+            },
+        )
         assert response.status_code == 422
 
         # Invalid route step
-        response = client.post("/plan", json={
-            "depart_city": "San Jose",
-            "arrive_city": "Tokyo",
-            "ac_type": "A320",
-            "route_step_km": -10.0  # Negative
-        })
+        response = client.post(
+            "/plan",
+            json={
+                "depart_city": "San Jose",
+                "arrive_city": "Tokyo",
+                "ac_type": "A320",
+                "route_step_km": -10.0,  # Negative
+            },
+        )
         assert response.status_code == 422
 
     @pytest.mark.unit
-    def test_plan_endpoint_custom_parameters(self, client, mock_airports_iata, mock_openap_flight_generator, mock_openap_fuel_flow, mock_openap_props):
+    def test_plan_endpoint_custom_parameters(
+        self,
+        client,
+        mock_airports_iata,
+        mock_openap_flight_generator,
+        mock_openap_fuel_flow,
+        mock_openap_props,
+    ):
         """Test planning with custom parameters."""
-        with patch('main.OPENAP_AVAILABLE', True):
-            with patch('main.FlightGenerator', return_value=mock_openap_flight_generator):
-                with patch('main.FuelFlow', return_value=mock_openap_fuel_flow):
-                    with patch('main.prop.aircraft', return_value=mock_openap_props):
-
+        with patch("main.OPENAP_AVAILABLE", True):
+            with patch(
+                "main.FlightGenerator", return_value=mock_openap_flight_generator
+            ):
+                with patch("main.FuelFlow", return_value=mock_openap_fuel_flow):
+                    with patch("main.prop.aircraft", return_value=mock_openap_props):
                         request_data = {
                             "depart_city": "San Jose",
                             "arrive_city": "Tokyo",
                             "ac_type": "A320",
                             "cruise_alt_ft": 41000,
                             "mass_kg": 70000.0,
-                            "route_step_km": 100.0
+                            "route_step_km": 100.0,
                         }
 
                         response = client.post("/plan", json=request_data)
@@ -357,8 +400,12 @@ class TestPlanEndpoint:
                         data = response.json()
 
                         # Check that custom parameters were used
-                        assert data["estimates"]["assumptions"]["cruise_alt_ft"] == 41000
+                        assert (
+                            data["estimates"]["assumptions"]["cruise_alt_ft"] == 41000
+                        )
                         assert data["estimates"]["assumptions"]["mass_kg"] == 70000.0
 
                         # Polyline should have fewer points due to larger step size
-                        assert len(data["polyline"]) < 200  # Fewer than default 25km step
+                        assert (
+                            len(data["polyline"]) < 200
+                        )  # Fewer than default 25km step

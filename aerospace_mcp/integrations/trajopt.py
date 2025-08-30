@@ -16,6 +16,7 @@ from .rockets import RocketGeometry, analyze_rocket_performance, rocket_3dof_tra
 @dataclass
 class OptimizationParameters:
     """Parameters for trajectory optimization."""
+
     max_iterations: int = 100
     tolerance: float = 1e-3
     step_size: float = 0.1
@@ -25,6 +26,7 @@ class OptimizationParameters:
 @dataclass
 class TrajectoryOptimizationResult:
     """Result from trajectory optimization."""
+
     optimal_parameters: dict[str, float]
     optimal_objective: float
     iterations: int
@@ -38,11 +40,11 @@ def simple_golden_section_search(
     lower_bound: float,
     upper_bound: float,
     tolerance: float = 1e-3,
-    max_iterations: int = 100
+    max_iterations: int = 100,
 ) -> tuple[float, float]:
     """
     Golden section search for 1D optimization.
-    
+
     Returns:
         Tuple of (optimal_x, optimal_value)
     """
@@ -56,7 +58,7 @@ def simple_golden_section_search(
     f1 = objective_func(x1)
     f2 = objective_func(x2)
 
-    for i in range(max_iterations):
+    for _i in range(max_iterations):
         if abs(upper_bound - lower_bound) < tolerance:
             break
 
@@ -86,11 +88,11 @@ def simple_gradient_descent(
     param_bounds: list[tuple[float, float]],
     learning_rate: float = 0.01,
     tolerance: float = 1e-3,
-    max_iterations: int = 100
+    max_iterations: int = 100,
 ) -> tuple[list[float], float, int, bool]:
     """
     Simple gradient descent optimization for multi-dimensional problems.
-    
+
     Returns:
         Tuple of (optimal_params, optimal_value, iterations, converged)
     """
@@ -143,25 +145,26 @@ def simple_gradient_descent(
 def optimize_launch_angle(
     geometry: RocketGeometry,
     objective: str = "max_altitude",
-    angle_bounds: tuple[float, float] = (80.0, 90.0)
+    angle_bounds: tuple[float, float] = (80.0, 90.0),
 ) -> TrajectoryOptimizationResult:
     """
     Optimize launch angle for maximum altitude or range.
-    
+
     Args:
         geometry: Rocket geometry and properties
         objective: "max_altitude" or "max_range"
         angle_bounds: (min_angle_deg, max_angle_deg)
-    
+
     Returns:
         Optimization result
     """
+
     def objective_function(angle_deg: float) -> float:
         """Objective function to minimize (negative for maximization)."""
         try:
             trajectory = rocket_3dof_trajectory(geometry, launch_angle_deg=angle_deg)
             if not trajectory:
-                return float('inf')  # Invalid trajectory
+                return float("inf")  # Invalid trajectory
 
             performance = analyze_rocket_performance(trajectory)
 
@@ -169,12 +172,14 @@ def optimize_launch_angle(
                 return -performance.max_altitude_m  # Negative for maximization
             elif objective == "max_range":
                 # Estimate range from final horizontal position (simplified)
-                final_horizontal_distance = 0.0  # Placeholder - would need 2D integration
+                final_horizontal_distance = (
+                    0.0  # Placeholder - would need 2D integration
+                )
                 return -final_horizontal_distance
             else:
-                return float('inf')
+                return float("inf")
         except Exception:
-            return float('inf')
+            return float("inf")
 
     # Optimize using golden section search
     optimal_angle, optimal_value = simple_golden_section_search(
@@ -182,7 +187,7 @@ def optimize_launch_angle(
         angle_bounds[0],
         angle_bounds[1],
         tolerance=0.1,  # 0.1 degree tolerance
-        max_iterations=50
+        max_iterations=50,
     )
 
     # Generate final trajectory with optimal parameters
@@ -195,7 +200,7 @@ def optimize_launch_angle(
         iterations=50,  # Approximation
         converged=True,
         trajectory_points=final_trajectory,
-        performance=final_performance
+        performance=final_performance,
     )
 
 
@@ -204,18 +209,18 @@ def optimize_thrust_profile(
     burn_time_s: float,
     total_impulse_target: float,
     n_segments: int = 5,
-    objective: str = "max_altitude"
+    objective: str = "max_altitude",
 ) -> TrajectoryOptimizationResult:
     """
     Optimize thrust profile for better performance.
-    
+
     Args:
         geometry: Base rocket geometry
         burn_time_s: Total burn time
         total_impulse_target: Target total impulse
         n_segments: Number of thrust profile segments
         objective: "max_altitude", "min_max_q", or "min_gravity_loss"
-    
+
     Returns:
         Optimization result
     """
@@ -241,9 +246,11 @@ def optimize_thrust_profile(
                     thrust_curve.append([time_end, 0.0])  # End thrust
 
             # Normalize to maintain total impulse
-            current_impulse = sum(avg_thrust * mult * segment_time for mult in multipliers)
+            current_impulse = sum(
+                avg_thrust * mult * segment_time for mult in multipliers
+            )
             if current_impulse <= 0:
-                return float('inf')
+                return float("inf")
 
             scale_factor = total_impulse_target / current_impulse
             thrust_curve = [[t, thrust * scale_factor] for t, thrust in thrust_curve]
@@ -255,11 +262,13 @@ def optimize_thrust_profile(
                 diameter_m=geometry.diameter_m,
                 length_m=geometry.length_m,
                 cd=geometry.cd,
-                thrust_curve=thrust_curve
+                thrust_curve=thrust_curve,
             )
 
             # Run trajectory simulation with reasonable parameters
-            trajectory = rocket_3dof_trajectory(opt_geometry, dt_s=0.2, max_time_s=150.0)
+            trajectory = rocket_3dof_trajectory(
+                opt_geometry, dt_s=0.2, max_time_s=150.0
+            )
             if not trajectory:
                 return 1e6  # Large penalty instead of inf
 
@@ -267,7 +276,9 @@ def optimize_thrust_profile(
 
             if objective == "max_altitude":
                 # Return negative altitude for minimization, but ensure it's not zero
-                result = -max(1.0, performance.max_altitude_m)  # At least -1 to avoid zero
+                result = -max(
+                    1.0, performance.max_altitude_m
+                )  # At least -1 to avoid zero
                 return result
             elif objective == "min_max_q":
                 return performance.max_q_pa
@@ -288,7 +299,7 @@ def optimize_thrust_profile(
         multiplier_bounds,
         learning_rate=0.05,
         tolerance=1e-3,
-        max_iterations=100
+        max_iterations=100,
     )
 
     # Generate final thrust curve and trajectory
@@ -302,9 +313,13 @@ def optimize_thrust_profile(
             final_thrust_curve.append([time_end, 0.0])
 
     # Normalize final curve
-    current_impulse = sum(avg_thrust * mult * segment_time for mult in optimal_multipliers)
+    current_impulse = sum(
+        avg_thrust * mult * segment_time for mult in optimal_multipliers
+    )
     scale_factor = total_impulse_target / current_impulse
-    final_thrust_curve = [[t, thrust * scale_factor] for t, thrust in final_thrust_curve]
+    final_thrust_curve = [
+        [t, thrust * scale_factor] for t, thrust in final_thrust_curve
+    ]
 
     # Generate final trajectory
     final_geometry = RocketGeometry(
@@ -313,60 +328,64 @@ def optimize_thrust_profile(
         diameter_m=geometry.diameter_m,
         length_m=geometry.length_m,
         cd=geometry.cd,
-        thrust_curve=final_thrust_curve
+        thrust_curve=final_thrust_curve,
     )
 
     final_trajectory = rocket_3dof_trajectory(final_geometry)
     final_performance = analyze_rocket_performance(final_trajectory)
 
     # Prepare optimal parameters
-    optimal_params = {f"thrust_mult_seg_{i+1}": mult for i, mult in enumerate(optimal_multipliers)}
+    optimal_params = {
+        f"thrust_mult_seg_{i + 1}": mult for i, mult in enumerate(optimal_multipliers)
+    }
     optimal_params["thrust_curve"] = final_thrust_curve
 
     return TrajectoryOptimizationResult(
         optimal_parameters=optimal_params,
-        optimal_objective=-optimal_value if objective == "max_altitude" else optimal_value,
+        optimal_objective=-optimal_value
+        if objective == "max_altitude"
+        else optimal_value,
         iterations=iterations,
         converged=converged,
         trajectory_points=final_trajectory,
-        performance=final_performance
+        performance=final_performance,
     )
 
 
 def compare_trajectories(
-    geometries: list[RocketGeometry],
-    names: list[str],
-    launch_angle_deg: float = 90.0
+    geometries: list[RocketGeometry], names: list[str], launch_angle_deg: float = 90.0
 ) -> dict[str, Any]:
     """
     Compare multiple rocket trajectories.
-    
+
     Args:
         geometries: List of rocket geometries to compare
         names: Names for each geometry
         launch_angle_deg: Launch angle for all rockets
-    
+
     Returns:
         Comparison results dictionary
     """
     results = {}
 
-    for i, (geometry, name) in enumerate(zip(geometries, names, strict=False)):
+    for _i, (geometry, name) in enumerate(zip(geometries, names, strict=False)):
         try:
-            trajectory = rocket_3dof_trajectory(geometry, launch_angle_deg=launch_angle_deg)
+            trajectory = rocket_3dof_trajectory(
+                geometry, launch_angle_deg=launch_angle_deg
+            )
             performance = analyze_rocket_performance(trajectory)
 
             results[name] = {
                 "geometry": asdict(geometry),
                 "performance": asdict(performance),
                 "trajectory_length": len(trajectory),
-                "success": True
+                "success": True,
             }
         except Exception as e:
             results[name] = {
                 "geometry": asdict(geometry),
                 "error": str(e),
-                "success": False
+                "success": False,
             }
 
     # Add comparison metrics
@@ -374,16 +393,22 @@ def compare_trajectories(
         successful_results = [r for r in results.values() if r.get("success", False)]
 
         # Find best performance in each category
-        best_altitude = max(r["performance"]["max_altitude_m"] for r in successful_results)
-        best_velocity = max(r["performance"]["max_velocity_ms"] for r in successful_results)
-        best_efficiency = max(r["performance"]["specific_impulse_s"] for r in successful_results)
+        best_altitude = max(
+            r["performance"]["max_altitude_m"] for r in successful_results
+        )
+        best_velocity = max(
+            r["performance"]["max_velocity_ms"] for r in successful_results
+        )
+        best_efficiency = max(
+            r["performance"]["specific_impulse_s"] for r in successful_results
+        )
 
         results["comparison"] = {
             "best_altitude_m": best_altitude,
             "best_velocity_ms": best_velocity,
             "best_efficiency_isp_s": best_efficiency,
             "num_successful": len(successful_results),
-            "total_compared": len(geometries)
+            "total_compared": len(geometries),
         }
 
     return results
@@ -392,16 +417,16 @@ def compare_trajectories(
 def trajectory_sensitivity_analysis(
     base_geometry: RocketGeometry,
     parameter_variations: dict[str, list[float]],
-    objective: str = "max_altitude"
+    objective: str = "max_altitude",
 ) -> dict[str, Any]:
     """
     Perform sensitivity analysis on trajectory parameters.
-    
+
     Args:
         base_geometry: Baseline rocket geometry
         parameter_variations: Dict with parameter names and variation values
         objective: Objective to analyze sensitivity for
-    
+
     Returns:
         Sensitivity analysis results
     """
@@ -430,7 +455,7 @@ def trajectory_sensitivity_analysis(
                 diameter_m=base_geometry.diameter_m,
                 length_m=base_geometry.length_m,
                 cd=base_geometry.cd,
-                thrust_curve=base_geometry.thrust_curve
+                thrust_curve=base_geometry.thrust_curve,
             )
 
             # Apply variation
@@ -457,23 +482,37 @@ def trajectory_sensitivity_analysis(
                     current_value = performance.max_altitude_m
 
                 # Calculate sensitivity
-                percent_change_param = (variation - getattr(base_geometry, param_name)) / getattr(base_geometry, param_name) * 100
-                percent_change_objective = (current_value - baseline_value) / baseline_value * 100
-                sensitivity = percent_change_objective / percent_change_param if percent_change_param != 0 else 0
+                percent_change_param = (
+                    (variation - getattr(base_geometry, param_name))
+                    / getattr(base_geometry, param_name)
+                    * 100
+                )
+                percent_change_objective = (
+                    (current_value - baseline_value) / baseline_value * 100
+                )
+                sensitivity = (
+                    percent_change_objective / percent_change_param
+                    if percent_change_param != 0
+                    else 0
+                )
 
-                param_results.append({
-                    "parameter_value": variation,
-                    "objective_value": current_value,
-                    "percent_change_param": percent_change_param,
-                    "percent_change_objective": percent_change_objective,
-                    "sensitivity": sensitivity
-                })
+                param_results.append(
+                    {
+                        "parameter_value": variation,
+                        "objective_value": current_value,
+                        "percent_change_param": percent_change_param,
+                        "percent_change_objective": percent_change_objective,
+                        "sensitivity": sensitivity,
+                    }
+                )
             except Exception:
-                param_results.append({
-                    "parameter_value": variation,
-                    "error": "Simulation failed",
-                    "sensitivity": None
-                })
+                param_results.append(
+                    {
+                        "parameter_value": variation,
+                        "error": "Simulation failed",
+                        "sensitivity": None,
+                    }
+                )
 
         sensitivity_results[param_name] = param_results
 
@@ -481,13 +520,14 @@ def trajectory_sensitivity_analysis(
         "baseline_value": baseline_value,
         "objective": objective,
         "parameter_sensitivities": sensitivity_results,
-        "baseline_geometry": asdict(base_geometry)
+        "baseline_geometry": asdict(base_geometry),
     }
 
 
 # Update availability
 try:
     from . import update_availability
+
     update_availability("trajopt", True, {})
 except ImportError:
     pass

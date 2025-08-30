@@ -8,7 +8,6 @@ Tests the trajopt.py module functionality including:
 - Trajectory comparison
 """
 
-
 import pytest
 
 from aerospace_mcp.integrations.rockets import RocketGeometry
@@ -27,9 +26,10 @@ class TestOptimizationAlgorithms:
 
     def test_golden_section_search_quadratic(self):
         """Test golden section search on a simple quadratic function."""
+
         # f(x) = (x - 3)² + 2, minimum at x = 3
         def quadratic(x):
-            return (x - 3)**2 + 2
+            return (x - 3) ** 2 + 2
 
         optimal_x, optimal_value = simple_golden_section_search(
             quadratic, 0.0, 6.0, tolerance=0.01, max_iterations=50
@@ -41,8 +41,9 @@ class TestOptimizationAlgorithms:
 
     def test_golden_section_search_convergence(self):
         """Test that golden section search converges."""
+
         def simple_func(x):
-            return x**2 - 4*x + 5  # Minimum at x = 2
+            return x**2 - 4 * x + 5  # Minimum at x = 2
 
         optimal_x, optimal_value = simple_golden_section_search(
             simple_func, 0.0, 4.0, tolerance=0.001, max_iterations=100
@@ -53,10 +54,11 @@ class TestOptimizationAlgorithms:
 
     def test_gradient_descent_2d(self):
         """Test gradient descent on 2D function."""
+
         # f(x,y) = (x-1)² + (y-2)², minimum at (1,2)
         def objective(params):
             x, y = params
-            return (x - 1)**2 + (y - 2)**2
+            return (x - 1) ** 2 + (y - 2) ** 2
 
         optimal_params, optimal_value, iterations, converged = simple_gradient_descent(
             objective,
@@ -64,7 +66,7 @@ class TestOptimizationAlgorithms:
             param_bounds=[(-5.0, 5.0), (-5.0, 5.0)],
             learning_rate=0.1,
             tolerance=0.01,
-            max_iterations=100
+            max_iterations=100,
         )
 
         assert converged
@@ -74,8 +76,9 @@ class TestOptimizationAlgorithms:
 
     def test_gradient_descent_bounds(self):
         """Test that gradient descent respects parameter bounds."""
+
         def objective(params):
-            x, = params
+            (x,) = params
             return x**2  # Minimum at x = 0
 
         # But constrain x to be >= 1
@@ -85,7 +88,7 @@ class TestOptimizationAlgorithms:
             param_bounds=[(1.0, 5.0)],
             learning_rate=0.1,
             tolerance=0.01,
-            max_iterations=50
+            max_iterations=50,
         )
 
         # Should find boundary minimum at x = 1
@@ -105,7 +108,7 @@ class TestLaunchAngleOptimization:
             diameter_m=0.18,
             length_m=1.5,
             cd=0.35,
-            thrust_curve=thrust_curve
+            thrust_curve=thrust_curve,
         )
 
     def test_optimize_launch_angle_basic(self):
@@ -113,9 +116,7 @@ class TestLaunchAngleOptimization:
         geometry = self.create_test_rocket()
 
         result = optimize_launch_angle(
-            geometry,
-            objective="max_altitude",
-            angle_bounds=(85.0, 90.0)
+            geometry, objective="max_altitude", angle_bounds=(85.0, 90.0)
         )
 
         # Should complete optimization
@@ -137,9 +138,7 @@ class TestLaunchAngleOptimization:
         geometry = self.create_test_rocket()
 
         result = optimize_launch_angle(
-            geometry,
-            objective="max_altitude",
-            angle_bounds=(80.0, 90.0)
+            geometry, objective="max_altitude", angle_bounds=(80.0, 90.0)
         )
 
         # For max altitude, should prefer angles close to 90°
@@ -152,9 +151,7 @@ class TestLaunchAngleOptimization:
 
         # Test altitude optimization
         altitude_result = optimize_launch_angle(
-            geometry,
-            objective="max_altitude",
-            angle_bounds=(85.0, 90.0)
+            geometry, objective="max_altitude", angle_bounds=(85.0, 90.0)
         )
 
         # Both should converge
@@ -174,7 +171,7 @@ class TestThrustProfileOptimization:
             propellant_mass_kg=80.0,
             diameter_m=0.2,
             length_m=2.0,
-            cd=0.4
+            cd=0.4,
         )
 
     def test_thrust_profile_basic(self):
@@ -186,7 +183,7 @@ class TestThrustProfileOptimization:
             burn_time_s=8.0,
             total_impulse_target=15000.0,  # 15 kN·s
             n_segments=4,
-            objective="max_altitude"
+            objective="max_altitude",
         )
 
         # Should complete optimization
@@ -194,7 +191,7 @@ class TestThrustProfileOptimization:
 
         # Should have optimal parameters for each segment
         for i in range(4):
-            param_key = f"thrust_mult_seg_{i+1}"
+            param_key = f"thrust_mult_seg_{i + 1}"
             assert param_key in result.optimal_parameters
             multiplier = result.optimal_parameters[param_key]
             assert 0.1 <= multiplier <= 3.0  # Within bounds
@@ -217,7 +214,7 @@ class TestThrustProfileOptimization:
             burn_time_s=6.0,
             total_impulse_target=target_impulse,
             n_segments=3,
-            objective="max_altitude"
+            objective="max_altitude",
         )
 
         # Check that actual impulse is reasonable - optimization may not be perfect
@@ -242,7 +239,7 @@ class TestThrustProfileOptimization:
                     burn_time_s=5.0,
                     total_impulse_target=10000.0,
                     n_segments=3,
-                    objective=obj
+                    objective=obj,
                 )
                 results[obj] = result
             except Exception as e:
@@ -262,12 +259,15 @@ class TestThrustProfileOptimization:
                 burn_time_s=4.0,
                 total_impulse_target=8000.0,
                 n_segments=n_segments,
-                objective="max_altitude"
+                objective="max_altitude",
             )
 
             # Should have correct number of segment parameters
-            segment_params = [k for k in result.optimal_parameters.keys()
-                            if k.startswith("thrust_mult_seg_")]
+            segment_params = [
+                k
+                for k in result.optimal_parameters.keys()
+                if k.startswith("thrust_mult_seg_")
+            ]
             assert len(segment_params) == n_segments
 
 
@@ -280,20 +280,29 @@ class TestTrajectoryComparison:
 
         geometries = [
             RocketGeometry(  # Light rocket
-                dry_mass_kg=10.0, propellant_mass_kg=40.0,
-                diameter_m=0.15, length_m=1.2, cd=0.3,
-                thrust_curve=base_thrust
+                dry_mass_kg=10.0,
+                propellant_mass_kg=40.0,
+                diameter_m=0.15,
+                length_m=1.2,
+                cd=0.3,
+                thrust_curve=base_thrust,
             ),
             RocketGeometry(  # Heavy rocket
-                dry_mass_kg=25.0, propellant_mass_kg=100.0,
-                diameter_m=0.25, length_m=2.0, cd=0.4,
-                thrust_curve=[[0.0, 3000.0], [8.0, 3000.0], [8.1, 0.0]]
+                dry_mass_kg=25.0,
+                propellant_mass_kg=100.0,
+                diameter_m=0.25,
+                length_m=2.0,
+                cd=0.4,
+                thrust_curve=[[0.0, 3000.0], [8.0, 3000.0], [8.1, 0.0]],
             ),
             RocketGeometry(  # High drag rocket
-                dry_mass_kg=15.0, propellant_mass_kg=60.0,
-                diameter_m=0.3, length_m=1.5, cd=0.8,
-                thrust_curve=base_thrust
-            )
+                dry_mass_kg=15.0,
+                propellant_mass_kg=60.0,
+                diameter_m=0.3,
+                length_m=1.5,
+                cd=0.8,
+                thrust_curve=base_thrust,
+            ),
         ]
 
         names = ["Light", "Heavy", "High-Drag"]
@@ -344,16 +353,22 @@ class TestTrajectoryComparison:
         """Test trajectory comparison with problematic rockets."""
         # Create one good rocket and one problematic one
         good_rocket = RocketGeometry(
-            dry_mass_kg=15.0, propellant_mass_kg=60.0,
-            diameter_m=0.2, length_m=1.5, cd=0.35,
-            thrust_curve=[[0.0, 1800.0], [6.0, 1800.0], [6.1, 0.0]]
+            dry_mass_kg=15.0,
+            propellant_mass_kg=60.0,
+            diameter_m=0.2,
+            length_m=1.5,
+            cd=0.35,
+            thrust_curve=[[0.0, 1800.0], [6.0, 1800.0], [6.1, 0.0]],
         )
 
         # Create problematic rocket (zero thrust)
         bad_rocket = RocketGeometry(
-            dry_mass_kg=10.0, propellant_mass_kg=20.0,
-            diameter_m=0.1, length_m=1.0, cd=0.3,
-            thrust_curve=[]  # No thrust
+            dry_mass_kg=10.0,
+            propellant_mass_kg=20.0,
+            diameter_m=0.1,
+            length_m=1.0,
+            cd=0.3,
+            thrust_curve=[],  # No thrust
         )
 
         geometries = [good_rocket, bad_rocket]
@@ -379,7 +394,7 @@ class TestSensitivityAnalysis:
             diameter_m=0.2,
             length_m=2.0,
             cd=0.4,
-            thrust_curve=[[0.0, 2000.0], [8.0, 2000.0], [8.1, 0.0]]
+            thrust_curve=[[0.0, 2000.0], [8.0, 2000.0], [8.1, 0.0]],
         )
 
     def test_sensitivity_analysis_basic(self):
@@ -388,15 +403,13 @@ class TestSensitivityAnalysis:
 
         # Define parameter variations
         parameter_variations = {
-            "dry_mass_kg": [18.0, 20.0, 22.0],       # ±10%
-            "propellant_mass_kg": [72.0, 80.0, 88.0], # ±10%
-            "cd": [0.35, 0.4, 0.45]                   # ±12.5%
+            "dry_mass_kg": [18.0, 20.0, 22.0],  # ±10%
+            "propellant_mass_kg": [72.0, 80.0, 88.0],  # ±10%
+            "cd": [0.35, 0.4, 0.45],  # ±12.5%
         }
 
         result = trajectory_sensitivity_analysis(
-            base_geometry,
-            parameter_variations,
-            objective="max_altitude"
+            base_geometry, parameter_variations, objective="max_altitude"
         )
 
         # Should have baseline value
@@ -414,7 +427,7 @@ class TestSensitivityAnalysis:
             # Check that sensitivities are calculated
             for point in param_results:
                 if "sensitivity" in point and point["sensitivity"] is not None:
-                    assert isinstance(point["sensitivity"], (int, float))
+                    assert isinstance(point["sensitivity"], int | float)
 
     def test_sensitivity_analysis_mass_sensitivity(self):
         """Test that mass parameters show expected sensitivity."""
@@ -426,20 +439,23 @@ class TestSensitivityAnalysis:
         }
 
         result = trajectory_sensitivity_analysis(
-            base_geometry,
-            parameter_variations,
-            objective="max_altitude"
+            base_geometry, parameter_variations, objective="max_altitude"
         )
 
         sensitivities = result["parameter_sensitivities"]["dry_mass_kg"]
 
         # Should have valid sensitivities
-        valid_sensitivities = [s for s in sensitivities
-                             if "sensitivity" in s and s["sensitivity"] is not None]
+        valid_sensitivities = [
+            s
+            for s in sensitivities
+            if "sensitivity" in s and s["sensitivity"] is not None
+        ]
         assert len(valid_sensitivities) > 0
 
         # Mass increase should generally reduce altitude (negative sensitivity)
-        avg_sensitivity = sum(s["sensitivity"] for s in valid_sensitivities) / len(valid_sensitivities)
+        avg_sensitivity = sum(s["sensitivity"] for s in valid_sensitivities) / len(
+            valid_sensitivities
+        )
         assert avg_sensitivity < 0  # More mass = less altitude
 
     def test_sensitivity_analysis_drag_sensitivity(self):
@@ -451,20 +467,23 @@ class TestSensitivityAnalysis:
         }
 
         result = trajectory_sensitivity_analysis(
-            base_geometry,
-            parameter_variations,
-            objective="max_altitude"
+            base_geometry, parameter_variations, objective="max_altitude"
         )
 
         sensitivities = result["parameter_sensitivities"]["cd"]
 
         # Should have valid sensitivities
-        valid_sensitivities = [s for s in sensitivities
-                             if "sensitivity" in s and s["sensitivity"] is not None]
+        valid_sensitivities = [
+            s
+            for s in sensitivities
+            if "sensitivity" in s and s["sensitivity"] is not None
+        ]
         assert len(valid_sensitivities) > 0
 
         # Higher drag should generally reduce altitude
-        avg_sensitivity = sum(s["sensitivity"] for s in valid_sensitivities) / len(valid_sensitivities)
+        avg_sensitivity = sum(s["sensitivity"] for s in valid_sensitivities) / len(
+            valid_sensitivities
+        )
         assert avg_sensitivity < 0  # More drag = less altitude
 
     def test_sensitivity_analysis_multiple_parameters(self):
@@ -475,13 +494,11 @@ class TestSensitivityAnalysis:
             "dry_mass_kg": [18.0, 20.0, 22.0],
             "propellant_mass_kg": [70.0, 80.0, 90.0],
             "diameter_m": [0.18, 0.2, 0.22],
-            "cd": [0.35, 0.4, 0.45]
+            "cd": [0.35, 0.4, 0.45],
         }
 
         result = trajectory_sensitivity_analysis(
-            base_geometry,
-            parameter_variations,
-            objective="max_altitude"
+            base_geometry, parameter_variations, objective="max_altitude"
         )
 
         # Should analyze all parameters
@@ -498,9 +515,12 @@ class TestOptimizationEdgeCases:
     def test_optimization_with_no_thrust(self):
         """Test optimization with rocket that has no thrust."""
         geometry = RocketGeometry(
-            dry_mass_kg=10.0, propellant_mass_kg=20.0,
-            diameter_m=0.1, length_m=1.0, cd=0.3,
-            thrust_curve=[]  # No thrust
+            dry_mass_kg=10.0,
+            propellant_mass_kg=20.0,
+            diameter_m=0.1,
+            length_m=1.0,
+            cd=0.3,
+            thrust_curve=[],  # No thrust
         )
 
         # Launch angle optimization should still complete
@@ -512,16 +532,19 @@ class TestOptimizationEdgeCases:
     def test_optimization_extreme_bounds(self):
         """Test optimization with extreme parameter bounds."""
         geometry = RocketGeometry(
-            dry_mass_kg=15.0, propellant_mass_kg=45.0,
-            diameter_m=0.15, length_m=1.3, cd=0.3,
-            thrust_curve=[[0.0, 1000.0], [5.0, 1000.0], [5.1, 0.0]]
+            dry_mass_kg=15.0,
+            propellant_mass_kg=45.0,
+            diameter_m=0.15,
+            length_m=1.3,
+            cd=0.3,
+            thrust_curve=[[0.0, 1000.0], [5.0, 1000.0], [5.1, 0.0]],
         )
 
         # Very narrow bounds
         result = optimize_launch_angle(
             geometry,
             objective="max_altitude",
-            angle_bounds=(89.9, 90.0)  # 0.1 degree range
+            angle_bounds=(89.9, 90.0),  # 0.1 degree range
         )
 
         # Should still find a solution within bounds
@@ -531,9 +554,12 @@ class TestOptimizationEdgeCases:
     def test_sensitivity_analysis_single_point(self):
         """Test sensitivity analysis with single variation point."""
         base_geometry = RocketGeometry(
-            dry_mass_kg=20.0, propellant_mass_kg=60.0,
-            diameter_m=0.2, length_m=1.8, cd=0.4,
-            thrust_curve=[[0.0, 1500.0], [6.0, 1500.0], [6.1, 0.0]]
+            dry_mass_kg=20.0,
+            propellant_mass_kg=60.0,
+            diameter_m=0.2,
+            length_m=1.8,
+            cd=0.4,
+            thrust_curve=[[0.0, 1500.0], [6.0, 1500.0], [6.1, 0.0]],
         )
 
         # Only baseline value (no variation)
@@ -542,9 +568,7 @@ class TestOptimizationEdgeCases:
         }
 
         result = trajectory_sensitivity_analysis(
-            base_geometry,
-            parameter_variations,
-            objective="max_altitude"
+            base_geometry, parameter_variations, objective="max_altitude"
         )
 
         # Should handle gracefully
@@ -558,17 +582,18 @@ class TestOptimizationConvergence:
     def test_repeated_optimization_consistency(self):
         """Test that repeated optimizations give consistent results."""
         geometry = RocketGeometry(
-            dry_mass_kg=18.0, propellant_mass_kg=72.0,
-            diameter_m=0.18, length_m=1.6, cd=0.35,
-            thrust_curve=[[0.0, 1600.0], [7.0, 1600.0], [7.1, 0.0]]
+            dry_mass_kg=18.0,
+            propellant_mass_kg=72.0,
+            diameter_m=0.18,
+            length_m=1.6,
+            cd=0.35,
+            thrust_curve=[[0.0, 1600.0], [7.0, 1600.0], [7.1, 0.0]],
         )
 
         results = []
         for _ in range(3):  # Run optimization 3 times
             result = optimize_launch_angle(
-                geometry,
-                objective="max_altitude",
-                angle_bounds=(85.0, 90.0)
+                geometry, objective="max_altitude", angle_bounds=(85.0, 90.0)
             )
             results.append(result.optimal_parameters["launch_angle_deg"])
 

@@ -40,16 +40,28 @@ class PlanRequest(BaseModel):
     # You can pass cities, or override with explicit IATA
     depart_city: str = Field(..., description="e.g., 'San Jose'")
     arrive_city: str = Field(..., description="e.g., 'Tokyo'")
-    depart_country: str | None = Field(None, description="ISO alpha-2 country code (optional)")
-    arrive_country: str | None = Field(None, description="ISO alpha-2 country code (optional)")
-    prefer_depart_iata: str | None = Field(None, description="Force a particular departure airport by IATA")
-    prefer_arrive_iata: str | None = Field(None, description="Force a particular arrival airport by IATA")
+    depart_country: str | None = Field(
+        None, description="ISO alpha-2 country code (optional)"
+    )
+    arrive_country: str | None = Field(
+        None, description="ISO alpha-2 country code (optional)"
+    )
+    prefer_depart_iata: str | None = Field(
+        None, description="Force a particular departure airport by IATA"
+    )
+    prefer_arrive_iata: str | None = Field(
+        None, description="Force a particular arrival airport by IATA"
+    )
 
     # Aircraft/performance knobs
     ac_type: str = Field(..., description="ICAO aircraft type (e.g., 'A320', 'B738')")
     cruise_alt_ft: int = Field(35000, ge=8000, le=45000)
-    mass_kg: float | None = Field(None, description="If not set, defaults to 85% MTOW when available")
-    route_step_km: float = Field(25.0, gt=1.0, description="Sampling step for polyline points")
+    mass_kg: float | None = Field(
+        None, description="If not set, defaults to 85% MTOW when available"
+    )
+    route_step_km: float = Field(
+        25.0, gt=1.0, description="Sampling step for polyline points"
+    )
     backend: Literal["openap"] = "openap"  # Placeholder for future backends
 
 
@@ -99,7 +111,10 @@ def _find_city_airports(city: str, country: str | None = None) -> list[AirportOu
     for iata, ap in _AIRPORTS_IATA.items():
         if not iata or not ap.get("iata"):
             continue
-        if ap.get("city", "").strip().lower() == city_l or city_l in ap.get("name", "").lower():
+        if (
+            ap.get("city", "").strip().lower() == city_l
+            or city_l in ap.get("name", "").lower()
+        ):
             if country is None or (ap.get("country", "").upper() == country.upper()):
                 out.append(
                     AirportOut(
@@ -128,19 +143,26 @@ def _resolve_endpoint(
     if prefer_iata:
         ap = _airport_from_iata(prefer_iata)
         if not ap:
-            raise HTTPException(status_code=400, detail=f"{role}: IATA '{prefer_iata}' not found.")
+            raise HTTPException(
+                status_code=400, detail=f"{role}: IATA '{prefer_iata}' not found."
+            )
         return ap
 
     cands = _find_city_airports(city, country)
     if not cands:
-        raise HTTPException(status_code=404, detail=f"{role}: no airport for city='{city}' (country={country or 'ANY'}).")
+        raise HTTPException(
+            status_code=404,
+            detail=f"{role}: no airport for city='{city}' (country={country or 'ANY'}).",
+        )
     return cands[0]
 
 
 # ----------------------------
 # Geodesic / polyline
 # ----------------------------
-def great_circle_points(lat1: float, lon1: float, lat2: float, lon2: float, step_km: float) -> tuple[list[tuple[float, float]], float]:
+def great_circle_points(
+    lat1: float, lon1: float, lat2: float, lon2: float, step_km: float
+) -> tuple[list[tuple[float, float]], float]:
     g = Geodesic.WGS84.Inverse(lat1, lon1, lat2, lon2)
     dist_m = g["s12"]
     line = Geodesic.WGS84.Line(lat1, lon1, g["azi1"])
@@ -156,9 +178,14 @@ def great_circle_points(lat1: float, lon1: float, lat2: float, lon2: float, step
 # ----------------------------
 # OpenAP estimates (climb / cruise / descent)
 # ----------------------------
-def estimates_openap(ac_type: str, cruise_alt_ft: int, mass_kg: float | None, route_dist_km: float) -> tuple[dict, str]:
+def estimates_openap(
+    ac_type: str, cruise_alt_ft: int, mass_kg: float | None, route_dist_km: float
+) -> tuple[dict, str]:
     if not OPENAP_AVAILABLE:
-        raise HTTPException(status_code=501, detail="OpenAP backend unavailable. Please `pip install openap`.")
+        raise HTTPException(
+            status_code=501,
+            detail="OpenAP backend unavailable. Please `pip install openap`.",
+        )
 
     # Resolve mass default from aircraft properties (fallback to 85% MTOW if present)
     mass = mass_kg
@@ -206,16 +233,24 @@ def estimates_openap(ac_type: str, cruise_alt_ft: int, mass_kg: float | None, ro
     # How much cruise distance remains after climb+descent?
     d_remaining = max(0.0, route_dist_km - (d_climb + d_des))
     # Guard for super-short hops
-    cruise_time_s = 0.0 if gs_cru <= 1e-6 else (d_remaining * KM_PER_NM) / (gs_cru / 3600.0 / 1.852)  # but simpler to compute by kts:
+    cruise_time_s = (
+        0.0 if gs_cru <= 1e-6 else (d_remaining * KM_PER_NM) / (gs_cru / 3600.0 / 1.852)
+    )  # but simpler to compute by kts:
     # Convert properly: kts = nm/hour → km/s = (kts * NM_PER_KM) / 3600
-    cruise_time_s = 0.0 if gs_cru <= 1e-6 else (d_remaining / ((gs_cru * NM_PER_KM) / 3600.0))
+    cruise_time_s = (
+        0.0 if gs_cru <= 1e-6 else (d_remaining / ((gs_cru * NM_PER_KM) / 3600.0))
+    )
 
     fuelflow = FuelFlow(ac=ac_type)
 
-    def fuel_from(avg_gs_kts: float, avg_alt_ft: float, vs_fpm: float, time_s: float) -> float:
+    def fuel_from(
+        avg_gs_kts: float, avg_alt_ft: float, vs_fpm: float, time_s: float
+    ) -> float:
         # TAS ~ GS (zero-wind assumption for baseline)
         try:
-            ff_kg_s = float(fuelflow.enroute(mass=mass, tas=avg_gs_kts, alt=avg_alt_ft, vs=vs_fpm))
+            ff_kg_s = float(
+                fuelflow.enroute(mass=mass, tas=avg_gs_kts, alt=avg_alt_ft, vs=vs_fpm)
+            )
         except Exception:
             ff_kg_s = 0.0
         return ff_kg_s * time_s
@@ -225,9 +260,21 @@ def estimates_openap(ac_type: str, cruise_alt_ft: int, mass_kg: float | None, ro
     fuel_cru = fuel_from(gs_cru, cruise_alt_ft, 0.0, cruise_time_s)
 
     # Build segments
-    climb_out = SegmentEst(time_min=t_climb / 60.0, distance_km=d_climb, avg_gs_kts=gs_climb, fuel_kg=fuel_climb)
-    cruise_out = SegmentEst(time_min=cruise_time_s / 60.0, distance_km=d_remaining, avg_gs_kts=gs_cru, fuel_kg=fuel_cru)
-    des_out = SegmentEst(time_min=t_des / 60.0, distance_km=d_des, avg_gs_kts=gs_des, fuel_kg=fuel_des)
+    climb_out = SegmentEst(
+        time_min=t_climb / 60.0,
+        distance_km=d_climb,
+        avg_gs_kts=gs_climb,
+        fuel_kg=fuel_climb,
+    )
+    cruise_out = SegmentEst(
+        time_min=cruise_time_s / 60.0,
+        distance_km=d_remaining,
+        avg_gs_kts=gs_cru,
+        fuel_kg=fuel_cru,
+    )
+    des_out = SegmentEst(
+        time_min=t_des / 60.0, distance_km=d_des, avg_gs_kts=gs_des, fuel_kg=fuel_des
+    )
 
     block_time_min = climb_out.time_min + cruise_out.time_min + des_out.time_min
     block_fuel_kg = climb_out.fuel_kg + cruise_out.fuel_kg + des_out.fuel_kg
@@ -268,18 +315,33 @@ def airports_by_city(city: str = Query(...), country: str | None = Query(None)):
 
 @app.post("/plan", response_model=PlanResponse)
 def plan(req: PlanRequest):
-    if req.depart_city.strip().lower() == req.arrive_city.strip().lower() and not req.prefer_arrive_iata and not req.prefer_depart_iata:
-        raise HTTPException(status_code=400, detail="Departure and arrival look identical—please specify airports explicitly.")
+    if (
+        req.depart_city.strip().lower() == req.arrive_city.strip().lower()
+        and not req.prefer_arrive_iata
+        and not req.prefer_depart_iata
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Departure and arrival look identical—please specify airports explicitly.",
+        )
 
-    dep = _resolve_endpoint(req.depart_city, req.depart_country, req.prefer_depart_iata, role="departure")
-    arr = _resolve_endpoint(req.arrive_city, req.arrive_country, req.prefer_arrive_iata, role="arrival")
+    dep = _resolve_endpoint(
+        req.depart_city, req.depart_country, req.prefer_depart_iata, role="departure"
+    )
+    arr = _resolve_endpoint(
+        req.arrive_city, req.arrive_country, req.prefer_arrive_iata, role="arrival"
+    )
 
     # Great-circle route
-    poly, dist_km = great_circle_points(dep.lat, dep.lon, arr.lat, arr.lon, req.route_step_km)
+    poly, dist_km = great_circle_points(
+        dep.lat, dep.lon, arr.lat, arr.lon, req.route_step_km
+    )
 
     # Estimates
     if req.backend == "openap":
-        est, engine_name = estimates_openap(req.ac_type, req.cruise_alt_ft, req.mass_kg, dist_km)
+        est, engine_name = estimates_openap(
+            req.ac_type, req.cruise_alt_ft, req.mass_kg, dist_km
+        )
     else:
         raise HTTPException(status_code=400, detail=f"Unknown backend: {req.backend}")
 

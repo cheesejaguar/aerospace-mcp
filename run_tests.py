@@ -34,7 +34,7 @@ def main():
         choices=["unit", "integration", "all", "coverage", "fast", "slow"],
         nargs="?",
         default="all",
-        help="Type of tests to run"
+        help="Type of tests to run",
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument("--parallel", "-n", type=int, help="Run tests in parallel")
@@ -82,7 +82,7 @@ def main():
             "--cov-report=html",
             "--cov-report=term-missing",
             "--cov-fail-under=80",
-            "tests/"
+            "tests/",
         ]
         exit_code = run_command(cmd, "Running tests with coverage")
 

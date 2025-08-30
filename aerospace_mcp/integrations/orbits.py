@@ -12,45 +12,49 @@ from typing import Any
 
 # Constants
 MU_EARTH = 3.986004418e14  # m³/s² - Earth's gravitational parameter
-R_EARTH = 6378137.0        # m - Earth's equatorial radius (WGS84)
-J2_EARTH = 1.08262668e-3   # Earth's J2 perturbation coefficient
-OMEGA_EARTH = 7.2921159e-5 # rad/s - Earth's rotation rate
+R_EARTH = 6378137.0  # m - Earth's equatorial radius (WGS84)
+J2_EARTH = 1.08262668e-3  # Earth's J2 perturbation coefficient
+OMEGA_EARTH = 7.2921159e-5  # rad/s - Earth's rotation rate
 
 
 @dataclass
 class OrbitElements:
     """Classical orbital elements."""
-    semi_major_axis_m: float      # Semi-major axis (m)
-    eccentricity: float           # Eccentricity (dimensionless)
-    inclination_deg: float        # Inclination (degrees)
-    raan_deg: float              # Right ascension of ascending node (degrees)
-    arg_periapsis_deg: float     # Argument of periapsis (degrees)
-    true_anomaly_deg: float      # True anomaly (degrees)
-    epoch_utc: str               # Epoch in UTC ISO format
+
+    semi_major_axis_m: float  # Semi-major axis (m)
+    eccentricity: float  # Eccentricity (dimensionless)
+    inclination_deg: float  # Inclination (degrees)
+    raan_deg: float  # Right ascension of ascending node (degrees)
+    arg_periapsis_deg: float  # Argument of periapsis (degrees)
+    true_anomaly_deg: float  # True anomaly (degrees)
+    epoch_utc: str  # Epoch in UTC ISO format
 
 
 @dataclass
 class StateVector:
     """Position and velocity state vector."""
-    position_m: list[float]      # Position vector [x, y, z] in meters
-    velocity_ms: list[float]     # Velocity vector [vx, vy, vz] in m/s
-    epoch_utc: str               # Epoch in UTC ISO format
-    frame: str = "J2000"         # Reference frame
+
+    position_m: list[float]  # Position vector [x, y, z] in meters
+    velocity_ms: list[float]  # Velocity vector [vx, vy, vz] in m/s
+    epoch_utc: str  # Epoch in UTC ISO format
+    frame: str = "J2000"  # Reference frame
 
 
 @dataclass
 class OrbitProperties:
     """Computed orbital properties."""
-    period_s: float              # Orbital period (seconds)
-    apoapsis_m: float           # Apoapsis altitude above Earth surface (m)
-    periapsis_m: float          # Periapsis altitude above Earth surface (m)
-    energy_j_kg: float          # Specific orbital energy (J/kg)
+
+    period_s: float  # Orbital period (seconds)
+    apoapsis_m: float  # Apoapsis altitude above Earth surface (m)
+    periapsis_m: float  # Periapsis altitude above Earth surface (m)
+    energy_j_kg: float  # Specific orbital energy (J/kg)
     angular_momentum_m2s: float  # Specific angular momentum magnitude (m²/s)
 
 
 @dataclass
 class GroundTrack:
     """Ground track point."""
+
     latitude_deg: float
     longitude_deg: float
     altitude_m: float
@@ -60,9 +64,10 @@ class GroundTrack:
 @dataclass
 class Maneuver:
     """Orbital maneuver definition."""
-    delta_v_ms: list[float]      # Delta-V vector [x, y, z] in m/s
-    time_utc: str               # Maneuver execution time
-    description: str = ""       # Optional description
+
+    delta_v_ms: list[float]  # Delta-V vector [x, y, z] in m/s
+    time_utc: str  # Maneuver execution time
+    description: str = ""  # Optional description
 
 
 def deg_to_rad(deg: float) -> float:
@@ -90,7 +95,7 @@ def vector_cross(a: list[float], b: list[float]) -> list[float]:
     return [
         a[1] * b[2] - a[2] * b[1],
         a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0]
+        a[0] * b[1] - a[1] * b[0],
     ]
 
 
@@ -102,17 +107,21 @@ def vector_normalize(vec: list[float]) -> list[float]:
     return [x / mag for x in vec]
 
 
-def kepler_equation_solver(mean_anomaly_rad: float, eccentricity: float,
-                          tolerance: float = 1e-8, max_iterations: int = 50) -> float:
+def kepler_equation_solver(
+    mean_anomaly_rad: float,
+    eccentricity: float,
+    tolerance: float = 1e-8,
+    max_iterations: int = 50,
+) -> float:
     """
     Solve Kepler's equation for eccentric anomaly using Newton-Raphson method.
-    
+
     Args:
         mean_anomaly_rad: Mean anomaly in radians
         eccentricity: Orbital eccentricity
         tolerance: Convergence tolerance
         max_iterations: Maximum iterations
-    
+
     Returns:
         Eccentric anomaly in radians
     """
@@ -139,10 +148,10 @@ def kepler_equation_solver(mean_anomaly_rad: float, eccentricity: float,
 def elements_to_state_vector(elements: OrbitElements) -> StateVector:
     """
     Convert orbital elements to state vector using manual calculations.
-    
+
     Args:
         elements: Orbital elements
-        
+
     Returns:
         State vector in J2000 frame
     """
@@ -164,12 +173,12 @@ def elements_to_state_vector(elements: OrbitElements) -> StateVector:
 
     # Velocity in perifocal coordinates
     p = a * (1 - e**2)
-    h = math.sqrt(MU_EARTH * p)
+    math.sqrt(MU_EARTH * p)
 
     v_peri = [
         -math.sqrt(MU_EARTH / p) * math.sin(nu),
         math.sqrt(MU_EARTH / p) * (e + math.cos(nu)),
-        0.0
+        0.0,
     ]
 
     # Rotation matrices
@@ -194,30 +203,30 @@ def elements_to_state_vector(elements: OrbitElements) -> StateVector:
     r_j2000 = [
         R11 * r_peri[0] + R12 * r_peri[1] + R13 * r_peri[2],
         R21 * r_peri[0] + R22 * r_peri[1] + R23 * r_peri[2],
-        R31 * r_peri[0] + R32 * r_peri[1] + R33 * r_peri[2]
+        R31 * r_peri[0] + R32 * r_peri[1] + R33 * r_peri[2],
     ]
 
     v_j2000 = [
         R11 * v_peri[0] + R12 * v_peri[1] + R13 * v_peri[2],
         R21 * v_peri[0] + R22 * v_peri[1] + R23 * v_peri[2],
-        R31 * v_peri[0] + R32 * v_peri[1] + R33 * v_peri[2]
+        R31 * v_peri[0] + R32 * v_peri[1] + R33 * v_peri[2],
     ]
 
     return StateVector(
         position_m=r_j2000,
         velocity_ms=v_j2000,
         epoch_utc=elements.epoch_utc,
-        frame="J2000"
+        frame="J2000",
     )
 
 
 def state_vector_to_elements(state: StateVector) -> OrbitElements:
     """
     Convert state vector to orbital elements using manual calculations.
-    
+
     Args:
         state: State vector in J2000 frame
-        
+
     Returns:
         Classical orbital elements
     """
@@ -294,17 +303,17 @@ def state_vector_to_elements(state: StateVector) -> OrbitElements:
         raan_deg=rad_to_deg(raan),
         arg_periapsis_deg=rad_to_deg(arg_pe),
         true_anomaly_deg=rad_to_deg(nu),
-        epoch_utc=state.epoch_utc
+        epoch_utc=state.epoch_utc,
     )
 
 
 def calculate_orbit_properties(elements: OrbitElements) -> OrbitProperties:
     """
     Calculate orbital properties from elements.
-    
+
     Args:
         elements: Orbital elements
-        
+
     Returns:
         Orbital properties
     """
@@ -329,23 +338,25 @@ def calculate_orbit_properties(elements: OrbitElements) -> OrbitProperties:
         apoapsis_m=r_ap,
         periapsis_m=r_pe,
         energy_j_kg=energy,
-        angular_momentum_m2s=h
+        angular_momentum_m2s=h,
     )
 
 
-def propagate_orbit_j2(initial_state: StateVector, time_span_s: float,
-                      time_step_s: float = 60.0) -> list[StateVector]:
+def propagate_orbit_j2(
+    initial_state: StateVector, time_span_s: float, time_step_s: float = 60.0
+) -> list[StateVector]:
     """
     Propagate orbit with J2 perturbations using numerical integration.
-    
+
     Args:
         initial_state: Initial state vector
         time_span_s: Propagation time span (seconds)
         time_step_s: Integration time step (seconds)
-        
+
     Returns:
         List of state vectors over time
     """
+
     def acceleration_j2(r_vec: list[float]) -> list[float]:
         """Calculate acceleration including J2 perturbations."""
         r = vector_magnitude(r_vec)
@@ -355,12 +366,12 @@ def propagate_orbit_j2(initial_state: StateVector, time_span_s: float,
 
         # J2 perturbation
         factor = 1.5 * J2_EARTH * MU_EARTH * R_EARTH**2 / r**5
-        z2_r2 = (r_vec[2] / r)**2
+        z2_r2 = (r_vec[2] / r) ** 2
 
         a_j2 = [
             factor * r_vec[0] * (1 - 5 * z2_r2),
             factor * r_vec[1] * (1 - 5 * z2_r2),
-            factor * r_vec[2] * (3 - 5 * z2_r2)
+            factor * r_vec[2] * (3 - 5 * z2_r2),
         ]
 
         return [a_central[i] + a_j2[i] for i in range(3)]
@@ -372,7 +383,7 @@ def propagate_orbit_j2(initial_state: StateVector, time_span_s: float,
 
     # Parse initial epoch
     try:
-        epoch = datetime.fromisoformat(initial_state.epoch_utc.replace('Z', '+00:00'))
+        epoch = datetime.fromisoformat(initial_state.epoch_utc.replace("Z", "+00:00"))
     except:
         epoch = datetime.now(UTC)
 
@@ -401,34 +412,42 @@ def propagate_orbit_j2(initial_state: StateVector, time_span_s: float,
         k4_v = acceleration_j2(r4)
 
         # Update state
-        r = [r[i] + dt/6 * (k1_r[i] + 2*k2_r[i] + 2*k3_r[i] + k4_r[i]) for i in range(3)]
-        v = [v[i] + dt/6 * (k1_v[i] + 2*k2_v[i] + 2*k3_v[i] + k4_v[i]) for i in range(3)]
+        r = [
+            r[i] + dt / 6 * (k1_r[i] + 2 * k2_r[i] + 2 * k3_r[i] + k4_r[i])
+            for i in range(3)
+        ]
+        v = [
+            v[i] + dt / 6 * (k1_v[i] + 2 * k2_v[i] + 2 * k3_v[i] + k4_v[i])
+            for i in range(3)
+        ]
 
         t += dt
 
         # Create new state
-        new_epoch = epoch.replace(microsecond=0) + \
-                   type(epoch - epoch)(seconds=int(t))
+        new_epoch = epoch.replace(microsecond=0) + type(epoch - epoch)(seconds=int(t))
 
-        states.append(StateVector(
-            position_m=r.copy(),
-            velocity_ms=v.copy(),
-            epoch_utc=new_epoch.isoformat(),
-            frame=initial_state.frame
-        ))
+        states.append(
+            StateVector(
+                position_m=r.copy(),
+                velocity_ms=v.copy(),
+                epoch_utc=new_epoch.isoformat(),
+                frame=initial_state.frame,
+            )
+        )
 
     return states
 
 
-def calculate_ground_track(orbit_states: list[StateVector],
-                         time_step_s: float = 60.0) -> list[GroundTrack]:
+def calculate_ground_track(
+    orbit_states: list[StateVector], time_step_s: float = 60.0
+) -> list[GroundTrack]:
     """
     Calculate ground track from orbit state vectors.
-    
+
     Args:
         orbit_states: List of state vectors
         time_step_s: Time step between states (seconds)
-        
+
     Returns:
         List of ground track points
     """
@@ -443,7 +462,7 @@ def calculate_ground_track(orbit_states: list[StateVector],
 
         # Account for Earth rotation
         try:
-            epoch = datetime.fromisoformat(state.epoch_utc.replace('Z', '+00:00'))
+            datetime.fromisoformat(state.epoch_utc.replace("Z", "+00:00"))
             t_since_epoch = i * time_step_s
             lon = math.atan2(r_vec[1], r_vec[0]) - OMEGA_EARTH * t_since_epoch
         except:
@@ -457,12 +476,14 @@ def calculate_ground_track(orbit_states: list[StateVector],
 
         altitude = r - R_EARTH
 
-        ground_track.append(GroundTrack(
-            latitude_deg=rad_to_deg(lat),
-            longitude_deg=rad_to_deg(lon),
-            altitude_m=altitude,
-            time_utc=state.epoch_utc
-        ))
+        ground_track.append(
+            GroundTrack(
+                latitude_deg=rad_to_deg(lat),
+                longitude_deg=rad_to_deg(lon),
+                altitude_m=altitude,
+                time_utc=state.epoch_utc,
+            )
+        )
 
     return ground_track
 
@@ -470,11 +491,11 @@ def calculate_ground_track(orbit_states: list[StateVector],
 def hohmann_transfer(r1_m: float, r2_m: float) -> dict[str, float]:
     """
     Calculate Hohmann transfer orbit parameters.
-    
+
     Args:
         r1_m: Initial circular orbit radius (m)
         r2_m: Final circular orbit radius (m)
-        
+
     Returns:
         Transfer parameters including delta-V requirements
     """
@@ -485,8 +506,8 @@ def hohmann_transfer(r1_m: float, r2_m: float) -> dict[str, float]:
     v1_circular = math.sqrt(MU_EARTH / r1_m)
     v2_circular = math.sqrt(MU_EARTH / r2_m)
 
-    v1_transfer = math.sqrt(MU_EARTH * (2/r1_m - 1/a_transfer))
-    v2_transfer = math.sqrt(MU_EARTH * (2/r2_m - 1/a_transfer))
+    v1_transfer = math.sqrt(MU_EARTH * (2 / r1_m - 1 / a_transfer))
+    v2_transfer = math.sqrt(MU_EARTH * (2 / r2_m - 1 / a_transfer))
 
     # Delta-V requirements
     dv1 = abs(v1_transfer - v1_circular)
@@ -502,21 +523,22 @@ def hohmann_transfer(r1_m: float, r2_m: float) -> dict[str, float]:
         "delta_v_total_ms": dv_total,
         "transfer_time_s": transfer_time,
         "transfer_time_h": transfer_time / 3600,
-        "semi_major_axis_m": a_transfer
+        "semi_major_axis_m": a_transfer,
     }
 
 
-def lambert_solver_simple(r1_vec: list[float], r2_vec: list[float],
-                         time_flight_s: float, mu: float = MU_EARTH) -> dict[str, Any]:
+def lambert_solver_simple(
+    r1_vec: list[float], r2_vec: list[float], time_flight_s: float, mu: float = MU_EARTH
+) -> dict[str, Any]:
     """
     Simple Lambert problem solver for two-body trajectory.
-    
+
     Args:
         r1_vec: Initial position vector (m)
         r2_vec: Final position vector (m)
         time_flight_s: Time of flight (seconds)
         mu: Gravitational parameter (m³/s²)
-        
+
     Returns:
         Dictionary with initial and final velocity vectors
     """
@@ -540,7 +562,7 @@ def lambert_solver_simple(r1_vec: list[float], r2_vec: list[float],
             "feasible": False,
             "reason": f"Transfer time {time_flight_s:.1f}s less than minimum {t_min:.1f}s",
             "v1_ms": [0, 0, 0],
-            "v2_ms": [0, 0, 0]
+            "v2_ms": [0, 0, 0],
         }
 
     # Simplified solution assuming elliptical transfer
@@ -554,11 +576,11 @@ def lambert_solver_simple(r1_vec: list[float], r2_vec: list[float],
     # Approximate semi-major axis for given flight time
     # Using Kepler's 3rd law and approximation
     n_approx = 2 * math.pi / time_flight_s  # Approximate mean motion
-    a_approx = (mu / n_approx**2)**(1/3)
+    a_approx = (mu / n_approx**2) ** (1 / 3)
 
     # Energy and specific angular momentum approximations
-    energy = -mu / (2 * a_approx)
-    h_approx = math.sqrt(mu * a_approx * (1 - 0.1**2))  # Assume low eccentricity
+    -mu / (2 * a_approx)
+    math.sqrt(mu * a_approx * (1 - 0.1**2))  # Assume low eccentricity
 
     # Approximate velocities (simplified circular approximation)
     v1_mag = math.sqrt(mu / r1)
@@ -583,19 +605,20 @@ def lambert_solver_simple(r1_vec: list[float], r2_vec: list[float],
         "v1_ms": v1_vec,
         "v2_ms": v2_vec,
         "transfer_angle_deg": rad_to_deg(dnu),
-        "estimated_semi_major_axis_m": a_approx
+        "estimated_semi_major_axis_m": a_approx,
     }
 
 
-def orbital_rendezvous_planning(chaser_elements: OrbitElements,
-                               target_elements: OrbitElements) -> dict[str, Any]:
+def orbital_rendezvous_planning(
+    chaser_elements: OrbitElements, target_elements: OrbitElements
+) -> dict[str, Any]:
     """
     Plan orbital rendezvous maneuvers between two spacecraft.
-    
+
     Args:
         chaser_elements: Chaser spacecraft orbital elements
         target_elements: Target spacecraft orbital elements
-        
+
     Returns:
         Rendezvous plan with phasing and approach maneuvers
     """
@@ -604,7 +627,9 @@ def orbital_rendezvous_planning(chaser_elements: OrbitElements,
     target_state = elements_to_state_vector(target_elements)
 
     # Calculate relative position
-    rel_pos = [target_state.position_m[i] - chaser_state.position_m[i] for i in range(3)]
+    rel_pos = [
+        target_state.position_m[i] - chaser_state.position_m[i] for i in range(3)
+    ]
     rel_distance = vector_magnitude(rel_pos)
 
     # Orbital properties
@@ -615,27 +640,43 @@ def orbital_rendezvous_planning(chaser_elements: OrbitElements,
     chaser_r = vector_magnitude(chaser_state.position_m)
     target_r = vector_magnitude(target_state.position_m)
 
-    cos_phase = vector_dot(chaser_state.position_m, target_state.position_m) / (chaser_r * target_r)
+    cos_phase = vector_dot(chaser_state.position_m, target_state.position_m) / (
+        chaser_r * target_r
+    )
     cos_phase = max(-1, min(1, cos_phase))
     phase_angle_rad = math.acos(cos_phase)
 
     # Estimate phasing time
     if abs(chaser_props.period_s - target_props.period_s) > 1:
-        synodic_period = abs(chaser_props.period_s * target_props.period_s /
-                           (chaser_props.period_s - target_props.period_s))
+        synodic_period = abs(
+            chaser_props.period_s
+            * target_props.period_s
+            / (chaser_props.period_s - target_props.period_s)
+        )
         phasing_time_s = phase_angle_rad / (2 * math.pi) * synodic_period
     else:
-        phasing_time_s = float('inf')  # Coplanar, similar orbits
+        phasing_time_s = float("inf")  # Coplanar, similar orbits
 
     # Delta-V estimates for circularization if needed
     chaser_circ_dv = 0.0
-    target_circ_dv = 0.0
 
     if chaser_elements.eccentricity > 0.01:
         # Circularization delta-V (rough estimate)
-        v_ap = math.sqrt(MU_EARTH * (2 / (chaser_elements.semi_major_axis_m * (1 + chaser_elements.eccentricity)) -
-                                   1 / chaser_elements.semi_major_axis_m))
-        v_circ = math.sqrt(MU_EARTH / (chaser_elements.semi_major_axis_m * (1 + chaser_elements.eccentricity)))
+        v_ap = math.sqrt(
+            MU_EARTH
+            * (
+                2
+                / (
+                    chaser_elements.semi_major_axis_m
+                    * (1 + chaser_elements.eccentricity)
+                )
+                - 1 / chaser_elements.semi_major_axis_m
+            )
+        )
+        v_circ = math.sqrt(
+            MU_EARTH
+            / (chaser_elements.semi_major_axis_m * (1 + chaser_elements.eccentricity))
+        )
         chaser_circ_dv = abs(v_circ - v_ap)
 
     return {
@@ -643,24 +684,33 @@ def orbital_rendezvous_planning(chaser_elements: OrbitElements,
         "relative_distance_km": rel_distance / 1000,
         "phase_angle_deg": rad_to_deg(phase_angle_rad),
         "phasing_time_s": phasing_time_s,
-        "phasing_time_h": phasing_time_s / 3600 if phasing_time_s != float('inf') else float('inf'),
+        "phasing_time_h": phasing_time_s / 3600
+        if phasing_time_s != float("inf")
+        else float("inf"),
         "chaser_period_s": chaser_props.period_s,
         "target_period_s": target_props.period_s,
         "period_difference_s": abs(chaser_props.period_s - target_props.period_s),
         "altitude_difference_m": abs(chaser_props.apoapsis_m - target_props.apoapsis_m),
         "estimated_circularization_dv_ms": chaser_circ_dv,
-        "feasibility": "Good" if rel_distance < 100000 and abs(chaser_elements.inclination_deg - target_elements.inclination_deg) < 5.0 else "Challenging"
+        "feasibility": "Good"
+        if rel_distance < 100000
+        and abs(chaser_elements.inclination_deg - target_elements.inclination_deg) < 5.0
+        else "Challenging",
     }
 
 
 # Update availability
-def porkchop_plot_analysis(departure_body: str = "Earth", arrival_body: str = "Mars",
-                         departure_dates: list[str] = None,
-                         arrival_dates: list[str] = None,
-                         min_tof_days: int = 100, max_tof_days: int = 400) -> dict[str, Any]:
+def porkchop_plot_analysis(
+    departure_body: str = "Earth",
+    arrival_body: str = "Mars",
+    departure_dates: list[str] = None,
+    arrival_dates: list[str] = None,
+    min_tof_days: int = 100,
+    max_tof_days: int = 400,
+) -> dict[str, Any]:
     """
     Generate porkchop plot analysis for interplanetary transfers.
-    
+
     Args:
         departure_body: Departure celestial body (default: Earth)
         arrival_body: Arrival celestial body (default: Mars)
@@ -668,7 +718,7 @@ def porkchop_plot_analysis(departure_body: str = "Earth", arrival_body: str = "M
         arrival_dates: List of arrival dates (ISO format)
         min_tof_days: Minimum time of flight (days)
         max_tof_days: Maximum time of flight (days)
-        
+
     Returns:
         Dictionary containing transfer analysis grid
     """
@@ -687,7 +737,7 @@ def porkchop_plot_analysis(departure_body: str = "Earth", arrival_body: str = "M
             "2026-05-01T00:00:00",
             "2026-07-01T00:00:00",
             "2026-09-01T00:00:00",
-            "2026-11-01T00:00:00"
+            "2026-11-01T00:00:00",
         ]
 
     if arrival_dates is None:
@@ -704,7 +754,7 @@ def porkchop_plot_analysis(departure_body: str = "Earth", arrival_body: str = "M
             "2026-10-01T00:00:00",
             "2026-12-01T00:00:00",
             "2027-02-01T00:00:00",
-            "2027-04-01T00:00:00"
+            "2027-04-01T00:00:00",
         ]
 
     # Simplified planetary positions (circular orbits for demonstration)
@@ -718,8 +768,9 @@ def porkchop_plot_analysis(departure_body: str = "Earth", arrival_body: str = "M
         """Get simplified planet position at given date."""
         # Parse date (simplified)
         import datetime
+
         try:
-            dt = datetime.datetime.fromisoformat(date_iso.replace('Z', '+00:00'))
+            dt = datetime.datetime.fromisoformat(date_iso.replace("Z", "+00:00"))
         except:
             dt = datetime.datetime.fromisoformat(date_iso)
 
@@ -753,13 +804,18 @@ def porkchop_plot_analysis(departure_body: str = "Earth", arrival_body: str = "M
         for arr_date in arrival_dates:
             # Calculate time of flight
             import datetime
+
             try:
-                dep_dt = datetime.datetime.fromisoformat(dep_date.replace('Z', '+00:00'))
+                dep_dt = datetime.datetime.fromisoformat(
+                    dep_date.replace("Z", "+00:00")
+                )
             except:
                 dep_dt = datetime.datetime.fromisoformat(dep_date)
 
             try:
-                arr_dt = datetime.datetime.fromisoformat(arr_date.replace('Z', '+00:00'))
+                arr_dt = datetime.datetime.fromisoformat(
+                    arr_date.replace("Z", "+00:00")
+                )
             except:
                 arr_dt = datetime.datetime.fromisoformat(arr_date)
 
@@ -793,39 +849,45 @@ def porkchop_plot_analysis(departure_body: str = "Earth", arrival_body: str = "M
                 earth_v_orbit = math.sqrt(mu_sun / (1.496e11))  # m/s
 
                 # Excess velocity magnitude
-                v_inf_vec = [v1[i] - earth_v_orbit if i == 1 else v1[i] for i in range(3)]
+                v_inf_vec = [
+                    v1[i] - earth_v_orbit if i == 1 else v1[i] for i in range(3)
+                ]
                 v_inf_mag = math.sqrt(sum(v**2 for v in v_inf_vec))
 
                 # Characteristic energy C3 (km²/s²)
-                c3 = (v_inf_mag / 1000)**2  # Convert to km/s then square
+                c3 = (v_inf_mag / 1000) ** 2  # Convert to km/s then square
 
                 # Delta-V estimate (simplified)
                 delta_v_ms = v_inf_mag
 
-                porkchop_data.append({
-                    "departure_date": dep_date,
-                    "arrival_date": arr_date,
-                    "time_of_flight_days": tof_days,
-                    "c3_km2_s2": c3,
-                    "delta_v_ms": delta_v_ms,
-                    "departure_position_m": r1,
-                    "arrival_position_m": r2,
-                    "transfer_feasible": c3 < 100.0  # Reasonable C3 limit
-                })
+                porkchop_data.append(
+                    {
+                        "departure_date": dep_date,
+                        "arrival_date": arr_date,
+                        "time_of_flight_days": tof_days,
+                        "c3_km2_s2": c3,
+                        "delta_v_ms": delta_v_ms,
+                        "departure_position_m": r1,
+                        "arrival_position_m": r2,
+                        "transfer_feasible": c3 < 100.0,  # Reasonable C3 limit
+                    }
+                )
 
             except Exception as e:
                 # Add failed transfer case
-                porkchop_data.append({
-                    "departure_date": dep_date,
-                    "arrival_date": arr_date,
-                    "time_of_flight_days": tof_days,
-                    "c3_km2_s2": float('inf'),
-                    "delta_v_ms": float('inf'),
-                    "departure_position_m": r1,
-                    "arrival_position_m": r2,
-                    "transfer_feasible": False,
-                    "error": str(e)
-                })
+                porkchop_data.append(
+                    {
+                        "departure_date": dep_date,
+                        "arrival_date": arr_date,
+                        "time_of_flight_days": tof_days,
+                        "c3_km2_s2": float("inf"),
+                        "delta_v_ms": float("inf"),
+                        "departure_position_m": r1,
+                        "arrival_position_m": r2,
+                        "transfer_feasible": False,
+                        "error": str(e),
+                    }
+                )
 
     # Find optimal transfer
     feasible_transfers = [t for t in porkchop_data if t["transfer_feasible"]]
@@ -848,7 +910,7 @@ def porkchop_plot_analysis(departure_body: str = "Earth", arrival_body: str = "M
             "mean_c3_km2_s2": sum(c3_values) / len(c3_values),
             "min_tof_days": min(tof_values),
             "max_tof_days": max(tof_values),
-            "mean_tof_days": sum(tof_values) / len(tof_values)
+            "mean_tof_days": sum(tof_values) / len(tof_values),
         }
     else:
         summary_stats = {
@@ -859,7 +921,7 @@ def porkchop_plot_analysis(departure_body: str = "Earth", arrival_body: str = "M
             "mean_c3_km2_s2": None,
             "min_tof_days": min_tof_days,
             "max_tof_days": max_tof_days,
-            "mean_tof_days": (min_tof_days + max_tof_days) / 2
+            "mean_tof_days": (min_tof_days + max_tof_days) / 2,
         }
 
     return {
@@ -871,24 +933,26 @@ def porkchop_plot_analysis(departure_body: str = "Earth", arrival_body: str = "M
         "constraints": {
             "min_tof_days": min_tof_days,
             "max_tof_days": max_tof_days,
-            "max_feasible_c3_km2_s2": 100.0
+            "max_feasible_c3_km2_s2": 100.0,
         },
-        "note": "Simplified analysis using circular planetary orbits. Use SPICE kernels for production applications."
+        "note": "Simplified analysis using circular planetary orbits. Use SPICE kernels for production applications.",
     }
 
 
-def get_ephemeris_position(body: str, epoch_utc: str, frame: str = "J2000") -> dict[str, Any]:
+def get_ephemeris_position(
+    body: str, epoch_utc: str, frame: str = "J2000"
+) -> dict[str, Any]:
     """
     Get ephemeris position of celestial body (stub implementation).
-    
+
     Args:
         body: Celestial body name (Earth, Mars, Venus, etc.)
         epoch_utc: UTC epoch in ISO format
         frame: Reference frame (default: J2000)
-        
+
     Returns:
         Position and velocity vectors, with accuracy notes
-        
+
     Note:
         This is a simplified implementation using circular orbits.
         For production use, install SPICE kernels and use spiceypy or similar.
@@ -897,7 +961,7 @@ def get_ephemeris_position(body: str, epoch_utc: str, frame: str = "J2000") -> d
     import datetime
 
     try:
-        dt = datetime.datetime.fromisoformat(epoch_utc.replace('Z', '+00:00'))
+        dt = datetime.datetime.fromisoformat(epoch_utc.replace("Z", "+00:00"))
     except:
         dt = datetime.datetime.fromisoformat(epoch_utc)
 
@@ -910,23 +974,23 @@ def get_ephemeris_position(body: str, epoch_utc: str, frame: str = "J2000") -> d
         "earth": {
             "semi_major_axis_au": 1.0,
             "period_days": 365.25,
-            "inclination_deg": 0.0
+            "inclination_deg": 0.0,
         },
         "mars": {
             "semi_major_axis_au": 1.524,
             "period_days": 686.98,
-            "inclination_deg": 1.85
+            "inclination_deg": 1.85,
         },
         "venus": {
             "semi_major_axis_au": 0.723,
             "period_days": 224.70,
-            "inclination_deg": 3.39
+            "inclination_deg": 3.39,
         },
         "jupiter": {
             "semi_major_axis_au": 5.204,
             "period_days": 4332.82,
-            "inclination_deg": 1.30
-        }
+            "inclination_deg": 1.30,
+        },
     }
 
     body_lower = body.lower()
@@ -934,7 +998,7 @@ def get_ephemeris_position(body: str, epoch_utc: str, frame: str = "J2000") -> d
         return {
             "error": f"Body '{body}' not supported in simplified ephemeris",
             "supported_bodies": list(orbital_data.keys()),
-            "recommendation": "Use SPICE kernels with spiceypy for accurate ephemeris data"
+            "recommendation": "Use SPICE kernels with spiceypy for accurate ephemeris data",
         }
 
     data = orbital_data[body_lower]
@@ -957,7 +1021,11 @@ def get_ephemeris_position(body: str, epoch_utc: str, frame: str = "J2000") -> d
     r_m = r_au * AU_TO_M
     v_circular = math.sqrt(mu_sun / r_m)  # m/s
 
-    velocity_ms = [-v_circular * math.sin(mean_anomaly), v_circular * math.cos(mean_anomaly), 0.0]
+    velocity_ms = [
+        -v_circular * math.sin(mean_anomaly),
+        v_circular * math.cos(mean_anomaly),
+        0.0,
+    ]
 
     return {
         "body": body,
@@ -971,8 +1039,8 @@ def get_ephemeris_position(body: str, epoch_utc: str, frame: str = "J2000") -> d
         "spice_recommendation": {
             "kernels_needed": ["de430.bsp", "pck00010.tpc", "naif0012.tls"],
             "library": "spiceypy",
-            "installation": "pip install spiceypy"
-        }
+            "installation": "pip install spiceypy",
+        },
     }
 
 
@@ -980,17 +1048,20 @@ def get_ephemeris_position(body: str, epoch_utc: str, frame: str = "J2000") -> d
 SPICE_AVAILABLE = False
 try:
     import spiceypy as spice
+
     SPICE_AVAILABLE = True
 
-    def get_ephemeris_position_spice(body: str, epoch_utc: str, frame: str = "J2000") -> dict[str, Any]:
+    def get_ephemeris_position_spice(
+        body: str, epoch_utc: str, frame: str = "J2000"
+    ) -> dict[str, Any]:
         """
         Get accurate ephemeris position using SPICE kernels (if loaded).
-        
+
         Args:
             body: SPICE body name or ID
             epoch_utc: UTC epoch in ISO format
             frame: SPICE reference frame
-            
+
         Returns:
             High-accuracy position and velocity vectors
         """
@@ -1003,7 +1074,7 @@ try:
 
             # Convert km to m, km/s to m/s
             position_m = [state[i] * 1000 for i in range(3)]
-            velocity_ms = [state[i+3] * 1000 for i in range(3)]
+            velocity_ms = [state[i + 3] * 1000 for i in range(3)]
 
             return {
                 "body": body,
@@ -1014,31 +1085,35 @@ try:
                 "light_time_s": light_time,
                 "accuracy": "high",
                 "model": "SPICE_kernels",
-                "source": "JPL_ephemeris"
+                "source": "JPL_ephemeris",
             }
 
         except Exception as e:
             return {
                 "error": f"SPICE error: {str(e)}",
                 "fallback_available": True,
-                "recommendation": "Check SPICE kernel loading and body names"
+                "recommendation": "Check SPICE kernel loading and body names",
             }
 
 except ImportError:
-    def get_ephemeris_position_spice(body: str, epoch_utc: str, frame: str = "J2000") -> dict[str, Any]:
+
+    def get_ephemeris_position_spice(
+        body: str, epoch_utc: str, frame: str = "J2000"
+    ) -> dict[str, Any]:
         """Placeholder when SPICE is not available."""
         return {
             "error": "SPICE not available",
             "install_command": "pip install spiceypy",
             "kernel_sources": [
                 "https://naif.jpl.nasa.gov/naif/data_generic.html",
-                "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/"
-            ]
+                "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/",
+            ],
         }
 
 
 try:
     from . import update_availability
+
     update_availability("orbits", True, {"spice_available": SPICE_AVAILABLE})
 except ImportError:
     pass

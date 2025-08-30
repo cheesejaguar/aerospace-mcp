@@ -2,7 +2,7 @@
 Aircraft Aerodynamics Tools
 
 Provides aircraft aerodynamics analysis including VLM wing analysis,
-airfoil polars, and basic aerodynamic calculations. Falls back to 
+airfoil polars, and basic aerodynamic calculations. Falls back to
 simplified methods when optional dependencies are unavailable.
 """
 
@@ -19,11 +19,13 @@ MACHUPX_AVAILABLE = False
 try:
     import aerosandbox as asb
     import aerosandbox.numpy as anp
+
     AEROSANDBOX_AVAILABLE = True
     update_availability("aero", True, {"aerosandbox": asb.__version__})
 except ImportError:
     try:
         import machupx as mx
+
         MACHUPX_AVAILABLE = True
         update_availability("aero", True, {"machupx": "unknown"})
     except ImportError:
@@ -65,31 +67,43 @@ AIRFOIL_DATABASE = {
         "cl_max": 1.5,
         "alpha_stall_deg": 14.0,
         "cm0": -0.06,
-    }
+    },
 }
+
 
 # Data models
 class AirfoilPoint(BaseModel):
     """Single airfoil polar point."""
+
     alpha_deg: float = Field(..., description="Angle of attack in degrees")
     cl: float = Field(..., description="Lift coefficient")
     cd: float = Field(..., description="Drag coefficient")
     cm: float | None = Field(None, description="Moment coefficient")
     cl_cd_ratio: float = Field(..., description="Lift to drag ratio")
 
+
 class WingGeometry(BaseModel):
     """Wing planform geometry definition."""
+
     span_m: float = Field(..., gt=0, description="Wing span in meters")
     chord_root_m: float = Field(..., gt=0, description="Root chord in meters")
     chord_tip_m: float = Field(..., gt=0, description="Tip chord in meters")
-    sweep_deg: float = Field(0.0, ge=-45, le=45, description="Quarter-chord sweep in degrees")
-    dihedral_deg: float = Field(0.0, ge=-15, le=15, description="Dihedral angle in degrees")
-    twist_deg: float = Field(0.0, ge=-10, le=10, description="Geometric twist (tip relative to root)")
+    sweep_deg: float = Field(
+        0.0, ge=-45, le=45, description="Quarter-chord sweep in degrees"
+    )
+    dihedral_deg: float = Field(
+        0.0, ge=-15, le=15, description="Dihedral angle in degrees"
+    )
+    twist_deg: float = Field(
+        0.0, ge=-10, le=10, description="Geometric twist (tip relative to root)"
+    )
     airfoil_root: str = Field("NACA2412", description="Root airfoil name")
     airfoil_tip: str = Field("NACA2412", description="Tip airfoil name")
 
+
 class WingAnalysisPoint(BaseModel):
     """Wing analysis results at a single condition."""
+
     alpha_deg: float = Field(..., description="Wing angle of attack")
     CL: float = Field(..., description="Wing lift coefficient")
     CD: float = Field(..., description="Wing drag coefficient")
@@ -97,14 +111,19 @@ class WingAnalysisPoint(BaseModel):
     L_D_ratio: float = Field(..., description="Lift to drag ratio")
     span_efficiency: float | None = Field(None, description="Span efficiency factor")
 
+
 class StabilityDerivatives(BaseModel):
     """Longitudinal stability derivatives."""
+
     CL_alpha: float = Field(..., description="Lift curve slope (per radian)")
     CM_alpha: float = Field(..., description="Pitching moment curve slope")
     CL_alpha_dot: float | None = Field(None, description="CL due to alpha rate")
     CM_alpha_dot: float | None = Field(None, description="CM due to alpha rate")
 
-def _simple_wing_analysis(geometry: WingGeometry, alpha_deg_list: list[float], mach: float = 0.2) -> list[WingAnalysisPoint]:
+
+def _simple_wing_analysis(
+    geometry: WingGeometry, alpha_deg_list: list[float], mach: float = 0.2
+) -> list[WingAnalysisPoint]:
     """
     Simple wing analysis using lifting line theory approximations.
     Used as fallback when advanced libraries are unavailable.
@@ -112,12 +131,16 @@ def _simple_wing_analysis(geometry: WingGeometry, alpha_deg_list: list[float], m
     results = []
 
     # Wing parameters
-    S = geometry.span_m * (geometry.chord_root_m + geometry.chord_tip_m) / 2  # Wing area
+    S = (
+        geometry.span_m * (geometry.chord_root_m + geometry.chord_tip_m) / 2
+    )  # Wing area
     AR = geometry.span_m**2 / S  # Aspect ratio
-    taper_ratio = geometry.chord_tip_m / geometry.chord_root_m
+    geometry.chord_tip_m / geometry.chord_root_m
 
     # Get airfoil properties (assume root airfoil for simplicity)
-    airfoil_data = AIRFOIL_DATABASE.get(geometry.airfoil_root, AIRFOIL_DATABASE["NACA2412"])
+    airfoil_data = AIRFOIL_DATABASE.get(
+        geometry.airfoil_root, AIRFOIL_DATABASE["NACA2412"]
+    )
 
     # Prandtl lifting line corrections
     e = 0.85  # Oswald efficiency (typical for clean wing)
@@ -144,39 +167,44 @@ def _simple_wing_analysis(geometry: WingGeometry, alpha_deg_list: list[float], m
 
         # Apply stall model
         if abs(alpha_deg) > airfoil_data["alpha_stall_deg"]:
-            stall_factor = 1.0 - 0.1 * (abs(alpha_deg) - airfoil_data["alpha_stall_deg"])
+            stall_factor = 1.0 - 0.1 * (
+                abs(alpha_deg) - airfoil_data["alpha_stall_deg"]
+            )
             stall_factor = max(0.3, stall_factor)
             CL *= stall_factor
-            CD *= (1.5 + 0.1 * (abs(alpha_deg) - airfoil_data["alpha_stall_deg"]))
+            CD *= 1.5 + 0.1 * (abs(alpha_deg) - airfoil_data["alpha_stall_deg"])
 
         L_D = CL / CD if CD > 0.001 else 0.0
 
-        results.append(WingAnalysisPoint(
-            alpha_deg=alpha_deg,
-            CL=CL,
-            CD=CD,
-            CM=CM,
-            L_D_ratio=L_D,
-            span_efficiency=e
-        ))
+        results.append(
+            WingAnalysisPoint(
+                alpha_deg=alpha_deg,
+                CL=CL,
+                CD=CD,
+                CM=CM,
+                L_D_ratio=L_D,
+                span_efficiency=e,
+            )
+        )
 
     return results
+
 
 def wing_vlm_analysis(
     geometry: WingGeometry,
     alpha_deg_list: list[float],
     mach: float = 0.2,
-    reynolds: float | None = None
+    reynolds: float | None = None,
 ) -> list[WingAnalysisPoint]:
     """
     Vortex Lattice Method wing analysis.
-    
+
     Args:
         geometry: Wing planform geometry
         alpha_deg_list: List of angles of attack to analyze (degrees)
         mach: Mach number
         reynolds: Reynolds number (optional, used for airfoil data if available)
-    
+
     Returns:
         List of WingAnalysisPoint objects with CL, CD, CM data
     """
@@ -191,8 +219,13 @@ def wing_vlm_analysis(
     # Use simple lifting line approximation
     return _simple_wing_analysis(geometry, alpha_deg_list, mach)
 
-def _aerosandbox_wing_analysis(geometry: WingGeometry, alpha_deg_list: list[float],
-                              mach: float, reynolds: float | None) -> list[WingAnalysisPoint]:
+
+def _aerosandbox_wing_analysis(
+    geometry: WingGeometry,
+    alpha_deg_list: list[float],
+    mach: float,
+    reynolds: float | None,
+) -> list[WingAnalysisPoint]:
     """AeroSandbox-based VLM analysis."""
     # Create wing geometry
     wing = asb.Wing(
@@ -201,24 +234,23 @@ def _aerosandbox_wing_analysis(geometry: WingGeometry, alpha_deg_list: list[floa
             asb.WingXSec(
                 xyz_le=[0, 0, 0],
                 chord=geometry.chord_root_m,
-                airfoil=asb.Airfoil(geometry.airfoil_root)
+                airfoil=asb.Airfoil(geometry.airfoil_root),
             ),
             asb.WingXSec(
-                xyz_le=[geometry.span_m/2 * math.tan(math.radians(geometry.sweep_deg)),
-                        geometry.span_m/2,
-                        geometry.span_m/2 * math.tan(math.radians(geometry.dihedral_deg))],
+                xyz_le=[
+                    geometry.span_m / 2 * math.tan(math.radians(geometry.sweep_deg)),
+                    geometry.span_m / 2,
+                    geometry.span_m / 2 * math.tan(math.radians(geometry.dihedral_deg)),
+                ],
                 chord=geometry.chord_tip_m,
                 airfoil=asb.Airfoil(geometry.airfoil_tip),
-                twist=math.radians(geometry.twist_deg)
-            )
-        ]
+                twist=math.radians(geometry.twist_deg),
+            ),
+        ],
     )
 
     # Create airplane
-    airplane = asb.Airplane(
-        name="TestAirplane",
-        wings=[wing]
-    )
+    airplane = asb.Airplane(name="TestAirplane", wings=[wing])
 
     results = []
 
@@ -227,7 +259,7 @@ def _aerosandbox_wing_analysis(geometry: WingGeometry, alpha_deg_list: list[floa
         op_point = asb.OperatingPoint(
             atmosphere=asb.Atmosphere(altitude=0),
             velocity=50.0,  # Arbitrary velocity
-            alpha=math.radians(alpha_deg)
+            alpha=math.radians(alpha_deg),
         )
 
         # Run VLM analysis
@@ -235,7 +267,7 @@ def _aerosandbox_wing_analysis(geometry: WingGeometry, alpha_deg_list: list[floa
             airplane=airplane,
             op_point=op_point,
             chordwise_panels=10,
-            spanwise_panels=20
+            spanwise_panels=20,
         )
 
         vlm_result = vlm.run()
@@ -247,37 +279,42 @@ def _aerosandbox_wing_analysis(geometry: WingGeometry, alpha_deg_list: list[floa
 
         L_D = CL / CD if CD > 0.001 else 0.0
 
-        results.append(WingAnalysisPoint(
-            alpha_deg=alpha_deg,
-            CL=float(CL),
-            CD=float(CD),
-            CM=float(CM),
-            L_D_ratio=L_D
-        ))
+        results.append(
+            WingAnalysisPoint(
+                alpha_deg=alpha_deg,
+                CL=float(CL),
+                CD=float(CD),
+                CM=float(CM),
+                L_D_ratio=L_D,
+            )
+        )
 
     return results
+
 
 def airfoil_polar_analysis(
     airfoil_name: str,
     alpha_deg_list: list[float],
     reynolds: float = 1e6,
-    mach: float = 0.1
+    mach: float = 0.1,
 ) -> list[AirfoilPoint]:
     """
     Generate airfoil polar data.
-    
+
     Args:
         airfoil_name: Airfoil designation (e.g., "NACA2412")
         alpha_deg_list: Angles of attack to analyze
         reynolds: Reynolds number
         mach: Mach number
-        
+
     Returns:
         List of AirfoilPoint objects with cl, cd, cm data
     """
     if AEROSANDBOX_AVAILABLE:
         try:
-            return _aerosandbox_airfoil_polar(airfoil_name, alpha_deg_list, reynolds, mach)
+            return _aerosandbox_airfoil_polar(
+                airfoil_name, alpha_deg_list, reynolds, mach
+            )
         except Exception:
             # Fall back to database method
             pass
@@ -285,8 +322,10 @@ def airfoil_polar_analysis(
     # Use simplified database method
     return _database_airfoil_polar(airfoil_name, alpha_deg_list, reynolds, mach)
 
-def _database_airfoil_polar(airfoil_name: str, alpha_deg_list: list[float],
-                           reynolds: float, mach: float) -> list[AirfoilPoint]:
+
+def _database_airfoil_polar(
+    airfoil_name: str, alpha_deg_list: list[float], reynolds: float, mach: float
+) -> list[AirfoilPoint]:
     """Generate airfoil polar from database coefficients."""
     # Get airfoil data from database
     airfoil_data = AIRFOIL_DATABASE.get(airfoil_name, AIRFOIL_DATABASE["NACA2412"])
@@ -307,7 +346,9 @@ def _database_airfoil_polar(airfoil_name: str, alpha_deg_list: list[float],
 
         # Apply stall model
         if abs(alpha_deg) > airfoil_data["alpha_stall_deg"]:
-            stall_factor = 1.0 - 0.15 * (abs(alpha_deg) - airfoil_data["alpha_stall_deg"])
+            stall_factor = 1.0 - 0.15 * (
+                abs(alpha_deg) - airfoil_data["alpha_stall_deg"]
+            )
             stall_factor = max(0.2, stall_factor)
             cl *= stall_factor
 
@@ -318,7 +359,7 @@ def _database_airfoil_polar(airfoil_name: str, alpha_deg_list: list[float],
 
         # Mach corrections for drag
         if mach > 0.3:
-            cd0 *= (1 + 0.2 * (mach - 0.3)**2)
+            cd0 *= 1 + 0.2 * (mach - 0.3) ** 2
 
         cd = cd0 + 0.01 * cl**2  # Simplified induced drag approximation
 
@@ -328,18 +369,16 @@ def _database_airfoil_polar(airfoil_name: str, alpha_deg_list: list[float],
         # L/D ratio
         cl_cd = cl / cd if cd > 0.001 else 0.0
 
-        results.append(AirfoilPoint(
-            alpha_deg=alpha_deg,
-            cl=cl,
-            cd=cd,
-            cm=cm,
-            cl_cd_ratio=cl_cd
-        ))
+        results.append(
+            AirfoilPoint(alpha_deg=alpha_deg, cl=cl, cd=cd, cm=cm, cl_cd_ratio=cl_cd)
+        )
 
     return results
 
-def _aerosandbox_airfoil_polar(airfoil_name: str, alpha_deg_list: list[float],
-                              reynolds: float, mach: float) -> list[AirfoilPoint]:
+
+def _aerosandbox_airfoil_polar(
+    airfoil_name: str, alpha_deg_list: list[float], reynolds: float, mach: float
+) -> list[AirfoilPoint]:
     """Generate airfoil polar using AeroSandbox XFoil integration."""
     try:
         # Create airfoil
@@ -351,26 +390,28 @@ def _aerosandbox_airfoil_polar(airfoil_name: str, alpha_deg_list: list[float],
             try:
                 # Run XFoil analysis
                 result = airfoil.get_aero_from_neuralfoil(
-                    alpha=alpha_deg,
-                    Re=reynolds,
-                    mach=mach
+                    alpha=alpha_deg, Re=reynolds, mach=mach
                 )
 
                 cl = result["CL"]
                 cd = result["CD"]
                 cm = result.get("CM", 0.0)
 
-                results.append(AirfoilPoint(
-                    alpha_deg=alpha_deg,
-                    cl=float(cl),
-                    cd=float(cd),
-                    cm=float(cm),
-                    cl_cd_ratio=float(cl/cd) if cd > 0.001 else 0.0
-                ))
+                results.append(
+                    AirfoilPoint(
+                        alpha_deg=alpha_deg,
+                        cl=float(cl),
+                        cd=float(cd),
+                        cm=float(cm),
+                        cl_cd_ratio=float(cl / cd) if cd > 0.001 else 0.0,
+                    )
+                )
 
             except Exception:
                 # Fall back to database for this point
-                db_result = _database_airfoil_polar(airfoil_name, [alpha_deg], reynolds, mach)
+                db_result = _database_airfoil_polar(
+                    airfoil_name, [alpha_deg], reynolds, mach
+                )
                 if db_result:
                     results.extend(db_result)
 
@@ -380,19 +421,18 @@ def _aerosandbox_airfoil_polar(airfoil_name: str, alpha_deg_list: list[float],
         # Fall back to database method
         return _database_airfoil_polar(airfoil_name, alpha_deg_list, reynolds, mach)
 
+
 def calculate_stability_derivatives(
-    geometry: WingGeometry,
-    alpha_deg: float = 2.0,
-    mach: float = 0.2
+    geometry: WingGeometry, alpha_deg: float = 2.0, mach: float = 0.2
 ) -> StabilityDerivatives:
     """
     Calculate basic longitudinal stability derivatives.
-    
+
     Args:
         geometry: Wing geometry
         alpha_deg: Reference angle of attack
         mach: Mach number
-        
+
     Returns:
         StabilityDerivatives object
     """
@@ -401,7 +441,9 @@ def calculate_stability_derivatives(
     AR = geometry.span_m**2 / S
 
     # Get airfoil data
-    airfoil_data = AIRFOIL_DATABASE.get(geometry.airfoil_root, AIRFOIL_DATABASE["NACA2412"])
+    airfoil_data = AIRFOIL_DATABASE.get(
+        geometry.airfoil_root, AIRFOIL_DATABASE["NACA2412"]
+    )
 
     # 3D lift curve slope
     e = 0.85  # Oswald efficiency
@@ -417,20 +459,22 @@ def calculate_stability_derivatives(
         CL_alpha=CL_alpha,
         CM_alpha=CM_alpha,
         CL_alpha_dot=None,  # Would need unsteady analysis
-        CM_alpha_dot=None
+        CM_alpha_dot=None,
     )
+
 
 def get_airfoil_database() -> dict[str, dict[str, float]]:
     """Get available airfoil database."""
     return AIRFOIL_DATABASE.copy()
 
+
 def estimate_wing_area(geometry: WingGeometry) -> dict[str, float]:
     """
     Calculate wing geometric properties.
-    
+
     Args:
         geometry: Wing planform geometry
-        
+
     Returns:
         Dictionary with wing area, aspect ratio, etc.
     """
@@ -444,11 +488,16 @@ def estimate_wing_area(geometry: WingGeometry) -> dict[str, float]:
     taper_ratio = geometry.chord_tip_m / geometry.chord_root_m
 
     # Mean aerodynamic chord
-    MAC = (2/3) * geometry.chord_root_m * (1 + taper_ratio + taper_ratio**2) / (1 + taper_ratio)
+    MAC = (
+        (2 / 3)
+        * geometry.chord_root_m
+        * (1 + taper_ratio + taper_ratio**2)
+        / (1 + taper_ratio)
+    )
 
     # Sweep of mean aerodynamic chord (approximate)
     sweep_MAC_deg = geometry.sweep_deg - math.degrees(
-        math.atan(4/AR * (0.25) * (1 - taper_ratio) / (1 + taper_ratio))
+        math.atan(4 / AR * (0.25) * (1 - taper_ratio) / (1 + taper_ratio))
     )
 
     return {
@@ -457,5 +506,5 @@ def estimate_wing_area(geometry: WingGeometry) -> dict[str, float]:
         "taper_ratio": taper_ratio,
         "mean_aerodynamic_chord_m": MAC,
         "sweep_MAC_deg": sweep_MAC_deg,
-        "span_m": geometry.span_m
+        "span_m": geometry.span_m,
     }

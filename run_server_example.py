@@ -25,4 +25,5 @@ sys.path.insert(0, project_root)
 if __name__ == "__main__":
     # Import and run the server
     from aerospace_mcp.server import run
+
     run()

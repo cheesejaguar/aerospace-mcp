@@ -8,7 +8,7 @@ when optional dependencies are not available.
 Available domains:
 - atmosphere: ISA/COESA atmosphere models and wind profiles
 - frames: Coordinate frame transformations (ECI/ECEF/ITRF)
-- aero: Aircraft aerodynamics (VLM, airfoils, polars)  
+- aero: Aircraft aerodynamics (VLM, airfoils, polars)
 - propellers: Propeller analysis and UAV energy estimation
 - rockets: Rocket performance, trajectories, and optimization
 - orbits: Orbital mechanics, transfers, and propagation
@@ -33,18 +33,21 @@ AVAILABILITY_FLAGS: dict[str, bool] = {
 # Library version tracking
 LIBRARY_VERSIONS: dict[str, str | None] = {}
 
+
 def get_domain_status() -> dict[str, dict[str, any]]:
     """Get availability status and versions for all domains."""
     return {
         domain: {
             "available": available,
             "libraries": {
-                lib: ver for lib, ver in LIBRARY_VERSIONS.items()
+                lib: ver
+                for lib, ver in LIBRARY_VERSIONS.items()
                 if lib.startswith(domain)
-            }
+            },
         }
         for domain, available in AVAILABILITY_FLAGS.items()
     }
+
 
 def update_availability(domain: str, available: bool, libraries: dict[str, str] = None):
     """Update availability status for a domain."""
@@ -52,6 +55,7 @@ def update_availability(domain: str, available: bool, libraries: dict[str, str] 
     if libraries:
         for lib, version in libraries.items():
             LIBRARY_VERSIONS[f"{domain}_{lib}"] = version
+
 
 # Domain-specific imports (lazy loaded)
 __all__ = [

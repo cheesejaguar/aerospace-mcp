@@ -7,7 +7,6 @@ Tests the rockets.py module functionality including:
 - Rocket sizing estimation
 """
 
-
 import pytest
 
 from aerospace_mcp.integrations.rockets import (
@@ -29,7 +28,7 @@ class TestRocketGeometry:
             propellant_mass_kg=30.0,
             diameter_m=0.1,
             length_m=1.0,
-            cd=0.3
+            cd=0.3,
         )
 
         assert geometry.dry_mass_kg == 10.0
@@ -47,7 +46,7 @@ class TestRocketGeometry:
             propellant_mass_kg=45.0,
             diameter_m=0.15,
             length_m=1.5,
-            thrust_curve=thrust_curve
+            thrust_curve=thrust_curve,
         )
 
         assert geometry.thrust_curve == thrust_curve
@@ -70,8 +69,12 @@ class TestThrustCurve:
         thrust_curve = [[0.0, 1000.0], [10.0, 500.0], [15.0, 0.0]]
 
         # Test interpolation at midpoints
-        assert get_thrust_at_time(thrust_curve, 5.0) == 750.0  # Midpoint between 1000 and 500
-        assert get_thrust_at_time(thrust_curve, 12.5) == 250.0  # Midpoint between 500 and 0
+        assert (
+            get_thrust_at_time(thrust_curve, 5.0) == 750.0
+        )  # Midpoint between 1000 and 500
+        assert (
+            get_thrust_at_time(thrust_curve, 12.5) == 250.0
+        )  # Midpoint between 500 and 0
 
         # Test boundary conditions
         assert get_thrust_at_time(thrust_curve, 0.0) == 1000.0
@@ -96,14 +99,16 @@ class TestRocketTrajectory:
             diameter_m=0.2,
             length_m=2.0,
             cd=0.4,
-            thrust_curve=thrust_curve
+            thrust_curve=thrust_curve,
         )
 
     def test_vertical_launch_basic(self):
         """Test basic vertical launch trajectory."""
         geometry = self.create_test_rocket()
 
-        trajectory = rocket_3dof_trajectory(geometry, dt_s=0.1, max_time_s=100.0, launch_angle_deg=90.0)
+        trajectory = rocket_3dof_trajectory(
+            geometry, dt_s=0.1, max_time_s=100.0, launch_angle_deg=90.0
+        )
 
         # Basic sanity checks
         assert len(trajectory) > 0
@@ -126,7 +131,9 @@ class TestRocketTrajectory:
         """Test angled launch trajectory."""
         geometry = self.create_test_rocket()
 
-        trajectory = rocket_3dof_trajectory(geometry, dt_s=0.1, max_time_s=100.0, launch_angle_deg=85.0)
+        trajectory = rocket_3dof_trajectory(
+            geometry, dt_s=0.1, max_time_s=100.0, launch_angle_deg=85.0
+        )
 
         assert len(trajectory) > 0
 
@@ -147,12 +154,17 @@ class TestRocketTrajectory:
         if burnout_point:
             assert burnout_point.mass_kg < initial_mass
             # Mass should be approximately dry mass at burnout (allow some margin)
-            assert abs(burnout_point.mass_kg - geometry.dry_mass_kg) < geometry.propellant_mass_kg * 0.2  # Within 20% of propellant mass
+            assert (
+                abs(burnout_point.mass_kg - geometry.dry_mass_kg)
+                < geometry.propellant_mass_kg * 0.2
+            )  # Within 20% of propellant mass
 
         # Check that drag increases with velocity
         high_velocity_points = [p for p in trajectory if p.velocity_ms > 100]
         if high_velocity_points:
-            avg_drag = sum(p.drag_n for p in high_velocity_points) / len(high_velocity_points)
+            avg_drag = sum(p.drag_n for p in high_velocity_points) / len(
+                high_velocity_points
+            )
             assert avg_drag > 0
 
     def test_performance_analysis(self):
@@ -189,8 +201,8 @@ class TestRocketSizing:
         """Test sizing for small rocket mission."""
         sizing = estimate_rocket_sizing(
             target_altitude_m=5000.0,  # 5 km target
-            payload_mass_kg=2.0,       # 2 kg payload
-            propellant_type="solid"
+            payload_mass_kg=2.0,  # 2 kg payload
+            propellant_type="solid",
         )
 
         # Should be feasible
@@ -231,23 +243,27 @@ class TestRocketSizing:
         """Test sizing for impossible single-stage mission."""
         sizing = estimate_rocket_sizing(
             target_altitude_m=100000.0,  # 100 km - very challenging
-            payload_mass_kg=1000.0,      # 1000 kg payload - heavy
-            propellant_type="solid"
+            payload_mass_kg=1000.0,  # 1000 kg payload - heavy
+            propellant_type="solid",
         )
 
         # Should be infeasible for single stage - but our simplified model might not catch this
         # Just check that if feasible, the mass ratio is very high
         if sizing["feasible"]:
-            assert sizing["mass_ratio"] > 10.0  # Very high mass ratio indicates difficulty
+            assert (
+                sizing["mass_ratio"] > 10.0
+            )  # Very high mass ratio indicates difficulty
 
     def test_sizing_parameter_relationships(self):
         """Test relationships between sizing parameters."""
         sizing = estimate_rocket_sizing(15000.0, 10.0, "liquid")
 
         # Mass breakdown should sum correctly
-        total_calculated = (sizing["propellant_mass_kg"] +
-                          sizing["structure_mass_kg"] +
-                          sizing["payload_mass_kg"])
+        total_calculated = (
+            sizing["propellant_mass_kg"]
+            + sizing["structure_mass_kg"]
+            + sizing["payload_mass_kg"]
+        )
         assert abs(total_calculated - sizing["total_mass_kg"]) < 0.1
 
         # Thrust-to-weight should be reasonable
@@ -256,7 +272,7 @@ class TestRocketSizing:
 
         # Geometry should be reasonable
         ld_ratio = sizing["length_m"] / sizing["diameter_m"]
-        assert ld_ratio > 5.0   # Should be reasonably slender
+        assert ld_ratio > 5.0  # Should be reasonably slender
         assert ld_ratio < 20.0  # But not too extreme
 
 
@@ -266,21 +282,25 @@ class TestRocketIntegration:
     def test_sizing_to_trajectory_consistency(self):
         """Test that sized rocket performs close to target."""
         target_altitude = 8000.0  # 8 km
-        payload_mass = 3.0        # 3 kg
+        payload_mass = 3.0  # 3 kg
 
         # Get sizing estimate
         sizing = estimate_rocket_sizing(target_altitude, payload_mass, "solid")
         assert sizing["feasible"]
 
         # Create rocket geometry from sizing
-        thrust_curve = [[0.0, sizing["thrust_n"]], [10.0, sizing["thrust_n"]], [10.1, 0.0]]
+        thrust_curve = [
+            [0.0, sizing["thrust_n"]],
+            [10.0, sizing["thrust_n"]],
+            [10.1, 0.0],
+        ]
         geometry = RocketGeometry(
             dry_mass_kg=sizing["structure_mass_kg"] + payload_mass,
             propellant_mass_kg=sizing["propellant_mass_kg"],
             diameter_m=sizing["diameter_m"],
             length_m=sizing["length_m"],
             cd=0.3,
-            thrust_curve=thrust_curve
+            thrust_curve=thrust_curve,
         )
 
         # Run trajectory simulation
@@ -288,7 +308,9 @@ class TestRocketIntegration:
         performance = analyze_rocket_performance(trajectory)
 
         # Performance should be in the ballpark of target
-        altitude_error = abs(performance.max_altitude_m - target_altitude) / target_altitude
+        altitude_error = (
+            abs(performance.max_altitude_m - target_altitude) / target_altitude
+        )
         assert altitude_error < 0.5  # Within 50% - rough sizing estimate
 
         # Should achieve reasonable performance
@@ -303,7 +325,7 @@ class TestRocketIntegration:
             diameter_m=0.15,
             length_m=1.8,
             cd=0.35,
-            thrust_curve=[[0.0, 1500.0], [12.0, 1500.0], [12.1, 0.0]]
+            thrust_curve=[[0.0, 1500.0], [12.0, 1500.0], [12.1, 0.0]],
         )
 
         angles = [90.0, 85.0, 80.0]
@@ -331,7 +353,7 @@ class TestRocketEdgeCases:
             propellant_mass_kg=20.0,
             diameter_m=0.1,
             length_m=1.0,
-            thrust_curve=[]  # No thrust
+            thrust_curve=[],  # No thrust
         )
 
         trajectory = rocket_3dof_trajectory(geometry, max_time_s=10.0)
@@ -348,7 +370,7 @@ class TestRocketEdgeCases:
             propellant_mass_kg=2000.0,
             diameter_m=0.5,
             length_m=3.0,
-            thrust_curve=[[0.0, 1000.0], [5.0, 0.0]]  # Low thrust for heavy rocket
+            thrust_curve=[[0.0, 1000.0], [5.0, 0.0]],  # Low thrust for heavy rocket
         )
 
         trajectory = rocket_3dof_trajectory(geometry, max_time_s=20.0)
@@ -364,7 +386,7 @@ class TestRocketEdgeCases:
             propellant_mass_kg=15.0,
             diameter_m=0.08,
             length_m=0.8,
-            thrust_curve=[[0.0, 800.0], [3.0, 0.0]]
+            thrust_curve=[[0.0, 800.0], [3.0, 0.0]],
         )
 
         trajectory = rocket_3dof_trajectory(geometry, max_time_s=1.0, dt_s=0.1)

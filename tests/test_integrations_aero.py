@@ -30,7 +30,7 @@ class TestWingGeometry:
             dihedral_deg=2.0,
             twist_deg=-2.0,
             airfoil_root="NACA2412",
-            airfoil_tip="NACA2412"
+            airfoil_tip="NACA2412",
         )
 
         assert geometry.span_m == 10.0
@@ -44,11 +44,7 @@ class TestWingGeometry:
 
     def test_wing_area_calculation(self):
         """Test wing geometric property calculations."""
-        geometry = WingGeometry(
-            span_m=10.0,
-            chord_root_m=2.0,
-            chord_tip_m=1.0
-        )
+        geometry = WingGeometry(span_m=10.0, chord_root_m=2.0, chord_tip_m=1.0)
 
         props = estimate_wing_area(geometry)
 
@@ -74,10 +70,7 @@ class TestWingAnalysis:
     def test_simple_wing_analysis(self):
         """Test basic wing analysis functionality."""
         geometry = WingGeometry(
-            span_m=8.0,
-            chord_root_m=1.2,
-            chord_tip_m=0.8,
-            airfoil_root="NACA2412"
+            span_m=8.0, chord_root_m=1.2, chord_tip_m=0.8, airfoil_root="NACA2412"
         )
 
         alpha_list = [0, 2, 4, 6, 8]
@@ -88,23 +81,20 @@ class TestWingAnalysis:
         # Check that lift increases with angle of attack (up to a point)
         for i in range(len(results) - 1):
             if results[i].alpha_deg < 10:  # Before stall
-                assert results[i+1].CL >= results[i].CL
+                assert results[i + 1].CL >= results[i].CL
 
         # Check reasonable values
         for result in results:
             assert -2.0 < result.CL < 2.0  # Reasonable lift coefficient range
             assert 0.005 < result.CD < 0.5  # Reasonable drag coefficient range
-            assert -0.5 < result.CM < 0.5   # Reasonable moment coefficient range
+            assert -0.5 < result.CM < 0.5  # Reasonable moment coefficient range
             if result.CD > 0.01:
                 assert result.L_D_ratio >= 0  # L/D should be non-negative
 
     def test_wing_analysis_stall_behavior(self):
         """Test wing stall behavior."""
         geometry = WingGeometry(
-            span_m=6.0,
-            chord_root_m=1.0,
-            chord_tip_m=1.0,
-            airfoil_root="NACA0012"
+            span_m=6.0, chord_root_m=1.0, chord_tip_m=1.0, airfoil_root="NACA0012"
         )
 
         # Test including high angles of attack
@@ -125,11 +115,7 @@ class TestWingAnalysis:
 
     def test_wing_analysis_mach_effects(self):
         """Test Mach number effects on wing analysis."""
-        geometry = WingGeometry(
-            span_m=5.0,
-            chord_root_m=1.5,
-            chord_tip_m=1.0
-        )
+        geometry = WingGeometry(span_m=5.0, chord_root_m=1.5, chord_tip_m=1.0)
 
         alpha_list = [2, 4, 6]
 
@@ -146,17 +132,11 @@ class TestWingAnalysis:
     def test_different_airfoils(self):
         """Test wing analysis with different airfoil selections."""
         geometry_symmetric = WingGeometry(
-            span_m=6.0,
-            chord_root_m=1.0,
-            chord_tip_m=1.0,
-            airfoil_root="NACA0012"
+            span_m=6.0, chord_root_m=1.0, chord_tip_m=1.0, airfoil_root="NACA0012"
         )
 
         geometry_cambered = WingGeometry(
-            span_m=6.0,
-            chord_root_m=1.0,
-            chord_tip_m=1.0,
-            airfoil_root="NACA4412"
+            span_m=6.0, chord_root_m=1.0, chord_tip_m=1.0, airfoil_root="NACA4412"
         )
 
         alpha_list = [0, 4]
@@ -186,7 +166,7 @@ class TestAirfoilAnalysis:
         assert "NACA2412" in database
 
         # Check data structure
-        for airfoil_name, data in database.items():
+        for _airfoil_name, data in database.items():
             assert "cl_alpha" in data
             assert "cd0" in data
             assert "cl_max" in data
@@ -194,8 +174,8 @@ class TestAirfoilAnalysis:
 
             # Check reasonable values
             assert 5.0 < data["cl_alpha"] < 8.0  # Typical 2D lift curve slope
-            assert 0.004 < data["cd0"] < 0.02    # Typical profile drag
-            assert 1.0 < data["cl_max"] < 2.5    # Typical maximum lift
+            assert 0.004 < data["cd0"] < 0.02  # Typical profile drag
+            assert 1.0 < data["cl_max"] < 2.5  # Typical maximum lift
             assert 10.0 < data["alpha_stall_deg"] < 20.0  # Typical stall angle
 
     def test_airfoil_polar_generation(self):
@@ -210,7 +190,7 @@ class TestAirfoilAnalysis:
         for result in results:
             assert -2.0 < result.cl < 2.0  # Reasonable lift coefficient
             assert 0.004 < result.cd < 0.2  # Reasonable drag coefficient
-            assert -0.2 < result.cm < 0.1   # Reasonable moment coefficient
+            assert -0.2 < result.cm < 0.1  # Reasonable moment coefficient
 
             # L/D ratio should be reasonable
             if result.cd > 0.005:
@@ -220,8 +200,9 @@ class TestAirfoilAnalysis:
         linear_region = [r for r in results if -2 < r.alpha_deg < 8]
         if len(linear_region) >= 2:
             # Calculate approximate slope
-            cl_alpha_approx = (linear_region[-1].cl - linear_region[0].cl) / \
-                             (math.radians(linear_region[-1].alpha_deg - linear_region[0].alpha_deg))
+            cl_alpha_approx = (linear_region[-1].cl - linear_region[0].cl) / (
+                math.radians(linear_region[-1].alpha_deg - linear_region[0].alpha_deg)
+            )
             assert 4.0 < cl_alpha_approx < 8.0  # Typical 2D values
 
     def test_reynolds_effects(self):
@@ -278,10 +259,7 @@ class TestStabilityDerivatives:
     def test_basic_stability_calculation(self):
         """Test basic stability derivatives calculation."""
         geometry = WingGeometry(
-            span_m=8.0,
-            chord_root_m=1.0,
-            chord_tip_m=0.8,
-            airfoil_root="NACA2412"
+            span_m=8.0, chord_root_m=1.0, chord_tip_m=0.8, airfoil_root="NACA2412"
         )
 
         stability = calculate_stability_derivatives(geometry, alpha_deg=2.0, mach=0.2)
@@ -301,18 +279,12 @@ class TestStabilityDerivatives:
         """Test aspect ratio effects on stability derivatives."""
         # High aspect ratio wing
         geometry_high_ar = WingGeometry(
-            span_m=12.0,
-            chord_root_m=1.0,
-            chord_tip_m=1.0,
-            airfoil_root="NACA2412"
+            span_m=12.0, chord_root_m=1.0, chord_tip_m=1.0, airfoil_root="NACA2412"
         )
 
         # Low aspect ratio wing
         geometry_low_ar = WingGeometry(
-            span_m=4.0,
-            chord_root_m=2.0,
-            chord_tip_m=2.0,
-            airfoil_root="NACA2412"
+            span_m=4.0, chord_root_m=2.0, chord_tip_m=2.0, airfoil_root="NACA2412"
         )
 
         stability_high_ar = calculate_stability_derivatives(geometry_high_ar)
@@ -323,11 +295,7 @@ class TestStabilityDerivatives:
 
     def test_mach_effects_stability(self):
         """Test Mach number effects on stability derivatives."""
-        geometry = WingGeometry(
-            span_m=6.0,
-            chord_root_m=1.2,
-            chord_tip_m=1.0
-        )
+        geometry = WingGeometry(span_m=6.0, chord_root_m=1.2, chord_tip_m=1.0)
 
         stability_low_mach = calculate_stability_derivatives(geometry, mach=0.1)
         stability_high_mach = calculate_stability_derivatives(geometry, mach=0.5)
@@ -355,7 +323,7 @@ class TestIntegration:
             dihedral_deg=1.0,
             twist_deg=-1.0,
             airfoil_root="NACA2412",
-            airfoil_tip="NACA2412"
+            airfoil_tip="NACA2412",
         )
 
         # Calculate wing properties
@@ -370,7 +338,7 @@ class TestIntegration:
 
         # Verify reasonable results
         assert wing_props["wing_area_m2"] > 10.0  # Should be reasonable size
-        assert wing_props["aspect_ratio"] > 4.0   # Should be reasonable AR
+        assert wing_props["aspect_ratio"] > 4.0  # Should be reasonable AR
 
         assert len(aero_results) == len(alpha_range)
 
@@ -379,18 +347,14 @@ class TestIntegration:
         if cruise_points:
             cruise_point = cruise_points[0]
             assert cruise_point.L_D_ratio > 5.0  # Should have reasonable L/D
-            assert 0.4 < cruise_point.CL < 1.2   # Should be in reasonable range
+            assert 0.4 < cruise_point.CL < 1.2  # Should be in reasonable range
 
         assert stability.CL_alpha > 0  # Should have positive lift curve slope
 
     @pytest.mark.skipif(not AEROSANDBOX_AVAILABLE, reason="AeroSandbox not available")
     def test_aerosandbox_integration(self):
         """Test AeroSandbox integration if available."""
-        geometry = WingGeometry(
-            span_m=6.0,
-            chord_root_m=1.0,
-            chord_tip_m=1.0
-        )
+        geometry = WingGeometry(span_m=6.0, chord_root_m=1.0, chord_tip_m=1.0)
 
         results = wing_vlm_analysis(geometry, [0, 4, 8])
 
@@ -408,15 +372,11 @@ class TestIntegration:
             WingGeometry(
                 span_m=-1.0,  # Invalid negative span
                 chord_root_m=1.0,
-                chord_tip_m=1.0
+                chord_tip_m=1.0,
             )
 
         # Test empty alpha list
-        geometry = WingGeometry(
-            span_m=5.0,
-            chord_root_m=1.0,
-            chord_tip_m=1.0
-        )
+        geometry = WingGeometry(span_m=5.0, chord_root_m=1.0, chord_tip_m=1.0)
 
         # Should handle empty input gracefully
         results = wing_vlm_analysis(geometry, [], mach=0.2)
@@ -430,11 +390,7 @@ class TestIntegration:
         """Test that calculations complete in reasonable time."""
         import time
 
-        geometry = WingGeometry(
-            span_m=10.0,
-            chord_root_m=1.5,
-            chord_tip_m=1.0
-        )
+        geometry = WingGeometry(span_m=10.0, chord_root_m=1.5, chord_tip_m=1.0)
 
         start_time = time.time()
 

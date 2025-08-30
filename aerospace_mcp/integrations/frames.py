@@ -26,6 +26,7 @@ try:
     import astropy.units as u
     from astropy.coordinates import GCRS, ITRS, CartesianRepresentation
     from astropy.time import Time
+
     ASTROPY_AVAILABLE = True
     update_availability("frames", True, {"astropy": astropy.__version__})
 except ImportError:
@@ -35,6 +36,7 @@ try:
     import skyfield
     from skyfield.api import load, utc
     from skyfield.positionlib import position_of_radec
+
     SKYFIELD_AVAILABLE = True
     if not ASTROPY_AVAILABLE:  # Only set if astropy not available
         try:
@@ -47,22 +49,29 @@ except ImportError:
         # Frames module is still available with manual calculations
         update_availability("frames", True, {})
 
+
 # Data models
 class CoordinatePoint(BaseModel):
     """A point in 3D space with metadata."""
+
     x: float = Field(..., description="X coordinate (m)")
     y: float = Field(..., description="Y coordinate (m)")
     z: float = Field(..., description="Z coordinate (m)")
     frame: str = Field(..., description="Coordinate frame")
     epoch: str | None = Field(None, description="Epoch (ISO format)")
 
+
 class GeodeticPoint(BaseModel):
     """Geodetic coordinates."""
+
     latitude_deg: float = Field(..., description="Latitude in degrees")
     longitude_deg: float = Field(..., description="Longitude in degrees")
     altitude_m: float = Field(..., description="Height above ellipsoid (m)")
 
-def _manual_ecef_to_geodetic(x: float, y: float, z: float) -> tuple[float, float, float]:
+
+def _manual_ecef_to_geodetic(
+    x: float, y: float, z: float
+) -> tuple[float, float, float]:
     """
     Convert ECEF to geodetic coordinates using iterative method.
     Returns (lat_deg, lon_deg, alt_m).
@@ -89,7 +98,10 @@ def _manual_ecef_to_geodetic(x: float, y: float, z: float) -> tuple[float, float
 
     return math.degrees(lat_rad), math.degrees(lon_rad), alt
 
-def _manual_geodetic_to_ecef(lat_deg: float, lon_deg: float, alt_m: float) -> tuple[float, float, float]:
+
+def _manual_geodetic_to_ecef(
+    lat_deg: float, lon_deg: float, alt_m: float
+) -> tuple[float, float, float]:
     """
     Convert geodetic to ECEF coordinates.
     Returns (x, y, z) in meters.
@@ -111,6 +123,7 @@ def _manual_geodetic_to_ecef(lat_deg: float, lon_deg: float, alt_m: float) -> tu
 
     return x, y, z
 
+
 def _simple_precession_matrix(epoch1: str, epoch2: str) -> list[list[float]]:
     """
     Simple precession matrix for ECI frame transformations.
@@ -118,30 +131,26 @@ def _simple_precession_matrix(epoch1: str, epoch2: str) -> list[list[float]]:
     """
     # Parse epochs (assume they're close to J2000)
     # This is a placeholder - real implementation would use proper precession theory
-    dt_years = 0.0  # Simplified assumption
 
     # Identity matrix for now - would implement IAU precession in real version
-    return [
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0]
-    ]
+    return [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+
 
 def transform_frames(
     xyz: list[float],
     from_frame: str,
     to_frame: str,
-    epoch_iso: str = "2000-01-01T12:00:00"
+    epoch_iso: str = "2000-01-01T12:00:00",
 ) -> CoordinatePoint:
     """
     Transform coordinates between reference frames.
-    
+
     Args:
         xyz: [x, y, z] coordinates in meters
         from_frame: Source frame ("ECEF", "ECI", "ITRF", "GCRS")
         to_frame: Target frame ("ECEF", "ECI", "ITRF", "GCRS")
         epoch_iso: Reference epoch in ISO format
-        
+
     Returns:
         CoordinatePoint with transformed coordinates
     """
@@ -157,17 +166,13 @@ def transform_frames(
 
     # Same frame - no transformation needed
     if from_frame == to_frame:
-        return CoordinatePoint(
-            x=x, y=y, z=z,
-            frame=to_frame,
-            epoch=epoch_iso
-        )
+        return CoordinatePoint(x=x, y=y, z=z, frame=to_frame, epoch=epoch_iso)
 
     # Use high-precision libraries if available
     if ASTROPY_AVAILABLE:
         try:
             # Parse epoch
-            time = Time(epoch_iso, format='isot')
+            time = Time(epoch_iso, format="isot")
 
             # Map frame names to astropy
             frame_map = {
@@ -180,10 +185,8 @@ def transform_frames(
             if from_frame in frame_map and to_frame in frame_map:
                 # Create coordinate object
                 coords_from = frame_map[from_frame](
-                    CartesianRepresentation(
-                        x=x * u.m, y=y * u.m, z=z * u.m
-                    ),
-                    obstime=time
+                    CartesianRepresentation(x=x * u.m, y=y * u.m, z=z * u.m),
+                    obstime=time,
                 )
 
                 # Transform
@@ -194,7 +197,7 @@ def transform_frames(
                     y=float(coords_to.cartesian.y.to(u.m).value),
                     z=float(coords_to.cartesian.z.to(u.m).value),
                     frame=to_frame,
-                    epoch=epoch_iso
+                    epoch=epoch_iso,
                 )
         except Exception:
             # Fall back to manual methods
@@ -203,65 +206,49 @@ def transform_frames(
     # Manual transformations for basic cases
     if from_frame == "ECEF" and to_frame == "GEODETIC":
         lat, lon, alt = _manual_ecef_to_geodetic(x, y, z)
-        return CoordinatePoint(
-            x=lat, y=lon, z=alt,
-            frame="GEODETIC",
-            epoch=epoch_iso
-        )
+        return CoordinatePoint(x=lat, y=lon, z=alt, frame="GEODETIC", epoch=epoch_iso)
     elif from_frame == "GEODETIC" and to_frame == "ECEF":
         x_new, y_new, z_new = _manual_geodetic_to_ecef(x, y, z)
-        return CoordinatePoint(
-            x=x_new, y=y_new, z=z_new,
-            frame="ECEF",
-            epoch=epoch_iso
-        )
-    elif (from_frame in ["ECI", "GCRS"] and to_frame in ["ECEF", "ITRF"]) or \
-         (from_frame in ["ECEF", "ITRF"] and to_frame in ["ECI", "GCRS"]):
-
+        return CoordinatePoint(x=x_new, y=y_new, z=z_new, frame="ECEF", epoch=epoch_iso)
+    elif (from_frame in ["ECI", "GCRS"] and to_frame in ["ECEF", "ITRF"]) or (
+        from_frame in ["ECEF", "ITRF"] and to_frame in ["ECI", "GCRS"]
+    ):
         # Simple approximation: ECI ≈ ECEF (ignoring Earth rotation)
         # In real implementation, would apply rotation matrix based on GMST
-        return CoordinatePoint(
-            x=x, y=y, z=z,
-            frame=to_frame,
-            epoch=epoch_iso
-        )
+        return CoordinatePoint(x=x, y=y, z=z, frame=to_frame, epoch=epoch_iso)
 
     raise NotImplementedError(
         f"Transformation from {from_frame} to {to_frame} not implemented. "
         f"Install astropy or skyfield for full functionality."
     )
 
+
 def ecef_to_geodetic(x: float, y: float, z: float) -> GeodeticPoint:
     """
     Convert ECEF coordinates to geodetic (WGS84).
-    
+
     Args:
         x, y, z: ECEF coordinates in meters
-        
+
     Returns:
         GeodeticPoint with latitude, longitude, altitude
     """
     lat, lon, alt = _manual_ecef_to_geodetic(x, y, z)
 
-    return GeodeticPoint(
-        latitude_deg=lat,
-        longitude_deg=lon,
-        altitude_m=alt
-    )
+    return GeodeticPoint(latitude_deg=lat, longitude_deg=lon, altitude_m=alt)
+
 
 def geodetic_to_ecef(
-    latitude_deg: float,
-    longitude_deg: float,
-    altitude_m: float
+    latitude_deg: float, longitude_deg: float, altitude_m: float
 ) -> CoordinatePoint:
     """
     Convert geodetic coordinates to ECEF.
-    
+
     Args:
         latitude_deg: Latitude in degrees (-90 to +90)
         longitude_deg: Longitude in degrees (-180 to +180)
         altitude_m: Height above WGS84 ellipsoid in meters
-        
+
     Returns:
         CoordinatePoint with ECEF coordinates
     """
@@ -272,15 +259,13 @@ def geodetic_to_ecef(
 
     x, y, z = _manual_geodetic_to_ecef(latitude_deg, longitude_deg, altitude_m)
 
-    return CoordinatePoint(
-        x=x, y=y, z=z,
-        frame="ECEF"
-    )
+    return CoordinatePoint(x=x, y=y, z=z, frame="ECEF")
+
 
 def get_frame_info() -> dict[str, any]:
     """
     Get information about available coordinate frames and capabilities.
-    
+
     Returns:
         Dictionary with frame information and library status
     """
@@ -291,13 +276,10 @@ def get_frame_info() -> dict[str, any]:
             "astropy": ASTROPY_AVAILABLE,
             "skyfield": SKYFIELD_AVAILABLE,
         },
-        "manual_transforms": [
-            "ECEF <-> GEODETIC",
-            "ECI <-> ECEF (approximate)"
-        ],
+        "manual_transforms": ["ECEF <-> GEODETIC", "ECI <-> ECEF (approximate)"],
         "notes": [
             "High-precision transformations require astropy",
             "Manual transforms use simplified models",
-            "ECI/ECEF transforms ignore Earth rotation (approximate)"
-        ]
+            "ECI/ECEF transforms ignore Earth rotation (approximate)",
+        ],
     }

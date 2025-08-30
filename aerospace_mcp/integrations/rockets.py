@@ -15,17 +15,21 @@ from .atmosphere import get_atmosphere_profile
 @dataclass
 class RocketGeometry:
     """Rocket geometry parameters."""
+
     dry_mass_kg: float  # Rocket dry mass
     propellant_mass_kg: float  # Initial propellant mass
     diameter_m: float  # Rocket diameter
     length_m: float  # Total rocket length
     cd: float = 0.3  # Drag coefficient
-    thrust_curve: list[list[float]] = None  # [[time_s, thrust_N], ...] or constant thrust
+    thrust_curve: list[list[float]] = (
+        None  # [[time_s, thrust_N], ...] or constant thrust
+    )
 
 
 @dataclass
 class RocketTrajectoryPoint:
     """Single point in rocket trajectory."""
+
     time_s: float
     altitude_m: float
     velocity_ms: float
@@ -40,6 +44,7 @@ class RocketTrajectoryPoint:
 @dataclass
 class RocketPerformance:
     """Rocket performance summary."""
+
     max_altitude_m: float
     apogee_time_s: float
     max_velocity_ms: float
@@ -90,17 +95,17 @@ def rocket_3dof_trajectory(
     geometry: RocketGeometry,
     dt_s: float = 0.1,
     max_time_s: float = 300.0,
-    launch_angle_deg: float = 90.0
+    launch_angle_deg: float = 90.0,
 ) -> list[RocketTrajectoryPoint]:
     """
     Calculate 3DOF rocket trajectory using numerical integration.
-    
+
     Args:
         geometry: Rocket geometry and mass properties
         dt_s: Time step for integration (seconds)
-        max_time_s: Maximum simulation time (seconds)  
+        max_time_s: Maximum simulation time (seconds)
         launch_angle_deg: Launch angle from horizontal (degrees)
-    
+
     Returns:
         List of trajectory points
     """
@@ -126,7 +131,11 @@ def rocket_3dof_trajectory(
 
     while time <= max_time_s and altitude >= 0:
         # Get current thrust
-        thrust = get_thrust_at_time(geometry.thrust_curve, time) if geometry.thrust_curve else 0.0
+        thrust = (
+            get_thrust_at_time(geometry.thrust_curve, time)
+            if geometry.thrust_curve
+            else 0.0
+        )
 
         # Get atmospheric properties at current altitude
         atm_alt = min(max_alt_m, max(0, int(altitude // 1000) * 1000))
@@ -137,7 +146,9 @@ def rocket_3dof_trajectory(
         else:
             # Fallback for extreme altitudes
             rho = 1.225 * math.exp(-altitude / 8400)  # Simple exponential model
-            speed_of_sound = 343.0 * math.sqrt(max(0.1, (288.15 - 0.0065 * altitude) / 288.15))
+            speed_of_sound = 343.0 * math.sqrt(
+                max(0.1, (288.15 - 0.0065 * altitude) / 288.15)
+            )
 
         # Total velocity
         velocity_total = math.sqrt(velocity_vertical**2 + velocity_horizontal**2)
@@ -149,13 +160,17 @@ def rocket_3dof_trajectory(
         dynamic_pressure = 0.5 * rho * velocity_total**2
 
         # Drag force (opposing velocity direction)
-        drag_area = math.pi * (geometry.diameter_m / 2)**2
+        drag_area = math.pi * (geometry.diameter_m / 2) ** 2
         drag_force = geometry.cd * drag_area * dynamic_pressure
 
         # Drag acceleration components
         if velocity_total > 0:
-            drag_accel_vertical = -drag_force * (velocity_vertical / velocity_total) / mass
-            drag_accel_horizontal = -drag_force * (velocity_horizontal / velocity_total) / mass
+            drag_accel_vertical = (
+                -drag_force * (velocity_vertical / velocity_total) / mass
+            )
+            drag_accel_horizontal = (
+                -drag_force * (velocity_horizontal / velocity_total) / mass
+            )
         else:
             drag_accel_vertical = 0.0
             drag_accel_horizontal = 0.0
@@ -173,17 +188,19 @@ def rocket_3dof_trajectory(
         accel_horizontal = thrust_accel_horizontal + drag_accel_horizontal
 
         # Record current state
-        trajectory.append(RocketTrajectoryPoint(
-            time_s=time,
-            altitude_m=altitude,
-            velocity_ms=velocity_total,
-            acceleration_ms2=math.sqrt(accel_vertical**2 + accel_horizontal**2),
-            mass_kg=mass,
-            thrust_n=thrust,
-            drag_n=drag_force,
-            mach=mach,
-            dynamic_pressure_pa=dynamic_pressure
-        ))
+        trajectory.append(
+            RocketTrajectoryPoint(
+                time_s=time,
+                altitude_m=altitude,
+                velocity_ms=velocity_total,
+                acceleration_ms2=math.sqrt(accel_vertical**2 + accel_horizontal**2),
+                mass_kg=mass,
+                thrust_n=thrust,
+                drag_n=drag_force,
+                mach=mach,
+                dynamic_pressure_pa=dynamic_pressure,
+            )
+        )
 
         # Integration (Euler method)
         velocity_vertical += accel_vertical * dt_s
@@ -194,7 +211,10 @@ def rocket_3dof_trajectory(
         if thrust > 0 and geometry.thrust_curve:
             # Estimate mass flow rate from thrust curve
             # For a simplified model, assume constant mass flow rate during burn
-            burn_time_total = max((point[0] for point in geometry.thrust_curve if point[1] > 0), default=1.0)
+            burn_time_total = max(
+                (point[0] for point in geometry.thrust_curve if point[1] > 0),
+                default=1.0,
+            )
             if burn_time_total > 0:
                 mass_flow_rate = geometry.propellant_mass_kg / burn_time_total
                 mass = max(geometry.dry_mass_kg, mass - mass_flow_rate * dt_s)
@@ -208,7 +228,9 @@ def rocket_3dof_trajectory(
     return trajectory
 
 
-def analyze_rocket_performance(trajectory: list[RocketTrajectoryPoint]) -> RocketPerformance:
+def analyze_rocket_performance(
+    trajectory: list[RocketTrajectoryPoint],
+) -> RocketPerformance:
     """Analyze rocket performance from trajectory data."""
     if not trajectory:
         return RocketPerformance(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -226,7 +248,7 @@ def analyze_rocket_performance(trajectory: list[RocketTrajectoryPoint]) -> Rocke
     # Find burnout point (when thrust drops to near zero)
     burnout_point = None
     for i, point in enumerate(trajectory):
-        if i > 0 and trajectory[i-1].thrust_n > 100 and point.thrust_n < 100:
+        if i > 0 and trajectory[i - 1].thrust_n > 100 and point.thrust_n < 100:
             burnout_point = point
             break
 
@@ -236,13 +258,15 @@ def analyze_rocket_performance(trajectory: list[RocketTrajectoryPoint]) -> Rocke
     # Calculate total impulse
     total_impulse = 0.0
     for i in range(1, len(trajectory)):
-        dt = trajectory[i].time_s - trajectory[i-1].time_s
-        avg_thrust = (trajectory[i].thrust_n + trajectory[i-1].thrust_n) / 2
+        dt = trajectory[i].time_s - trajectory[i - 1].time_s
+        avg_thrust = (trajectory[i].thrust_n + trajectory[i - 1].thrust_n) / 2
         total_impulse += avg_thrust * dt
 
     # Estimate specific impulse
     initial_prop_mass = trajectory[0].mass_kg - burnout_point.mass_kg
-    specific_impulse = total_impulse / (initial_prop_mass * 9.80665) if initial_prop_mass > 0 else 0
+    specific_impulse = (
+        total_impulse / (initial_prop_mass * 9.80665) if initial_prop_mass > 0 else 0
+    )
 
     return RocketPerformance(
         max_altitude_m=max_altitude,
@@ -254,23 +278,21 @@ def analyze_rocket_performance(trajectory: list[RocketTrajectoryPoint]) -> Rocke
         burnout_velocity_ms=burnout_point.velocity_ms,
         burnout_time_s=burnout_point.time_s,
         total_impulse_ns=total_impulse,
-        specific_impulse_s=specific_impulse
+        specific_impulse_s=specific_impulse,
     )
 
 
 def estimate_rocket_sizing(
-    target_altitude_m: float,
-    payload_mass_kg: float,
-    propellant_type: str = "solid"
+    target_altitude_m: float, payload_mass_kg: float, propellant_type: str = "solid"
 ) -> dict[str, Any]:
     """
     Estimate rocket sizing for target altitude and payload.
-    
+
     Args:
         target_altitude_m: Target apogee altitude
         payload_mass_kg: Payload mass
         propellant_type: "solid" or "liquid"
-    
+
     Returns:
         Dictionary with sizing estimates
     """
@@ -294,7 +316,9 @@ def estimate_rocket_sizing(
     potential_energy_per_kg = 9.80665 * target_altitude_m
     # Add gravity losses (roughly 1.5x theoretical for vertical flight)
     # Add drag losses (roughly 10-20% additional)
-    delta_v_req = math.sqrt(2 * potential_energy_per_kg) * 1.8  # Factor accounts for losses
+    delta_v_req = (
+        math.sqrt(2 * potential_energy_per_kg) * 1.8
+    )  # Factor accounts for losses
 
     # Rocket equation: delta_v = isp * g0 * ln(m_initial / m_final)
     g0 = 9.80665
@@ -316,7 +340,7 @@ def estimate_rocket_sizing(
     denominator = 1 + structural_ratio - mass_ratio * structural_ratio
     if denominator <= 0:
         # Impossible mission - need staging
-        propellant_mass = float('inf')
+        propellant_mass = float("inf")
     else:
         propellant_mass = (mass_ratio - 1) * payload_mass_kg / denominator
 
@@ -340,7 +364,7 @@ def estimate_rocket_sizing(
     # L = ld_ratio * D
     # V = π * D² * (ld_ratio * D) / 4 = π * ld_ratio * D³ / 4
     # D³ = 4 * V / (π * ld_ratio)
-    diameter = (4 * total_volume / (math.pi * ld_ratio)) ** (1/3)
+    diameter = (4 * total_volume / (math.pi * ld_ratio)) ** (1 / 3)
     length = ld_ratio * diameter
 
     return {
@@ -355,13 +379,14 @@ def estimate_rocket_sizing(
         "diameter_m": diameter,
         "length_m": length,
         "thrust_to_weight": thrust_to_weight,
-        "feasible": propellant_mass < float('inf')
+        "feasible": propellant_mass < float("inf"),
     }
 
 
 # Update availability
 try:
     from . import update_availability
+
     update_availability("rockets", True, {})
 except ImportError:
     pass

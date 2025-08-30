@@ -2,7 +2,6 @@
 Tests for atmosphere integration module.
 """
 
-
 import pytest
 
 from aerospace_mcp.integrations.atmosphere import (
@@ -37,8 +36,8 @@ class TestAtmosphereProfile:
 
         # Check that pressure decreases with altitude
         for i in range(1, len(profile)):
-            assert profile[i].pressure_pa < profile[i-1].pressure_pa
-            assert profile[i].density_kg_m3 < profile[i-1].density_kg_m3
+            assert profile[i].pressure_pa < profile[i - 1].pressure_pa
+            assert profile[i].density_kg_m3 < profile[i - 1].density_kg_m3
 
     def test_manual_isa_calculation(self):
         """Test manual ISA calculation against known values."""
@@ -101,15 +100,13 @@ class TestWindModel:
         altitudes = [0, 10, 50, 100, 500]
         surface_wind = 10.0  # m/s
 
-        wind_profile = wind_model_simple(
-            altitudes, surface_wind, model="logarithmic"
-        )
+        wind_profile = wind_model_simple(altitudes, surface_wind, model="logarithmic")
 
         assert len(wind_profile) == len(altitudes)
 
         # Wind should increase with height in logarithmic profile
         for i in range(1, len(wind_profile)):
-            assert wind_profile[i].wind_speed_mps >= wind_profile[i-1].wind_speed_mps
+            assert wind_profile[i].wind_speed_mps >= wind_profile[i - 1].wind_speed_mps
 
         # At reference height (10m), should be close to surface wind
         ref_point = next(p for p in wind_profile if p.altitude_m == 10)
@@ -120,19 +117,15 @@ class TestWindModel:
         altitudes = [0, 10, 50, 100]
         surface_wind = 8.0
 
-        wind_profile = wind_model_simple(
-            altitudes, surface_wind, model="power"
-        )
+        wind_profile = wind_model_simple(altitudes, surface_wind, model="power")
 
         # Wind should increase with height
         for i in range(1, len(wind_profile)):
-            assert wind_profile[i].wind_speed_mps >= wind_profile[i-1].wind_speed_mps
+            assert wind_profile[i].wind_speed_mps >= wind_profile[i - 1].wind_speed_mps
 
     def test_below_ground(self):
         """Test wind calculation below surface."""
-        wind_profile = wind_model_simple(
-            [-10, 0, 10], 10.0, surface_altitude_m=0.0
-        )
+        wind_profile = wind_model_simple([-10, 0, 10], 10.0, surface_altitude_m=0.0)
 
         # Below ground should be zero wind
         assert wind_profile[0].wind_speed_mps == 0.0
@@ -217,8 +210,10 @@ class TestIntegration:
             # Verify monotonic increase (generally)
             for i in range(1, len(wind_profile)):
                 # Allow for small variations due to numerical precision
-                assert (wind_profile[i].wind_speed_mps >=
-                       wind_profile[i-1].wind_speed_mps - 0.001)
+                assert (
+                    wind_profile[i].wind_speed_mps
+                    >= wind_profile[i - 1].wind_speed_mps - 0.001
+                )
 
 
 if __name__ == "__main__":
