@@ -117,7 +117,9 @@ class TestSearchAirportsTool:
 
     @pytest.mark.unit
     @pytest.mark.asyncio
-    async def test_search_airports_auto_detect_iata(self, mock_airports_iata, sjc_airport):
+    async def test_search_airports_auto_detect_iata(
+        self, mock_airports_iata, sjc_airport
+    ):
         """Test auto-detection of IATA codes."""
         with patch("aerospace_mcp.server._airport_from_iata") as mock_airport:
             mock_airport.return_value = sjc_airport
