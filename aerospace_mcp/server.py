@@ -2038,12 +2038,13 @@ async def _handle_get_system_status(arguments: dict) -> list[TextContent]:
             f"Airports Loaded: {len(_AIRPORTS_IATA):,}",
             "",
             "Available Tools:",
-            "• search_airports - Search for airports by IATA or city",
-            "• plan_flight - Plan flight routes with performance estimates",
-            "• calculate_distance - Calculate great circle distances",
-            "• get_aircraft_performance - Get aircraft performance estimates",
-            "• get_system_status - Get this status information",
         ]
+        
+        # Add all available tools dynamically
+        for tool in TOOLS:
+            status_lines.append(f"• {tool.name} - {tool.description}")
+        
+        status_lines.append("")
 
         if not OPENAP_AVAILABLE:
             status_lines.extend(

@@ -83,10 +83,10 @@ class TestSearchAirportsTool:
 
     @pytest.mark.unit
     @pytest.mark.asyncio
-    async def test_search_airports_by_iata(self, mock_airports_iata):
+    async def test_search_airports_by_iata(self, mock_airports_iata, sjc_airport):
         """Test searching airports by IATA code."""
         with patch("aerospace_mcp.server._airport_from_iata") as mock_airport:
-            mock_airport.return_value = mock_airports_iata["SJC"]
+            mock_airport.return_value = sjc_airport
 
             result = await _handle_search_airports(
                 {"query": "SJC", "query_type": "iata"}
@@ -117,10 +117,10 @@ class TestSearchAirportsTool:
 
     @pytest.mark.unit
     @pytest.mark.asyncio
-    async def test_search_airports_auto_detect_iata(self, mock_airports_iata):
+    async def test_search_airports_auto_detect_iata(self, mock_airports_iata, sjc_airport):
         """Test auto-detection of IATA codes."""
         with patch("aerospace_mcp.server._airport_from_iata") as mock_airport:
-            mock_airport.return_value = mock_airports_iata["SJC"]
+            mock_airport.return_value = sjc_airport
 
             await _handle_search_airports({"query": "SJC", "query_type": "auto"})
 
