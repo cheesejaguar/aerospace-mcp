@@ -49,7 +49,9 @@ def get_domain_status() -> dict[str, dict]:
     }
 
 
-def update_availability(domain: str, available: bool, libraries: dict[str, str] | None = None):
+def update_availability(
+    domain: str, available: bool, libraries: dict[str, str] | None = None
+):
     """Update availability status for a domain."""
     AVAILABILITY_FLAGS[domain] = available
     if libraries:
