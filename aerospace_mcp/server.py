@@ -2039,11 +2039,11 @@ async def _handle_get_system_status(arguments: dict) -> list[TextContent]:
             "",
             "Available Tools:",
         ]
-        
+
         # Add all available tools dynamically
         for tool in TOOLS:
             status_lines.append(f"• {tool.name} - {tool.description}")
-        
+
         status_lines.append("")
 
         if not OPENAP_AVAILABLE:
