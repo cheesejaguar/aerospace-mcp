@@ -7,6 +7,7 @@
     <meta name="description" content="Open-source aerospace research platform with flight planning, orbital mechanics, and spacecraft trajectory optimization. Features 30+ tools, 28,000+ airports, and FastMCP integration.">
     <meta name="keywords" content="aerospace, flight planning, orbital mechanics, MCP, FastAPI, space operations, aviation API, aircraft performance">
     <meta name="author" content="Aerospace MCP Project">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
 
     <style>
         :root {
@@ -279,6 +280,8 @@
             font-size: 0.9rem;
             line-height: 1.5;
             color: var(--text-color);
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
 
         .copy-btn {
@@ -740,7 +743,15 @@ client = Client(<span class="string">"stdio"</span>, <span class="string">"uv ru
         // Copy to clipboard functionality
         async function copyCode(button) {
             const codeBlock = button.nextElementSibling;
-            const text = codeBlock.textContent;
+            // Get the original text content and preserve line breaks
+            let text = codeBlock.innerHTML
+                .replace(/<span[^>]*>/g, '') // Remove opening span tags
+                .replace(/<\/span>/g, '')    // Remove closing span tags
+                .replace(/&lt;/g, '<')       // Decode HTML entities
+                .replace(/&gt;/g, '>')
+                .replace(/&amp;/g, '&')
+                .replace(/&quot;/g, '"')
+                .trim();
 
             try {
                 await navigator.clipboard.writeText(text);
