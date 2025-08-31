@@ -75,9 +75,9 @@ ENV AEROSPACE_MCP_LOG_LEVEL=info
 CMD ["sh", "-c", "if [ \"$AEROSPACE_MCP_MODE\" = \"mcp\" ]; then aerospace-mcp; else aerospace-mcp-http; fi"]
 
 # Labels for metadata
-LABEL maintainer="Aaron <aaron@example.com>"
+LABEL maintainer="Aaron <hello@aeroastro.org>"
 LABEL description="Aerospace MCP server for flight planning operations"
-LABEL version="0.1.0"
+LABEL version="0.0.1"
 LABEL org.opencontainers.image.source="https://github.com/username/aerospace-mcp"
 LABEL org.opencontainers.image.description="MCP server for aerospace and flight planning operations"
 LABEL org.opencontainers.image.licenses="MIT"
