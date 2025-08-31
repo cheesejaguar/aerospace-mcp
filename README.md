@@ -1085,16 +1085,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### Community
 
-- **Discord**: [Join our Discord](https://discord.gg/aerospace-mcp) for real-time chat
-- **Twitter**: [@AerospaceMCP](https://twitter.com/AerospaceMCP) for updates
-- **Blog**: [Read our blog](https://blog.aerospace-mcp.com) for tutorials and news
+- **Discord**: WIP for real-time chat
 
 ### Professional Support
 
 For enterprise support, consulting, or custom development:
-- Email: support@aerospace-mcp.com
-- Website: https://aerospace-mcp.com
-- LinkedIn: [Aerospace MCP](https://linkedin.com/company/aerospace-mcp)
+- Email: hello@aeroastro.org
+- Website: https://aeroastro.org
 
 ---
 
