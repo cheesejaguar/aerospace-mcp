@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aerospace MCP - Comprehensive Flight Planning & Space Operations API</title>
+    <meta name="description" content="Open-source aerospace research platform with flight planning, orbital mechanics, and spacecraft trajectory optimization. Features 30+ tools, 28,000+ airports, and FastMCP integration.">
+    <meta name="keywords" content="aerospace, flight planning, orbital mechanics, MCP, FastAPI, space operations, aviation API, aircraft performance">
+    <meta name="author" content="Aerospace MCP Project">
+
+    <style>
+        :root {
+            --primary-color: #1e40af;
+            --secondary-color: #7c3aed;
+            --accent-color: #f59e0b;
+            --text-color: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --bg-gradient: linear-gradient(135deg, #1e40af, #7c3aed, #0f172a);
+            --shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            --border-radius: 12px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-color);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Animated background particles */
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.1;
+        }
+
+        .particle {
+            position: absolute;
+            background: var(--accent-color);
+            border-radius: 50%;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(180deg); }
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            position: relative;
+            padding: 2rem;
+        }
+
+        .hero-content h1 {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, var(--text-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-content p {
+            font-size: clamp(1.1rem, 2.5vw, 1.3rem);
+            margin-bottom: 2rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 3rem;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: var(--bg-dark);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-color);
+            border: 2px solid var(--text-color);
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        /* Sections */
+        .section {
+            padding: 5rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 3rem;
+            color: var(--text-color);
+        }
+
+        /* Features Grid */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            padding: 2rem;
+            border-radius: var(--border-radius);
+            transition: var(--transition);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow);
+        }
+
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .feature-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+
+        .feature-card p {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .feature-list {
+            list-style: none;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .feature-list li {
+            padding: 0.2rem 0;
+            padding-left: 1rem;
+            position: relative;
+        }
+
+        .feature-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        /* Code Examples */
+        .code-section {
+            background: var(--bg-card);
+            border-radius: var(--border-radius);
+            margin: 2rem 0;
+        }
+
+        .code-tabs {
+            display: flex;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            overflow-x: auto;
+        }
+
+        .code-tab {
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+
+        .code-tab.active,
+        .code-tab:hover {
+            color: var(--accent-color);
+            background: rgba(245, 158, 11, 0.1);
+        }
+
+        .code-content {
+            display: none;
+            padding: 2rem;
+        }
+
+        .code-content.active {
+            display: block;
+        }
+
+        .code-block {
+            background: var(--bg-dark);
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 1rem 0;
+            position: relative;
+        }
+
+        .code-block code {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: var(--text-color);
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            background: var(--accent-color);
+            color: var(--bg-dark);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+
+        .copy-btn:hover {
+            opacity: 1;
+        }
+
+        /* Installation Methods */
+        .install-methods {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+
+        .install-card {
+            background: var(--bg-card);
+            padding: 2rem;
+            border-radius: var(--border-radius);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .install-card h3 {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            color: var(--accent-color);
+        }
+
+        /* Warning Section */
+        .warning {
+            background: linear-gradient(45deg, #dc2626, #ea580c);
+            padding: 2rem;
+            border-radius: var(--border-radius);
+            margin: 3rem 0;
+            text-align: center;
+        }
+
+        .warning h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: white;
+        }
+
+        .warning p {
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Footer */
+        .footer {
+            background: var(--bg-card);
+            padding: 3rem 2rem;
+            text-align: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .footer-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin: 2rem 0;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: var(--transition);
+        }
+
+        .footer-links a:hover {
+            color: var(--accent-color);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .section {
+                padding: 3rem 1rem;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .stats {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 1rem;
+            }
+
+            .code-tabs {
+                flex-direction: column;
+            }
+        }
+
+        /* Syntax highlighting */
+        .keyword { color: #8b5cf6; }
+        .string { color: #10b981; }
+        .number { color: #f59e0b; }
+        .comment { color: #64748b; font-style: italic; }
+        .function { color: #06b6d4; }
+    </style>
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="particles" id="particles"></div>
+
+    <!-- Header Section -->
+    <header class="header">
+        <div class="hero-content">
+            <h1>🚀 Aerospace MCP</h1>
+            <p>Comprehensive flight planning, orbital mechanics, and spacecraft trajectory optimization platform with FastMCP integration and 30+ specialized aerospace tools.</p>
+
+            <div class="hero-buttons">
+                <a href="https://github.com/cheesejaguar/aerospace-mcp" class="btn btn-primary" target="_blank">
+                    📱 View on GitHub
+                </a>
+                <a href="#features" class="btn btn-secondary">
+                    ✨ Explore Features
+                </a>
+                <a href="#quick-start" class="btn btn-secondary">
+                    🚀 Get Started
+                </a>
+            </div>
+
+            <div class="stats">
+                <div class="stat">
+                    <span class="stat-number">30+</span>
+                    <div class="stat-label">Aerospace Tools</div>
+                </div>
+                <div class="stat">
+                    <span class="stat-number">28K+</span>
+                    <div class="stat-label">Airports</div>
+                </div>
+                <div class="stat">
+                    <span class="stat-number">190+</span>
+                    <div class="stat-label">Aircraft Types</div>
+                </div>
+                <div class="stat">
+                    <span class="stat-number">&lt;1s</span>
+                    <div class="stat-label">Response Time</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Features Section -->
+    <section id="features" class="section">
+        <h2>🌟 Comprehensive Aerospace Capabilities</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <span class="feature-icon">✈️</span>
+                <h3>Flight Planning & Airport Resolution</h3>
+                <p>Intelligent airport search, route planning, and aircraft performance modeling with real-time calculations.</p>
+                <ul class="feature-list">
+                    <li>28,000+ airports worldwide</li>
+                    <li>Great-circle route calculation</li>
+                    <li>Aircraft-specific performance</li>
+                    <li>Fuel consumption estimation</li>
+                    <li>Multi-leg journey planning</li>
+                </ul>
+            </div>
+
+            <div class="feature-card">
+                <span class="feature-icon">🛰️</span>
+                <h3>Orbital Mechanics & Space Operations</h3>
+                <p>Complete orbital mechanics suite with propagation, rendezvous planning, and trajectory optimization.</p>
+                <ul class="feature-list">
+                    <li>Keplerian elements conversion</li>
+                    <li>J2 perturbation modeling</li>
+                    <li>Ground track computation</li>
+                    <li>Hohmann transfers</li>
+                    <li>Lambert problem solving</li>
+                </ul>
+            </div>
+
+            <div class="feature-card">
+                <span class="feature-icon">🌪️</span>
+                <h3>Atmospheric & Aerodynamics</h3>
+                <p>Advanced atmospheric modeling and aerodynamic analysis for comprehensive flight envelope studies.</p>
+                <ul class="feature-list">
+                    <li>ISA atmosphere profiles</li>
+                    <li>Wind modeling (logarithmic/power law)</li>
+                    <li>Wing VLM analysis</li>
+                    <li>Airfoil polar generation</li>
+                    <li>Stability derivatives</li>
+                </ul>
+            </div>
+
+            <div class="feature-card">
+                <span class="feature-icon">🚀</span>
+                <h3>Rocket Trajectory Optimization</h3>
+                <p>3DOF trajectory simulation, sizing estimation, and thrust profile optimization for rocket systems.</p>
+                <ul class="feature-list">
+                    <li>3DOF numerical integration</li>
+                    <li>Launch angle optimization</li>
+                    <li>Thrust profile optimization</li>
+                    <li>Sizing requirements estimation</li>
+                    <li>Sensitivity analysis</li>
+                </ul>
+            </div>
+
+            <div class="feature-card">
+                <span class="feature-icon">🔧</span>
+                <h3>FastMCP & REST API</h3>
+                <p>Dual interface support with modern FastMCP framework and traditional REST API for maximum flexibility.</p>
+                <ul class="feature-list">
+                    <li>FastMCP integration</li>
+                    <li>RESTful API endpoints</li>
+                    <li>Claude Desktop compatible</li>
+                    <li>70% code reduction</li>
+                    <li>Modular tool architecture</li>
+                </ul>
+            </div>
+
+            <div class="feature-card">
+                <span class="feature-icon">🔬</span>
+                <h3>Research & Analysis Tools</h3>
+                <p>Specialized tools for propeller analysis, UAV optimization, and Monte Carlo uncertainty studies.</p>
+                <ul class="feature-list">
+                    <li>BEMT propeller analysis</li>
+                    <li>UAV energy optimization</li>
+                    <li>Monte Carlo simulations</li>
+                    <li>Genetic algorithms</li>
+                    <li>Coordinate transformations</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Code Examples Section -->
+    <section class="section">
+        <h2>💻 Easy Integration</h2>
+
+        <div class="code-section">
+            <div class="code-tabs">
+                <button class="code-tab active" onclick="showTab('rest-api')">REST API</button>
+                <button class="code-tab" onclick="showTab('mcp-client')">MCP Client</button>
+                <button class="code-tab" onclick="showTab('python-client')">Python Client</button>
+            </div>
+
+            <div id="rest-api" class="code-content active">
+                <h3>REST API Usage</h3>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <code># Search for airports
+<span class="comment"># GET /airports/by_city?city=San Jose&country=US</span>
+curl <span class="string">"http://localhost:8080/airports/by_city?city=San Jose&country=US"</span>
+
+<span class="comment"># Plan a flight</span>
+curl -X <span class="keyword">POST</span> <span class="string">"http://localhost:8080/plan"</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{
+    "depart_city": "San Jose",
+    "arrive_city": "Tokyo",
+    "ac_type": "A320",
+    "cruise_alt_ft": 35000
+  }'</span></code>
+                </div>
+            </div>
+
+            <div id="mcp-client" class="code-content">
+                <h3>MCP Integration (Claude Desktop)</h3>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <code><span class="comment">// Add to Claude Desktop configuration</span>
+{
+  <span class="string">"mcpServers"</span>: {
+    <span class="string">"aerospace-mcp"</span>: {
+      <span class="string">"command"</span>: <span class="string">"uv"</span>,
+      <span class="string">"args"</span>: [<span class="string">"run"</span>, <span class="string">"aerospace-mcp"</span>],
+      <span class="string">"cwd"</span>: <span class="string">"/path/to/aerospace-mcp"</span>
+    }
+  }
+}</code>
+                </div>
+            </div>
+
+            <div id="python-client" class="code-content">
+                <h3>Python Client Example</h3>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <code><span class="keyword">import</span> requests
+
+<span class="comment"># Initialize client</span>
+base_url = <span class="string">"http://localhost:8080"</span>
+
+<span class="comment"># Search airports</span>
+response = requests.<span class="function">get</span>(
+    <span class="string">f"{base_url}/airports/by_city"</span>,
+    params={<span class="string">"city"</span>: <span class="string">"San Jose"</span>, <span class="string">"country"</span>: <span class="string">"US"</span>}
+)
+airports = response.<span class="function">json</span>()
+
+<span class="comment"># Plan flight</span>
+flight_data = {
+    <span class="string">"depart_city"</span>: <span class="string">"San Jose"</span>,
+    <span class="string">"arrive_city"</span>: <span class="string">"Tokyo"</span>,
+    <span class="string">"ac_type"</span>: <span class="string">"A320"</span>
+}
+
+response = requests.<span class="function">post</span>(<span class="string">f"{base_url}/plan"</span>, json=flight_data)
+flight_plan = response.<span class="function">json</span>()</code>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Start Section -->
+    <section id="quick-start" class="section">
+        <h2>🚀 Quick Start</h2>
+
+        <div class="install-methods">
+            <div class="install-card">
+                <h3>⚡ UV (Recommended)</h3>
+                <p>Fastest Python package manager with excellent dependency resolution.</p>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <code><span class="comment"># Install UV</span>
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+<span class="comment"># Clone and setup</span>
+git clone https://github.com/cheesejaguar/aerospace-mcp.git
+cd aerospace-mcp
+uv venv && source .venv/bin/activate
+uv sync
+
+<span class="comment"># Run HTTP server</span>
+uvicorn main:app --reload --host <span class="number">0.0.0.0</span> --port <span class="number">8080</span></code>
+                </div>
+            </div>
+
+            <div class="install-card">
+                <h3>🐳 Docker</h3>
+                <p>Containerized deployment for consistent environments.</p>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <code><span class="comment"># Clone and build</span>
+git clone https://github.com/cheesejaguar/aerospace-mcp.git
+cd aerospace-mcp
+
+<span class="comment"># Build and run</span>
+docker build -t aerospace-mcp .
+docker run -p <span class="number">8080</span>:<span class="number">8080</span> aerospace-mcp
+
+<span class="comment"># Test the API</span>
+curl <span class="string">"http://localhost:8080/health"</span></code>
+                </div>
+            </div>
+
+            <div class="install-card">
+                <h3>🤖 MCP Server</h3>
+                <p>Direct integration with Claude Desktop and other MCP clients.</p>
+                <div class="code-block">
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                    <code><span class="comment"># Run MCP server</span>
+uv run aerospace-mcp
+
+<span class="comment"># Or in TCP mode for debugging</span>
+uv run aerospace-mcp --tcp localhost:<span class="number">8000</span>
+
+<span class="comment"># Test with MCP client</span>
+<span class="keyword">from</span> mcp <span class="keyword">import</span> Client
+client = Client(<span class="string">"stdio"</span>, <span class="string">"uv run aerospace-mcp"</span>)</code>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Warning Section -->
+    <div class="warning">
+        <h3>⚠️ IMPORTANT SAFETY NOTICE</h3>
+        <p><strong>THIS SOFTWARE IS FOR EDUCATIONAL, RESEARCH, AND DEVELOPMENT PURPOSES ONLY</strong></p>
+        <p>• NOT FOR REAL NAVIGATION - Do not use for actual flight planning or navigation</p>
+        <p>• NOT CERTIFIED - This system is not certified by any aviation authority</p>
+        <p>• ESTIMATES ONLY - Performance calculations are theoretical estimates</p>
+        <p>• NO LIABILITY - Authors assume no responsibility for any consequences of use</p>
+        <p style="margin-top: 1rem; font-weight: bold;">For real flight planning, always use certified aviation software and consult official sources.</p>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <h3>🌟 Aerospace MCP Project</h3>
+            <p>Open-source aerospace research platform powered by FastMCP</p>
+
+            <div class="footer-links">
+                <a href="https://github.com/cheesejaguar/aerospace-mcp" target="_blank">GitHub Repository</a>
+                <a href="https://github.com/cheesejaguar/aerospace-mcp/blob/main/README.md" target="_blank">Documentation</a>
+                <a href="https://github.com/cheesejaguar/aerospace-mcp/issues" target="_blank">Issues</a>
+                <a href="https://github.com/cheesejaguar/aerospace-mcp/blob/main/LICENSE" target="_blank">MIT License</a>
+                <a href="https://fastmcp.com" target="_blank">FastMCP</a>
+            </div>
+
+            <p style="margin-top: 2rem; color: var(--text-secondary);">
+                Made with ❤️ for the aerospace community • © 2024 Aerospace MCP Project
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Create animated particles
+        function createParticles() {
+            const particlesContainer = document.getElementById('particles');
+            const particleCount = 50;
+
+            for (let i = 0; i < particleCount; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.top = Math.random() * 100 + '%';
+                particle.style.width = Math.random() * 4 + 2 + 'px';
+                particle.style.height = particle.style.width;
+                particle.style.animationDelay = Math.random() * 6 + 's';
+                particle.style.animationDuration = (Math.random() * 3 + 3) + 's';
+                particlesContainer.appendChild(particle);
+            }
+        }
+
+        // Tab switching functionality
+        function showTab(tabId) {
+            // Hide all content
+            const contents = document.querySelectorAll('.code-content');
+            contents.forEach(content => content.classList.remove('active'));
+
+            // Remove active class from all tabs
+            const tabs = document.querySelectorAll('.code-tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+
+            // Show selected content and activate tab
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Copy to clipboard functionality
+        async function copyCode(button) {
+            const codeBlock = button.nextElementSibling;
+            const text = codeBlock.textContent;
+
+            try {
+                await navigator.clipboard.writeText(text);
+                button.textContent = 'Copied!';
+                button.style.background = '#10b981';
+
+                setTimeout(() => {
+                    button.textContent = 'Copy';
+                    button.style.background = 'var(--accent-color)';
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+                button.textContent = 'Failed';
+            }
+        }
+
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Initialize particles on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            createParticles();
+        });
+
+        // Add scroll-based animations
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -100px 0px'
+        };
+
+        const observer = new IntersectionObserver(function(entries) {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        // Observe all feature cards for animation
+        document.addEventListener('DOMContentLoaded', function() {
+            const cards = document.querySelectorAll('.feature-card, .install-card');
+            cards.forEach(card => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(30px)';
+                card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+                observer.observe(card);
+            });
+        });
+    </script>
+</body>
+</html>
