@@ -11,6 +11,10 @@ from .tools.aerodynamics import (
     get_airfoil_database,
     wing_vlm_analysis,
 )
+from .tools.agents import (
+    format_data_for_tool,
+    select_aerospace_tool,
+)
 from .tools.atmosphere import (
     get_atmosphere_profile,
     wind_model_simple,
@@ -111,6 +115,10 @@ mcp.tool(genetic_algorithm_optimization)
 mcp.tool(particle_swarm_optimization)
 mcp.tool(porkchop_plot_analysis)
 mcp.tool(monte_carlo_uncertainty_analysis)
+
+# Agent tools for helping users
+mcp.tool(format_data_for_tool)
+mcp.tool(select_aerospace_tool)
 
 
 def run():
