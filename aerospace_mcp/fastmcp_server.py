@@ -1,7 +1,19 @@
-"""FastMCP server implementation for Aerospace flight planning tools."""
+"""FastMCP server implementation for Aerospace flight planning tools.
+
+Loads environment from .env before importing tools so feature flags and
+API keys are available at import time.
+"""
 
 import logging
 import sys
+
+# Load environment from .env before importing tool modules
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:
+    pass
 
 from fastmcp import FastMCP
 
@@ -10,6 +22,10 @@ from .tools.aerodynamics import (
     calculate_stability_derivatives,
     get_airfoil_database,
     wing_vlm_analysis,
+)
+from .tools.agents import (
+    format_data_for_tool,
+    select_aerospace_tool,
 )
 from .tools.atmosphere import (
     get_atmosphere_profile,
@@ -111,6 +127,10 @@ mcp.tool(genetic_algorithm_optimization)
 mcp.tool(particle_swarm_optimization)
 mcp.tool(porkchop_plot_analysis)
 mcp.tool(monte_carlo_uncertainty_analysis)
+
+# Agent tools for helping users
+mcp.tool(format_data_for_tool)
+mcp.tool(select_aerospace_tool)
 
 
 def run():

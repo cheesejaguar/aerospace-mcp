@@ -1,7 +1,15 @@
 from __future__ import annotations
 
+# Load environment variables from .env for local/dev runs
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:
+    pass
+
 import math
-from typing import Literal
+from typing import Any, Literal
 
 import airportsdata
 from fastapi import FastAPI, HTTPException, Query
@@ -77,7 +85,7 @@ class PlanResponse(BaseModel):
     distance_km: float
     distance_nm: float
     polyline: list[tuple[float, float]]  # [(lat, lon), ...]
-    estimates: dict  # {"block": {...}, "climb": {...}, ...}
+    estimates: dict[str, Any]  # {"block": {...}, "climb": {...}, ...}
 
 
 # ----------------------------
@@ -178,7 +186,7 @@ def great_circle_points(
 # ----------------------------
 def estimates_openap(
     ac_type: str, cruise_alt_ft: int, mass_kg: float | None, route_dist_km: float
-) -> tuple[dict, str]:
+) -> tuple[dict[str, Any], str]:
     if not OPENAP_AVAILABLE:
         raise HTTPException(
             status_code=501,
@@ -216,7 +224,7 @@ def estimates_openap(
     # Cruise segment baseline
     cruise_seg = fgen.cruise(dt=dt)
 
-    def seg(df):
+    def seg(df: Any) -> tuple[float, float, float, float, float]:
         t_s = float(df["t"].iloc[-1])
         dist_km = float(df["s"].iloc[-1]) / 1000.0  # 's' is meters in OpenAP docs
         alt_ft = float(df["altitude"].mean())
@@ -298,7 +306,7 @@ app = FastAPI(title="Flight Planner API", version="0.1.0")
 
 
 @app.get("/health")
-def health():
+def health() -> dict[str, Any]:
     return {
         "status": "ok",
         "openap": OPENAP_AVAILABLE,
@@ -307,12 +315,14 @@ def health():
 
 
 @app.get("/airports/by_city", response_model=list[AirportOut])
-def airports_by_city(city: str = Query(...), country: str | None = Query(None)):
+def airports_by_city(
+    city: str = Query(...), country: str | None = Query(None)
+) -> list[AirportOut]:
     return _find_city_airports(city, country)
 
 
 @app.post("/plan", response_model=PlanResponse)
-def plan(req: PlanRequest):
+def plan(req: PlanRequest) -> PlanResponse:
     if (
         req.depart_city.strip().lower() == req.arrive_city.strip().lower()
         and not req.prefer_arrive_iata

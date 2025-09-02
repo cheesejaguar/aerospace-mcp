@@ -566,9 +566,7 @@ class TestOptimizationEdgeCases:
         )
 
         # Only baseline value (no variation)
-        parameter_variations = {
-            "dry_mass_kg": [20.0]  # Only baseline
-        }
+        parameter_variations = {"dry_mass_kg": [20.0]}  # Only baseline
 
         result = trajectory_sensitivity_analysis(
             base_geometry, parameter_variations, objective="max_altitude"

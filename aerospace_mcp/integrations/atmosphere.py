@@ -140,9 +140,11 @@ def get_atmosphere_profile(
                 temperature_k=float(atm.temperature),
                 density_kg_m3=float(atm.density),
                 speed_of_sound_mps=float(atm.speed_of_sound),
-                viscosity_pa_s=float(atm.dynamic_viscosity)
-                if hasattr(atm, "dynamic_viscosity")
-                else None,
+                viscosity_pa_s=(
+                    float(atm.dynamic_viscosity)
+                    if hasattr(atm, "dynamic_viscosity")
+                    else None
+                ),
             )
         else:
             # Fall back to manual calculation

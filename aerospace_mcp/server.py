@@ -1,10 +1,22 @@
-"""MCP Server implementation for Aerospace flight planning tools."""
+"""MCP Server implementation for Aerospace flight planning tools.
+
+Ensures .env is loaded very early so environment-driven options are
+available when importing submodules and defining tools.
+"""
 
 import asyncio
 import json
 import logging
 import math
 from dataclasses import asdict
+
+# Load environment from .env before other imports that read env
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:
+    pass
 
 import mcp.server.sse
 import mcp.server.stdio
@@ -2753,9 +2765,11 @@ async def _handle_rocket_3dof_trajectory(arguments: dict) -> list[TextContent]:
             :: max(1, len(trajectory) // 50)
         ]  # Max 50 points
         json_data = {
-            "performance": performance.model_dump()
-            if hasattr(performance, "model_dump")
-            else asdict(performance),
+            "performance": (
+                performance.model_dump()
+                if hasattr(performance, "model_dump")
+                else asdict(performance)
+            ),
             "trajectory_sample": [asdict(point) for point in sample_trajectory],
         }
         result_lines.extend(

@@ -34,7 +34,14 @@ cd aerospace-mcp
 uv venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 uv sync
 
-# Run HTTP server
+# Copy env and configure (optional but recommended)
+cp .env.example .env
+# Edit .env as needed (host/port/log level, optional LLM tools)
+
+# Run HTTP server (package entrypoint)
+uv run aerospace-mcp-http
+
+# Alternatively (developer style)
 uvicorn main:app --reload --host 0.0.0.0 --port 8080
 
 # Test the API
@@ -63,10 +70,26 @@ Add to your Claude Desktop configuration:
     "aerospace-mcp": {
       "command": "uv",
       "args": ["run", "aerospace-mcp"],
-      "cwd": "/path/to/aerospace-mcp"
+      "cwd": "/path/to/aerospace-mcp",
+      "env": {
+        "LLM_TOOLS_ENABLED": "true",
+        "OPENAI_API_KEY": "your-openai-api-key-here"
+      }
     }
   }
 }
+```
+
+**Note**: The `env` section is optional and only needed if you want to enable the AI-powered agent tools for enhanced user experience.
+
+### MCP via CLI
+
+```bash
+# Start the MCP server (stdio)
+uv run aerospace-mcp
+
+# Start in SSE mode (optional)
+uv run aerospace-mcp sse 0.0.0.0 8001
 ```
 
 ## 📋 Table of Contents
@@ -120,7 +143,7 @@ Add to your Claude Desktop configuration:
 - ✅ Coordinate frame transformations (ECEF, ECI, geodetic)
 - ✅ Wing aerodynamics analysis (VLM, lifting line theory)
 - ✅ Airfoil polar generation and database access
-- ✅ Aircraft stability derivatives calculation  
+- ✅ Aircraft stability derivatives calculation
 - ✅ Propeller performance analysis (BEMT)
 - ✅ UAV energy optimization and endurance estimation
 - ✅ Motor-propeller matching analysis
@@ -133,7 +156,7 @@ Add to your Claude Desktop configuration:
 - ✅ **Orbital mechanics calculations** (Keplerian elements, state vectors, propagation)
 - ✅ **Ground track computation** for satellite tracking and visualization
 - ✅ **Hohmann transfer planning** for orbital maneuvers and mission design
-- ✅ **Orbital rendezvous planning** for spacecraft proximity operations  
+- ✅ **Orbital rendezvous planning** for spacecraft proximity operations
 - ✅ **Trajectory optimization** using genetic algorithms and particle swarm optimization
 - ✅ **Monte Carlo uncertainty analysis** for trajectory robustness assessment
 - ✅ **Lambert problem solving** for two-body trajectory determination
@@ -177,7 +200,7 @@ source .venv/bin/activate  # Linux/macOS
 # .venv\Scripts\activate     # Windows
 
 # Install dependencies
-uv add fastapi uvicorn[standard] airportsdata geographiclib pydantic
+uv add fastapi uvicorn[standard] airportsdata geographiclib pydantic python-dotenv
 uv add openap  # Optional: for performance estimates
 uv add mcp     # Optional: for MCP server functionality
 
@@ -209,11 +232,12 @@ source .venv/bin/activate  # Linux/macOS
 pip install --upgrade pip
 
 # Install core dependencies
-pip install fastapi uvicorn[standard] airportsdata geographiclib pydantic
+pip install fastapi uvicorn[standard] airportsdata geographiclib pydantic python-dotenv
 
 # Install optional dependencies
 pip install openap  # For performance estimates
 pip install mcp     # For MCP server
+pip install python-dotenv  # For loading .env in local/dev
 
 # Install from pyproject.toml
 pip install -e .
@@ -510,7 +534,7 @@ def optimize_lunar_transfer():
             "velocity_ms": [0, 1000, 0]
         }
     ]
-    
+
     response = requests.post("http://localhost:8080/genetic_algorithm_optimization", json={
         "initial_trajectory": initial_trajectory,
         "objective": "minimize_delta_v",
@@ -519,7 +543,7 @@ def optimize_lunar_transfer():
             "max_acceleration_ms2": 10
         }
     })
-    
+
     result = response.json()
     print(f"Optimized Delta-V: {result['total_delta_v_ms']/1000:.2f} km/s")
     print(f"Flight Time: {result['flight_time_s']/86400:.1f} days")
@@ -531,13 +555,13 @@ optimized_trajectory = optimize_lunar_transfer()
 def plan_mars_mission():
     response = requests.post("http://localhost:8080/porkchop_plot_analysis", json={
         "departure_body": "Earth",
-        "arrival_body": "Mars", 
+        "arrival_body": "Mars",
         "min_tof_days": 200,
         "max_tof_days": 300
     })
-    
+
     analysis = response.json()
-    
+
     if analysis["summary_statistics"]["feasible_transfers"] > 0:
         optimal = analysis["optimal_transfer"]
         print(f"Optimal Mars Transfer:")
@@ -676,11 +700,11 @@ This project has been **migrated from the traditional MCP SDK to FastMCP**, prov
 
 ### Migration Benefits
 
-✅ **70% Less Code**: Tool definitions went from verbose JSON schemas to simple Python decorators  
-✅ **Better Type Safety**: Automatic schema generation from type hints  
-✅ **Cleaner Architecture**: Modular tool organization across logical domains  
-✅ **Improved Maintainability**: Pythonic code that's easier to read and extend  
-✅ **Full Compatibility**: Same MCP protocol, works with all existing clients  
+✅ **70% Less Code**: Tool definitions went from verbose JSON schemas to simple Python decorators
+✅ **Better Type Safety**: Automatic schema generation from type hints
+✅ **Cleaner Architecture**: Modular tool organization across logical domains
+✅ **Improved Maintainability**: Pythonic code that's easier to read and extend
+✅ **Full Compatibility**: Same MCP protocol, works with all existing clients
 
 ### Before vs After
 
@@ -707,12 +731,35 @@ async def handle_call_tool(name: str, arguments: dict):
     # ... 30+ more tool handlers
 ```
 
+## ⚙️ Configuration (.env)
+
+Both the HTTP server and MCP servers automatically load environment variables from a local `.env` (via `python-dotenv`).
+
+- `AEROSPACE_MCP_MODE`: `http` or `mcp` (Docker entrypoint switch)
+- `AEROSPACE_MCP_HOST`: Bind host for HTTP (default `0.0.0.0`)
+- `AEROSPACE_MCP_PORT`: Port for HTTP (default `8080`)
+- `AEROSPACE_MCP_LOG_LEVEL`: `debug|info|warning|error` (default `info`)
+- `AEROSPACE_MCP_ENV`: `development|production` (controls reload)
+- `LLM_TOOLS_ENABLED`: `true|false` to enable AI agent tools (default `false`)
+- `OPENAI_API_KEY`: Required if LLM tools are enabled
+
+Example `.env`:
+
+```
+AEROSPACE_MCP_MODE=http
+AEROSPACE_MCP_HOST=0.0.0.0
+AEROSPACE_MCP_PORT=8080
+AEROSPACE_MCP_LOG_LEVEL=debug
+LLM_TOOLS_ENABLED=false
+# OPENAI_API_KEY=sk-...
+```
+
 **After (FastMCP):**
 ```python
 @mcp.tool
 def search_airports(
-    query: str, 
-    country: str | None = None, 
+    query: str,
+    country: str | None = None,
     query_type: Literal["iata", "city", "auto"] = "auto"
 ) -> str:
     """Search for airports by IATA code or city name."""
@@ -723,19 +770,19 @@ def search_airports(
 
 The FastMCP refactoring introduced a **modular architecture** with tools organized by domain:
 
-- `tools/core.py` - Core flight planning (search, plan, distance, performance)  
-- `tools/atmosphere.py` - Atmospheric modeling and wind analysis  
-- `tools/frames.py` - Coordinate frame transformations  
-- `tools/aerodynamics.py` - Wing analysis and airfoil polars  
-- `tools/propellers.py` - Propeller BEMT and UAV energy analysis  
-- `tools/rockets.py` - Rocket trajectory and sizing  
-- `tools/orbits.py` - Orbital mechanics and propagation  
-- `tools/optimization.py` - Trajectory optimization algorithms  
+- `tools/core.py` - Core flight planning (search, plan, distance, performance)
+- `tools/atmosphere.py` - Atmospheric modeling and wind analysis
+- `tools/frames.py` - Coordinate frame transformations
+- `tools/aerodynamics.py` - Wing analysis and airfoil polars
+- `tools/propellers.py` - Propeller BEMT and UAV energy analysis
+- `tools/rockets.py` - Rocket trajectory and sizing
+- `tools/orbits.py` - Orbital mechanics and propagation
+- `tools/optimization.py` - Trajectory optimization algorithms
 
 ### Compatibility Notes
 
 - **Entry Point**: Now uses `aerospace_mcp.fastmcp_server:run`
-- **Dependencies**: Includes `fastmcp>=2.11.3` instead of raw `mcp` 
+- **Dependencies**: Includes `fastmcp>=2.11.3` instead of raw `mcp`
 - **Server Name**: Still `aerospace-mcp` for client compatibility
 - **All Tools**: All 30+ tools maintain exact same names and parameters
 

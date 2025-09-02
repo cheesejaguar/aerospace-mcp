@@ -85,10 +85,11 @@ The system follows a layered architecture with shared business logic:
 - Environment-driven configuration (UVICORN_HOST, UVICORN_PORT, CORS_ORIGINS)
 - OpenAPI documentation at `/docs` and AI plugin manifest at `/.well-known/ai-plugin.json`
 
-**MCP Interface** (`aerospace_mcp/server.py`):
-- Five MCP tools: search_airports, plan_flight, calculate_distance, get_aircraft_performance, get_system_status
-- Dual transport modes: stdio (production) and SSE (development)
-- JSON schema validation for all tool inputs
+**MCP Interface** (`aerospace_mcp/fastmcp_server.py`):
+- 30+ MCP tools organized across 8 domain modules (core, atmosphere, frames, aerodynamics, propellers, rockets, orbits, optimization)
+- FastMCP framework for simplified tool development with decorators and automatic schema generation
+- Modular architecture with tools organized by aerospace domain
+- Full compatibility with traditional MCP protocol
 
 ### Key Components
 
@@ -112,7 +113,7 @@ The system follows a layered architecture with shared business logic:
 
 The package provides two console scripts:
 - `aerospace-mcp-http`: Starts FastAPI server (calls `app.main:run`)
-- `aerospace-mcp`: Starts MCP server (calls `aerospace_mcp.server:run`)
+- `aerospace-mcp`: Starts MCP server (calls `aerospace_mcp.fastmcp_server:run`)
 
 ### Development Patterns
 
@@ -130,8 +131,9 @@ The package provides two console scripts:
 - **geographiclib**: Precise geodesic calculations for great-circle routes
 - **openap**: Open Aircraft Performance library for realistic flight modeling
 - **fastapi/uvicorn**: HTTP API framework and ASGI server
-- **mcp**: Anthropic's Model Context Protocol SDK
+- **fastmcp**: High-level Model Context Protocol framework for simplified tool development
 - **pydantic**: Data validation and serialization
+- **Optional packages**: ambiance (atmosphere), poliastro/astropy (space), aerosandbox (aerodynamics), rocketpy (rockets), filterpy/control (GNC)
 
 ### Safety Considerations
 

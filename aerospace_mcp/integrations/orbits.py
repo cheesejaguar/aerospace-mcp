@@ -709,9 +709,9 @@ def orbital_rendezvous_planning(
         "relative_distance_km": rel_distance / 1000,
         "phase_angle_deg": rad_to_deg(phase_angle_rad),
         "phasing_time_s": phasing_time_s,
-        "phasing_time_h": phasing_time_s / 3600
-        if phasing_time_s != float("inf")
-        else float("inf"),
+        "phasing_time_h": (
+            phasing_time_s / 3600 if phasing_time_s != float("inf") else float("inf")
+        ),
         "time_to_rendezvous_s": phasing_time_s,  # Add expected key
         "chaser_period_s": chaser_props.period_s,
         "target_period_s": target_props.period_s,
@@ -720,10 +720,13 @@ def orbital_rendezvous_planning(
         "estimated_circularization_dv_ms": chaser_circ_dv,
         "total_delta_v_ms": total_dv,  # Add expected key
         "maneuvers": maneuvers,  # Add expected key
-        "feasibility": "Good"
-        if rel_distance < 100000
-        and abs(chaser_elements.inclination_deg - target_elements.inclination_deg) < 5.0
-        else "Challenging",
+        "feasibility": (
+            "Good"
+            if rel_distance < 100000
+            and abs(chaser_elements.inclination_deg - target_elements.inclination_deg)
+            < 5.0
+            else "Challenging"
+        ),
     }
 
 

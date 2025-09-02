@@ -342,9 +342,9 @@ def optimize_thrust_profile(
 
     return TrajectoryOptimizationResult(
         optimal_parameters=optimal_params,
-        optimal_objective=-optimal_value
-        if objective == "max_altitude"
-        else optimal_value,
+        optimal_objective=(
+            -optimal_value if objective == "max_altitude" else optimal_value
+        ),
         iterations=iterations,
         converged=converged,
         trajectory_points=final_trajectory,
