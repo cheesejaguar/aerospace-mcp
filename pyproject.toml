@@ -33,7 +33,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "fastmcp>=2.11.3",
     "uvloop>=0.19.0; sys_platform != 'win32'",
-    "litellm>=1.60.0",
+    "litellm>=1.76.1",
     "python-dotenv>=1.0.0",
 ]
 
