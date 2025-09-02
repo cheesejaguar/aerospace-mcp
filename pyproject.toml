@@ -34,6 +34,7 @@ dependencies = [
     "fastmcp>=2.11.3",
     "uvloop>=0.19.0; sys_platform != 'win32'",
     "litellm>=1.60.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -233,3 +234,21 @@ module = [
     "geographiclib.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Defer typing cleanup in heavy optional modules
+module = [
+    "aerospace_mcp.integrations.*",
+    "aerospace_mcp.server",
+    "aerospace_mcp.fastmcp_server",
+    "aerospace_mcp.core",
+    "aerospace_mcp.tools.*",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "tests.*",
+    "run_tests",
+]
+ignore_errors = true

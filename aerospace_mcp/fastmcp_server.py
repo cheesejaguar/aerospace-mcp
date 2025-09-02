@@ -1,7 +1,19 @@
-"""FastMCP server implementation for Aerospace flight planning tools."""
+"""FastMCP server implementation for Aerospace flight planning tools.
+
+Loads environment from .env before importing tools so feature flags and
+API keys are available at import time.
+"""
 
 import logging
 import sys
+
+# Load environment from .env before importing tool modules
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except Exception:
+    pass
 
 from fastmcp import FastMCP
 

@@ -18,6 +18,7 @@ MACHUPX_AVAILABLE = False
 
 try:
     import aerosandbox as asb
+
     # import aerosandbox.numpy as anp  # Available if needed
 
     AEROSANDBOX_AVAILABLE = True

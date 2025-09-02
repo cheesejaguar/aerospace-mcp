@@ -2,7 +2,16 @@
 
 This module provides a wrapper around the main FastAPI application
 defined in main.py, making it available as a proper package.
+Also ensures environment variables from a local .env are loaded early.
 """
+
+# Load environment from .env as early as possible
+try:  # Prefer optional dependency without hard requirement
+    from dotenv import load_dotenv
+
+    load_dotenv()  # Loads from .env in CWD or project root if present
+except Exception:
+    pass
 
 from main import app
 

@@ -377,12 +377,12 @@ def _aerosandbox_propeller_analysis(
                     power_w=power_w,
                     efficiency=efficiency,
                     advance_ratio=J,
-                    thrust_coefficient=thrust_n / (atmosphere.density * n**2 * D**4)
-                    if n > 0
-                    else 0,
-                    power_coefficient=power_w / (atmosphere.density * n**3 * D**5)
-                    if n > 0
-                    else 0,
+                    thrust_coefficient=(
+                        thrust_n / (atmosphere.density * n**2 * D**4) if n > 0 else 0
+                    ),
+                    power_coefficient=(
+                        power_w / (atmosphere.density * n**3 * D**5) if n > 0 else 0
+                    ),
                 )
             )
 
