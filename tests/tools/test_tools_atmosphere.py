@@ -29,9 +29,7 @@ def test_get_atmosphere_profile_success(monkeypatch):
 
 
 def test_get_atmosphere_profile_importerror(monkeypatch):
-    import sys as _sys
-
-    _sys.modules["aerospace_mcp.integrations.atmosphere"] = make_module()
+    sys.modules["aerospace_mcp.integrations.atmosphere"] = make_module()
     from aerospace_mcp.tools.atmosphere import get_atmosphere_profile
 
     out = get_atmosphere_profile([0], "ISA")
@@ -61,12 +59,10 @@ def test_wind_model_simple_success():
 
 
 def test_atmosphere_exception_handling(monkeypatch):
-    import sys as _sys
-
     def _boom(*a, **k):
         raise RuntimeError("boom")
 
-    _sys.modules["aerospace_mcp.integrations.atmosphere"] = make_module(
+    sys.modules["aerospace_mcp.integrations.atmosphere"] = make_module(
         get_atmosphere_profile=_boom, wind_model_simple=_boom
     )
     from aerospace_mcp.tools.atmosphere import (
@@ -81,9 +77,7 @@ def test_atmosphere_exception_handling(monkeypatch):
 
 
 def test_wind_model_simple_importerror():
-    import sys as _sys
-
-    _sys.modules["aerospace_mcp.integrations.atmosphere"] = make_module()
+    sys.modules["aerospace_mcp.integrations.atmosphere"] = make_module()
     from aerospace_mcp.tools.atmosphere import wind_model_simple
 
     out = wind_model_simple([0.0])

@@ -19,9 +19,7 @@ def test_transform_frames_success():
 
 
 def test_transform_frames_importerror():
-    import sys as _sys
-
-    _sys.modules["aerospace_mcp.integrations.frames"] = make_module()
+    sys.modules["aerospace_mcp.integrations.frames"] = make_module()
     from aerospace_mcp.tools.frames import transform_frames
 
     out = transform_frames({}, "ECEF", "ECI", None)
@@ -39,9 +37,7 @@ def test_geodetic_to_ecef_success():
 
 
 def test_geodetic_to_ecef_importerror():
-    import sys as _sys
-
-    _sys.modules["aerospace_mcp.integrations.frames"] = make_module()
+    sys.modules["aerospace_mcp.integrations.frames"] = make_module()
     from aerospace_mcp.tools.frames import geodetic_to_ecef
 
     out = geodetic_to_ecef(0, 0, 0)
@@ -87,9 +83,7 @@ def test_frames_exception_branches():
 
 
 def test_ecef_to_geodetic_importerror():
-    import sys as _sys
-
-    _sys.modules["aerospace_mcp.integrations.frames"] = make_module()
+    sys.modules["aerospace_mcp.integrations.frames"] = make_module()
     from aerospace_mcp.tools.frames import ecef_to_geodetic
 
     out = ecef_to_geodetic(0, 0, 0)

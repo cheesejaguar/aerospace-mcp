@@ -273,12 +273,12 @@ def test_get_aircraft_performance_branches(monkeypatch):
     assert "Performance estimation error" in core_tools.get_aircraft_performance(
         "A320", 1000
     )
+
     # Unexpected error
-    monkeypatch.setattr(
-        core_tools,
-        "estimates_openap",
-        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
-    )
+    def raise_runtime_error(*a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(core_tools, "estimates_openap", raise_runtime_error)
     assert "Unexpected error" in core_tools.get_aircraft_performance("A320", 1000)
 
 
