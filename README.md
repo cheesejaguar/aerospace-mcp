@@ -34,7 +34,14 @@ cd aerospace-mcp
 uv venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 uv sync
 
-# Run HTTP server
+# Copy env and configure (optional but recommended)
+cp .env.example .env
+# Edit .env as needed (host/port/log level, optional LLM tools)
+
+# Run HTTP server (package entrypoint)
+uv run aerospace-mcp-http
+
+# Alternatively (developer style)
 uvicorn main:app --reload --host 0.0.0.0 --port 8080
 
 # Test the API
@@ -74,6 +81,16 @@ Add to your Claude Desktop configuration:
 ```
 
 **Note**: The `env` section is optional and only needed if you want to enable the AI-powered agent tools for enhanced user experience.
+
+### MCP via CLI
+
+```bash
+# Start the MCP server (stdio)
+uv run aerospace-mcp
+
+# Start in SSE mode (optional)
+uv run aerospace-mcp sse 0.0.0.0 8001
+```
 
 ## 📋 Table of Contents
 
@@ -183,7 +200,7 @@ source .venv/bin/activate  # Linux/macOS
 # .venv\Scripts\activate     # Windows
 
 # Install dependencies
-uv add fastapi uvicorn[standard] airportsdata geographiclib pydantic
+uv add fastapi uvicorn[standard] airportsdata geographiclib pydantic python-dotenv
 uv add openap  # Optional: for performance estimates
 uv add mcp     # Optional: for MCP server functionality
 
@@ -215,11 +232,12 @@ source .venv/bin/activate  # Linux/macOS
 pip install --upgrade pip
 
 # Install core dependencies
-pip install fastapi uvicorn[standard] airportsdata geographiclib pydantic
+pip install fastapi uvicorn[standard] airportsdata geographiclib pydantic python-dotenv
 
 # Install optional dependencies
 pip install openap  # For performance estimates
 pip install mcp     # For MCP server
+pip install python-dotenv  # For loading .env in local/dev
 
 # Install from pyproject.toml
 pip install -e .
@@ -711,6 +729,29 @@ async def handle_call_tool(name: str, arguments: dict):
     if name == "search_airports":
         return await _handle_search_airports(arguments)
     # ... 30+ more tool handlers
+```
+
+## ⚙️ Configuration (.env)
+
+Both the HTTP server and MCP servers automatically load environment variables from a local `.env` (via `python-dotenv`).
+
+- `AEROSPACE_MCP_MODE`: `http` or `mcp` (Docker entrypoint switch)
+- `AEROSPACE_MCP_HOST`: Bind host for HTTP (default `0.0.0.0`)
+- `AEROSPACE_MCP_PORT`: Port for HTTP (default `8080`)
+- `AEROSPACE_MCP_LOG_LEVEL`: `debug|info|warning|error` (default `info`)
+- `AEROSPACE_MCP_ENV`: `development|production` (controls reload)
+- `LLM_TOOLS_ENABLED`: `true|false` to enable AI agent tools (default `false`)
+- `OPENAI_API_KEY`: Required if LLM tools are enabled
+
+Example `.env`:
+
+```
+AEROSPACE_MCP_MODE=http
+AEROSPACE_MCP_HOST=0.0.0.0
+AEROSPACE_MCP_PORT=8080
+AEROSPACE_MCP_LOG_LEVEL=debug
+LLM_TOOLS_ENABLED=false
+# OPENAI_API_KEY=sk-...
 ```
 
 **After (FastMCP):**
