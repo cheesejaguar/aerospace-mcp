@@ -119,7 +119,7 @@ requires-dist = [
     { name = "filterpy", marker = "extra == 'gnc'", specifier = ">=1.4.5" },
     { name = "geographiclib", specifier = ">=2.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.25.0" },
-    { name = "litellm", specifier = ">=1.60.0" },
+    { name = "litellm", specifier = ">=1.76.1" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.6.0" },
     { name = "openap", specifier = ">=1.3.0" },
     { name = "poliastro", marker = "extra == 'all'", specifier = ">=0.17.0" },
