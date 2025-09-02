@@ -10,10 +10,19 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
+# Check if LLM tools are enabled via environment variable
+LLM_TOOLS_ENABLED = os.environ.get("LLM_TOOLS_ENABLED", "false").lower() == "true"
+
 # Configure LiteLLM for OpenAI GPT-5-Medium
 litellm.set_verbose = False
-if "OPENAI_API_KEY" not in os.environ:
-    logger.warning("OPENAI_API_KEY not set. Agent tools will not function without it.")
+
+# Log status of LLM tools
+if not LLM_TOOLS_ENABLED:
+    logger.info("LLM tools disabled via LLM_TOOLS_ENABLED environment variable.")
+elif "OPENAI_API_KEY" not in os.environ:
+    logger.warning(
+        "LLM_TOOLS_ENABLED=true but OPENAI_API_KEY not set. Agent tools will not function without it."
+    )
 
 
 class ToolReference(BaseModel):
@@ -175,6 +184,10 @@ def format_data_for_tool(
     Returns:
         Formatted JSON string with the correct parameters for the tool
     """
+    # Check if LLM tools are enabled
+    if not LLM_TOOLS_ENABLED:
+        return "Error: LLM agent tools are disabled. Set LLM_TOOLS_ENABLED=true to enable them."
+
     # Find the tool reference first
     tool_ref = None
     for tool in AEROSPACE_TOOLS:
@@ -248,6 +261,10 @@ def select_aerospace_tool(user_task: str, user_context: str = "") -> str:
     Returns:
         Recommendation with tool name(s) and usage guidance
     """
+    # Check if LLM tools are enabled
+    if not LLM_TOOLS_ENABLED:
+        return "Error: LLM agent tools are disabled. Set LLM_TOOLS_ENABLED=true to enable them."
+
     if "OPENAI_API_KEY" not in os.environ:
         return "Error: OPENAI_API_KEY environment variable not set. Cannot use agent tools."
 

@@ -11,15 +11,47 @@ These tools use **OpenAI's GPT-5-Medium model** through **LiteLLM** to provide i
 
 ## Configuration
 
-### API Key Setup
+### Environment Variables
 
-Both agent tools require an OpenAI API key. Set the environment variable:
+The agent tools are controlled by two main environment variables:
+
+#### 1. LLM_TOOLS_ENABLED (Required)
+Controls whether the LLM-powered agent tools are enabled:
+
+```bash
+# Enable agent tools
+export LLM_TOOLS_ENABLED=true
+
+# Disable agent tools (default)
+export LLM_TOOLS_ENABLED=false
+```
+
+**Default**: `false` (agent tools disabled by default for security and cost control)
+
+#### 2. OPENAI_API_KEY (Required when enabled)
+OpenAI API key for LLM access, required only when `LLM_TOOLS_ENABLED=true`:
 
 ```bash
 export OPENAI_API_KEY="your-openai-api-key-here"
 ```
 
-Without this key, the agent tools will return helpful error messages indicating the missing configuration.
+Get your API key from: https://platform.openai.com/api-keys
+
+### Configuration File Setup
+
+You can also use a `.env` file for configuration. Copy `.env.example` to `.env` and set your values:
+
+```bash
+cp .env.example .env
+# Edit .env with your preferred settings
+```
+
+### Error Handling
+
+The agent tools provide clear error messages for different configuration states:
+- **LLM tools disabled**: "Error: LLM agent tools are disabled. Set LLM_TOOLS_ENABLED=true to enable them."
+- **Missing API key**: "Error: OPENAI_API_KEY environment variable not set. Cannot use agent tools."
+- **Invalid tool**: Lists all available tools when an invalid tool name is provided
 
 ## Available Agent Tools
 
@@ -90,6 +122,24 @@ The agent tools are aware of these aerospace-mcp tools:
 
 When using with Claude Desktop, users can leverage these agent tools for enhanced aerospace calculations:
 
+**Configuration in Claude Desktop settings:**
+```json
+{
+  "mcpServers": {
+    "aerospace-mcp": {
+      "command": "uv",
+      "args": ["run", "aerospace-mcp"],
+      "cwd": "/path/to/aerospace-mcp",
+      "env": {
+        "LLM_TOOLS_ENABLED": "true",
+        "OPENAI_API_KEY": "your-openai-api-key-here"
+      }
+    }
+  }
+}
+```
+
+**Usage Example:**
 ```
 User: "I want to plan a rocket launch to reach 100km altitude"
 
@@ -116,10 +166,12 @@ The agent tools include robust error handling:
 
 ### Performance Considerations
 
-- **Response Time**: Typically 2-5 seconds per query (depends on OpenAI API)
+- **Default Behavior**: Agent tools are **disabled by default** to prevent unexpected API usage and costs
+- **Response Time**: Typically 2-5 seconds per query (when enabled, depends on OpenAI API)
 - **Token Usage**: Optimized prompts to minimize token consumption
 - **Caching**: No caching implemented - each request is fresh
 - **Rate Limits**: Subject to OpenAI API rate limits
+- **Cost Control**: Tools only consume API tokens when explicitly enabled via `LLM_TOOLS_ENABLED=true`
 
 ## Development Notes
 
