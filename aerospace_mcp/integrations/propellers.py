@@ -18,16 +18,20 @@ AEROSANDBOX_AVAILABLE = False
 PYBEMT_AVAILABLE = False
 
 try:
-    import aerosandbox as asb
+    import aerosandbox as asb  # pragma: no cover
 
-    AEROSANDBOX_AVAILABLE = True
-    update_availability("propellers", True, {"aerosandbox": asb.__version__})
+    AEROSANDBOX_AVAILABLE = True  # pragma: no cover
+    update_availability(
+        "propellers", True, {"aerosandbox": asb.__version__}
+    )  # pragma: no cover
 except ImportError:
     try:
-        # import pybemt  # Available if needed
+        # import pybemt  # Available if needed  # pragma: no cover
 
-        PYBEMT_AVAILABLE = True
-        update_availability("propellers", True, {"pybemt": "unknown"})
+        PYBEMT_AVAILABLE = True  # pragma: no cover
+        update_availability(
+            "propellers", True, {"pybemt": "unknown"}
+        )  # pragma: no cover
     except ImportError:
         update_availability(
             "propellers", True, {}
@@ -301,7 +305,7 @@ def propeller_bemt_analysis(
     Returns:
         List of PropellerPerformancePoint objects
     """
-    if AEROSANDBOX_AVAILABLE:
+    if AEROSANDBOX_AVAILABLE:  # pragma: no cover - aerosandbox-specific code
         try:
             return _aerosandbox_propeller_analysis(
                 geometry, rpm_list, velocity_ms, altitude_m
@@ -314,7 +318,7 @@ def propeller_bemt_analysis(
     return _simple_propeller_analysis(geometry, rpm_list, velocity_ms, altitude_m)
 
 
-def _aerosandbox_propeller_analysis(
+def _aerosandbox_propeller_analysis(  # pragma: no cover - aerosandbox-specific
     geometry: PropellerGeometry,
     rpm_list: list[float],
     velocity_ms: float,

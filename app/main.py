@@ -10,7 +10,7 @@ try:  # Prefer optional dependency without hard requirement
     from dotenv import load_dotenv
 
     load_dotenv()  # Loads from .env in CWD or project root if present
-except Exception:
+except Exception:  # pragma: no cover
     pass
 
 from main import app

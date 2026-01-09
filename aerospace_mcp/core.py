@@ -12,7 +12,7 @@ OPENAP_AVAILABLE = True
 try:
     from openap import FuelFlow, prop
     from openap.gen import FlightGenerator
-except Exception:
+except Exception:  # pragma: no cover
     OPENAP_AVAILABLE = False
 
 # Constants
@@ -356,7 +356,7 @@ def plan_flight(payload: dict) -> dict:
             est, engine_name = estimates_openap(
                 req.ac_type, req.cruise_alt_ft, req.mass_kg, dist_km
             )
-        else:
+        else:  # pragma: no cover - backend is Literal["openap"], can't be anything else
             raise ValueError(f"Unknown backend: {req.backend}")
 
         # Build response
@@ -446,7 +446,7 @@ def create_flight_plan(req: PlanRequest) -> PlanResponse:
             )
         except OpenAPError as e:
             raise FlightPlanError(str(e))
-    else:
+    else:  # pragma: no cover - backend is Literal["openap"], can't be anything else
         raise FlightPlanError(f"Unknown backend: {req.backend}")
 
     return PlanResponse(

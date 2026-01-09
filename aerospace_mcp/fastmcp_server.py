@@ -12,7 +12,7 @@ try:
     from dotenv import load_dotenv
 
     load_dotenv()
-except Exception:
+except Exception:  # pragma: no cover
     pass
 
 from fastmcp import FastMCP

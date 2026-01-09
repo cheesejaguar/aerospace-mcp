@@ -388,5 +388,5 @@ try:
     from . import update_availability
 
     update_availability("rockets", True, {})
-except ImportError:
+except ImportError:  # pragma: no cover
     pass

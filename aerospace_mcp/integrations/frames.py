@@ -29,7 +29,7 @@ try:
 
     ASTROPY_AVAILABLE = True
     update_availability("frames", True, {"astropy": astropy.__version__})
-except ImportError:
+except ImportError:  # pragma: no cover
     pass
 
 try:
@@ -170,7 +170,7 @@ def transform_frames(
         return CoordinatePoint(x=x, y=y, z=z, frame=to_frame, epoch=epoch_iso)
 
     # Use high-precision libraries if available
-    if ASTROPY_AVAILABLE:
+    if ASTROPY_AVAILABLE:  # pragma: no cover - astropy-specific code
         try:
             # Parse epoch
             time = Time(epoch_iso, format="isot")

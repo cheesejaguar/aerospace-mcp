@@ -483,6 +483,6 @@ class TestFlightPlanningIntegration:
 
         for lat1, lon1, lat2, lon2, (min_km, max_km) in test_routes:
             polyline, distance_km = great_circle_points(lat1, lon1, lat2, lon2, 100.0)
-            assert min_km < distance_km < max_km, (
-                f"Distance {distance_km} not in range {min_km}-{max_km}"
-            )
+            assert (
+                min_km < distance_km < max_km
+            ), f"Distance {distance_km} not in range {min_km}-{max_km}"
