@@ -150,14 +150,11 @@ class TestPlanFlightTool:
 
         mock_resolve.side_effect = [mock_departure, mock_arrival]
 
-        # Mock route calculation
-        mock_route.return_value = {
-            "distance_km": 8280.5,
-            "distance_nm": 4471.1,
-            "initial_bearing_deg": 295.2,
-            "final_bearing_deg": 240.8,
-            "points": [[37.3626, -121.929, 0], [35.7647, 140.386, 8280.5]],
-        }
+        # Mock route calculation - returns tuple (points, distance_km)
+        mock_route.return_value = (
+            [(37.3626, -121.929), (35.7647, 140.386)],
+            8280.5,
+        )
 
         departure = {"city": "San Jose"}
         arrival = {"city": "Tokyo"}
@@ -175,18 +172,17 @@ class TestCalculateDistanceTool:
     @pytest.mark.unit
     @patch("aerospace_mcp.tools.core.great_circle_points")
     def test_calculate_distance(self, mock_route):
-        """Test distance calculation."""
-        mock_route.return_value = {
-            "distance_km": 100.0,
-            "distance_nm": 54.0,
-            "initial_bearing_deg": 45.0,
-            "final_bearing_deg": 45.0,
-        }
+        """Test distance calculation - great_circle_points returns tuple (points, distance_km)."""
+        mock_route.return_value = (
+            [(37.0, -122.0), (38.0, -121.0)],
+            100.0,
+        )
 
         result = calculate_distance(37.0, -122.0, 38.0, -121.0)
 
         assert "100.0" in result
-        assert "54.0" in result
+        # distance_nm is calculated from distance_km
+        assert "53.9" in result or "54.0" in result
 
 
 class TestSystemStatusTool:
@@ -217,12 +213,18 @@ class TestAircraftPerformanceTool:
     @patch("aerospace_mcp.tools.core.OPENAP_AVAILABLE", True)
     @patch("aerospace_mcp.tools.core.estimates_openap")
     def test_aircraft_performance_with_openap(self, mock_estimates):
-        """Test aircraft performance when OpenAP is available."""
-        mock_estimates.return_value = {
-            "fuel_kg": 2500.0,
-            "flight_time_minutes": 180.0,
-            "cruise_mach": 0.78,
-        }
+        """Test aircraft performance when OpenAP is available.
+
+        estimates_openap returns tuple (performance_dict, engine_name).
+        """
+        mock_estimates.return_value = (
+            {
+                "fuel_kg": 2500.0,
+                "flight_time_minutes": 180.0,
+                "cruise_mach": 0.78,
+            },
+            "openap",
+        )
 
         result = get_aircraft_performance("A320", 1000.0)
 

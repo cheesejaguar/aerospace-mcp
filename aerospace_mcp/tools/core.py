@@ -130,22 +130,44 @@ def plan_flight(
         # Resolve airports
         try:
             depart_airport = _resolve_endpoint(
-                request.depart_city, request.depart_country, request.prefer_depart_iata
+                request.depart_city,
+                request.depart_country,
+                request.prefer_depart_iata,
+                role="departure",
             )
             arrive_airport = _resolve_endpoint(
-                request.arrive_city, request.arrive_country, request.prefer_arrive_iata
+                request.arrive_city,
+                request.arrive_country,
+                request.prefer_arrive_iata,
+                role="arrival",
             )
         except AirportResolutionError as e:
             return f"Airport resolution error: {str(e)}"
 
-        # Calculate route
-        route_points = great_circle_points(
+        # Calculate route - great_circle_points returns (list[tuple], distance_km)
+        from geographiclib.geodesic import Geodesic
+
+        points_list, distance_km = great_circle_points(
             depart_airport.lat,
             depart_airport.lon,
             arrive_airport.lat,
             arrive_airport.lon,
             step_km=request.route_step_km,
         )
+
+        # Calculate bearings using geodesic
+        g = Geodesic.WGS84.Inverse(
+            depart_airport.lat,
+            depart_airport.lon,
+            arrive_airport.lat,
+            arrive_airport.lon,
+        )
+        initial_bearing = g["azi1"]
+        final_bearing = g["azi2"]
+
+        # Convert to nautical miles
+        NM_PER_KM = 0.539956803
+        distance_nm = distance_km * NM_PER_KM
 
         # Build response
         response = {
@@ -176,14 +198,11 @@ def plan_flight(
                 }
             },
             "route": {
-                "distance_km": route_points["distance_km"],
-                "distance_nm": route_points["distance_nm"],
-                "initial_bearing_deg": route_points["initial_bearing_deg"],
-                "final_bearing_deg": route_points["final_bearing_deg"],
-                "points": [
-                    {"lat": p[0], "lon": p[1], "distance_km": p[2]}
-                    for p in route_points["points"]
-                ],
+                "distance_km": distance_km,
+                "distance_nm": distance_nm,
+                "initial_bearing_deg": initial_bearing,
+                "final_bearing_deg": final_bearing,
+                "points": [{"lat": p[0], "lon": p[1]} for p in points_list],
             },
         }
 
@@ -194,7 +213,7 @@ def plan_flight(
                     request.ac_type,
                     request.cruise_alt_ft,
                     request.mass_kg,
-                    route_points["distance_km"],
+                    distance_km,
                 )
                 response["performance"] = performance
                 response["engine"] = engine_name
@@ -227,17 +246,28 @@ def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> st
         JSON string with distance information
     """
     try:
-        # Calculate great circle route
-        route = great_circle_points(
+        from geographiclib.geodesic import Geodesic
+
+        # Calculate great circle route - returns (list[tuple], distance_km)
+        _, distance_km = great_circle_points(
             lat1, lon1, lat2, lon2, step_km=1000000
         )  # Single segment
 
+        # Calculate bearings
+        g = Geodesic.WGS84.Inverse(lat1, lon1, lat2, lon2)
+        initial_bearing = g["azi1"]
+        final_bearing = g["azi2"]
+
+        # Convert to nautical miles
+        NM_PER_KM = 0.539956803
+        distance_nm = distance_km * NM_PER_KM
+
         return json.dumps(
             {
-                "distance_km": route["distance_km"],
-                "distance_nm": route["distance_nm"],
-                "initial_bearing_deg": route["initial_bearing_deg"],
-                "final_bearing_deg": route["final_bearing_deg"],
+                "distance_km": distance_km,
+                "distance_nm": distance_nm,
+                "initial_bearing_deg": initial_bearing,
+                "final_bearing_deg": final_bearing,
                 "coordinates": {
                     "start": {"lat": lat1, "lon": lon1},
                     "end": {"lat": lat2, "lon": lon2},
@@ -267,8 +297,16 @@ def get_aircraft_performance(
         return "OpenAP library is not available. Install with: pip install openap"
 
     try:
-        performance = estimates_openap(aircraft_type, distance_km, cruise_altitude_ft)
-        return json.dumps(performance, indent=2)
+        # estimates_openap signature: (ac_type, cruise_alt_ft, mass_kg, route_dist_km)
+        # returns: (dict, engine_name_str)
+        performance, engine_name = estimates_openap(
+            aircraft_type,
+            int(cruise_altitude_ft),
+            None,  # mass_kg - will use default 85% MTOW
+            distance_km,
+        )
+        result = {"performance": performance, "engine": engine_name}
+        return json.dumps(result, indent=2)
     except OpenAPError as e:
         return f"Performance estimation error: {str(e)}"
     except Exception as e:
