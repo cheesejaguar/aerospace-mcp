@@ -16,7 +16,12 @@ def test_wing_airfoil_and_stability_success():
     def mock_wing_vlm_analysis(geometry, alpha_deg_list, mach=0.2, reynolds=None):
         return [
             StubModel(
-                alpha_deg=a, CL=0.5, CD=0.02, CM=-0.05, L_D_ratio=25.0, span_efficiency=0.85
+                alpha_deg=a,
+                CL=0.5,
+                CD=0.02,
+                CM=-0.05,
+                L_D_ratio=25.0,
+                span_efficiency=0.85,
             )
             for a in alpha_deg_list
         ]
@@ -28,7 +33,9 @@ def test_wing_airfoil_and_stability_success():
         ]
 
     def mock_calculate_stability(geometry, alpha_deg=2.0, mach=0.2):
-        return StubModel(CL_alpha=4.5, CM_alpha=-0.5, CL_alpha_dot=None, CM_alpha_dot=None)
+        return StubModel(
+            CL_alpha=4.5, CM_alpha=-0.5, CL_alpha_dot=None, CM_alpha_dot=None
+        )
 
     sys.modules["aerospace_mcp.integrations.aero"] = make_module(
         WingGeometry=MockWingGeometry,
@@ -87,7 +94,10 @@ def test_aero_exception_branches():
     )
     from aerospace_mcp.tools import aerodynamics as aero_tools
 
-    assert "error" in aero_tools.wing_vlm_analysis({}, {"alpha_deg_list": [0.0]}, {}).lower()
+    assert (
+        "error"
+        in aero_tools.wing_vlm_analysis({}, {"alpha_deg_list": [0.0]}, {}).lower()
+    )
     assert "error" in aero_tools.airfoil_polar_analysis("NACA0012").lower()
     assert "error" in aero_tools.calculate_stability_derivatives({}, {}).lower()
     assert "error" in aero_tools.get_airfoil_database().lower()

@@ -423,9 +423,9 @@ class TestAtmosphereTable:
         altitudes, densities, speeds_of_sound = _build_atmosphere_table()
 
         # Should return numpy arrays
-        assert hasattr(altitudes, '__len__')
-        assert hasattr(densities, '__len__')
-        assert hasattr(speeds_of_sound, '__len__')
+        assert hasattr(altitudes, "__len__")
+        assert hasattr(densities, "__len__")
+        assert hasattr(speeds_of_sound, "__len__")
 
         # Should have same lengths
         assert len(altitudes) == len(densities) == len(speeds_of_sound)
@@ -444,7 +444,9 @@ class TestAtmosphereTable:
         """Test atmosphere table at sea level."""
         from aerospace_mcp.integrations.rockets import _build_atmosphere_table
 
-        altitudes, densities, speeds_of_sound = _build_atmosphere_table(max_alt_m=10000, step_m=1000)
+        altitudes, densities, speeds_of_sound = _build_atmosphere_table(
+            max_alt_m=10000, step_m=1000
+        )
 
         # First point should be sea level
         assert float(altitudes[0]) == 0.0

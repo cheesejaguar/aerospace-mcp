@@ -37,13 +37,20 @@ def wing_vlm_analysis(
         # Build WingGeometry from config
         geometry = WingGeometry(
             span_m=wing_config.get("span_m", 10.0),
-            chord_root_m=wing_config.get("chord_root_m", wing_config.get("chord_m", 2.0)),
-            chord_tip_m=wing_config.get("chord_tip_m", wing_config.get("chord_root_m", wing_config.get("chord_m", 2.0))),
+            chord_root_m=wing_config.get(
+                "chord_root_m", wing_config.get("chord_m", 2.0)
+            ),
+            chord_tip_m=wing_config.get(
+                "chord_tip_m",
+                wing_config.get("chord_root_m", wing_config.get("chord_m", 2.0)),
+            ),
             sweep_deg=wing_config.get("sweep_deg", 0.0),
             dihedral_deg=wing_config.get("dihedral_deg", 0.0),
             twist_deg=wing_config.get("twist_deg", 0.0),
             airfoil_root=wing_config.get("airfoil_root", "NACA2412"),
-            airfoil_tip=wing_config.get("airfoil_tip", wing_config.get("airfoil_root", "NACA2412")),
+            airfoil_tip=wing_config.get(
+                "airfoil_tip", wing_config.get("airfoil_root", "NACA2412")
+            ),
         )
 
         # Extract flight conditions
@@ -201,13 +208,20 @@ def calculate_stability_derivatives(wing_config: dict, flight_conditions: dict) 
         # Build WingGeometry from config
         geometry = WingGeometry(
             span_m=wing_config.get("span_m", 10.0),
-            chord_root_m=wing_config.get("chord_root_m", wing_config.get("chord_m", 2.0)),
-            chord_tip_m=wing_config.get("chord_tip_m", wing_config.get("chord_root_m", wing_config.get("chord_m", 2.0))),
+            chord_root_m=wing_config.get(
+                "chord_root_m", wing_config.get("chord_m", 2.0)
+            ),
+            chord_tip_m=wing_config.get(
+                "chord_tip_m",
+                wing_config.get("chord_root_m", wing_config.get("chord_m", 2.0)),
+            ),
             sweep_deg=wing_config.get("sweep_deg", 0.0),
             dihedral_deg=wing_config.get("dihedral_deg", 0.0),
             twist_deg=wing_config.get("twist_deg", 0.0),
             airfoil_root=wing_config.get("airfoil_root", "NACA2412"),
-            airfoil_tip=wing_config.get("airfoil_tip", wing_config.get("airfoil_root", "NACA2412")),
+            airfoil_tip=wing_config.get(
+                "airfoil_tip", wing_config.get("airfoil_root", "NACA2412")
+            ),
         )
 
         # Extract flight conditions
