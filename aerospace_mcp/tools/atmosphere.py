@@ -98,7 +98,11 @@ def wind_model_simple(
         for point in wind_profile:
             # Use correct attribute name (wind_speed_mps not wind_speed_ms)
             # Direction is assumed constant (from surface_wind_direction_deg)
-            direction = point.wind_direction_deg if point.wind_direction_deg is not None else surface_wind_direction_deg
+            direction = (
+                point.wind_direction_deg
+                if point.wind_direction_deg is not None
+                else surface_wind_direction_deg
+            )
             result_lines.append(
                 f"{point.altitude_m:8.0f} {point.wind_speed_mps:12.1f} {direction:10.0f}"
             )
@@ -108,7 +112,9 @@ def wind_model_simple(
             {
                 "altitude_m": p.altitude_m,
                 "wind_speed_mps": p.wind_speed_mps,
-                "wind_direction_deg": p.wind_direction_deg if p.wind_direction_deg is not None else surface_wind_direction_deg,
+                "wind_direction_deg": p.wind_direction_deg
+                if p.wind_direction_deg is not None
+                else surface_wind_direction_deg,
             }
             for p in wind_profile
         ]
