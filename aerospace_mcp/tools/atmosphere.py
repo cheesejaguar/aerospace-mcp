@@ -72,10 +72,13 @@ def wind_model_simple(
     try:
         from ..integrations.atmosphere import wind_model_simple as _wind_model
 
+        # Call integration function with correct argument mapping
+        # Note: integration function signature is:
+        # (altitudes_m, surface_wind_mps, surface_altitude_m, model, roughness_length_m, reference_height_m)
         wind_profile = _wind_model(
             altitudes_m,
             surface_wind_speed_ms,
-            surface_wind_direction_deg,
+            0.0,  # surface_altitude_m
             model_type,
             roughness_length_m,
         )
@@ -87,19 +90,29 @@ def wind_model_simple(
                 f"Surface Reference: {surface_wind_speed_ms:.1f} m/s @ {surface_wind_direction_deg:.0f}° (10m height)",
                 f"Roughness Length: {roughness_length_m:.3f} m",
                 "",
-                f"{'Alt (m)':>8} {'Speed (m/s)':>12} {'Dir (deg)':>10} {'Gust Factor':>12}",
+                f"{'Alt (m)':>8} {'Speed (m/s)':>12} {'Dir (deg)':>10}",
             ]
         )
-        result_lines.append("-" * 50)
+        result_lines.append("-" * 40)
 
         for point in wind_profile:
+            # Use correct attribute name (wind_speed_mps not wind_speed_ms)
+            # Direction is assumed constant (from surface_wind_direction_deg)
+            direction = point.wind_direction_deg if point.wind_direction_deg is not None else surface_wind_direction_deg
             result_lines.append(
-                f"{point.altitude_m:8.0f} {point.wind_speed_ms:12.1f} {point.wind_direction_deg:10.0f} "
-                f"{point.gust_factor:12.2f}"
+                f"{point.altitude_m:8.0f} {point.wind_speed_mps:12.1f} {direction:10.0f}"
             )
 
-        # Add JSON data
-        json_data = json.dumps([p.model_dump() for p in wind_profile], indent=2)
+        # Add JSON data with direction filled in
+        json_output = [
+            {
+                "altitude_m": p.altitude_m,
+                "wind_speed_mps": p.wind_speed_mps,
+                "wind_direction_deg": p.wind_direction_deg if p.wind_direction_deg is not None else surface_wind_direction_deg,
+            }
+            for p in wind_profile
+        ]
+        json_data = json.dumps(json_output, indent=2)
         result_lines.extend(["", "JSON Data:", json_data])
 
         return "\n".join(result_lines)
