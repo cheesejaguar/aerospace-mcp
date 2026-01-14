@@ -413,5 +413,91 @@ class TestRocketEdgeCases:
         assert performance.max_velocity_ms == 0
 
 
+class TestAtmosphereTable:
+    """Test atmosphere table pre-computation for trajectory integration."""
+
+    def test_build_atmosphere_table_returns_arrays(self):
+        """Test that _build_atmosphere_table returns NumPy arrays."""
+        from aerospace_mcp.integrations.rockets import _build_atmosphere_table
+
+        altitudes, densities, speeds_of_sound = _build_atmosphere_table()
+
+        # Should return numpy arrays
+        assert hasattr(altitudes, '__len__')
+        assert hasattr(densities, '__len__')
+        assert hasattr(speeds_of_sound, '__len__')
+
+        # Should have same lengths
+        assert len(altitudes) == len(densities) == len(speeds_of_sound)
+
+    def test_build_atmosphere_table_density_decreasing(self):
+        """Test that density decreases with altitude."""
+        from aerospace_mcp.integrations.rockets import _build_atmosphere_table
+
+        altitudes, densities, _ = _build_atmosphere_table(max_alt_m=50000, step_m=5000)
+
+        # Density should decrease with altitude
+        for i in range(1, len(densities)):
+            assert densities[i] < densities[i - 1]
+
+    def test_build_atmosphere_table_sea_level(self):
+        """Test atmosphere table at sea level."""
+        from aerospace_mcp.integrations.rockets import _build_atmosphere_table
+
+        altitudes, densities, speeds_of_sound = _build_atmosphere_table(max_alt_m=10000, step_m=1000)
+
+        # First point should be sea level
+        assert float(altitudes[0]) == 0.0
+
+        # Sea level density should be ~1.225 kg/m³
+        assert abs(float(densities[0]) - 1.225) < 0.01
+
+        # Sea level speed of sound should be ~340 m/s
+        assert abs(float(speeds_of_sound[0]) - 340.3) < 1.0
+
+    def test_build_atmosphere_table_custom_parameters(self):
+        """Test atmosphere table with custom parameters."""
+        from aerospace_mcp.integrations.rockets import _build_atmosphere_table
+
+        altitudes, _, _ = _build_atmosphere_table(max_alt_m=20000, step_m=2000)
+
+        # Should have expected number of points
+        expected_points = (20000 // 2000) + 1  # 0, 2000, 4000, ..., 20000
+        assert len(altitudes) == expected_points
+
+        # Check altitude spacing
+        for i in range(1, len(altitudes)):
+            assert float(altitudes[i] - altitudes[i - 1]) == 2000.0
+
+
+class TestThrustInterpolation:
+    """Test thrust curve interpolation."""
+
+    def test_get_thrust_at_time_basic(self):
+        """Test basic thrust interpolation."""
+        from aerospace_mcp.integrations.rockets import get_thrust_at_time
+
+        thrust_curve = [[0.0, 1000.0], [5.0, 1000.0], [5.5, 0.0]]
+
+        # At t=0, should be 1000
+        assert get_thrust_at_time(thrust_curve, 0.0) == 1000.0
+
+        # At t=2.5, should be 1000
+        assert abs(get_thrust_at_time(thrust_curve, 2.5) - 1000.0) < 1.0
+
+        # At t=5.25, should be ~500 (interpolated)
+        assert 400.0 < get_thrust_at_time(thrust_curve, 5.25) < 600.0
+
+        # After burnout, should be 0
+        assert get_thrust_at_time(thrust_curve, 10.0) == 0.0
+
+    def test_get_thrust_at_time_empty_curve(self):
+        """Test thrust interpolation with empty curve."""
+        from aerospace_mcp.integrations.rockets import get_thrust_at_time
+
+        assert get_thrust_at_time([], 1.0) == 0.0
+        assert get_thrust_at_time(None, 1.0) == 0.0
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

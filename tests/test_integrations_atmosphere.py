@@ -216,5 +216,84 @@ class TestIntegration:
                 )
 
 
+class TestVectorizedISACalculations:
+    """Test vectorized ISA atmosphere calculations."""
+
+    def test_isa_manual_vectorized_multiple_altitudes(self):
+        """Test vectorized ISA calculation for multiple altitudes."""
+        from aerospace_mcp.integrations._array_backend import np
+        from aerospace_mcp.integrations.atmosphere import _isa_manual_vectorized
+
+        altitudes = np.array([0, 5000, 11000, 20000, 35000])
+        pressures, temperatures, densities = _isa_manual_vectorized(altitudes)
+
+        # Check correct array lengths
+        assert len(pressures) == 5
+        assert len(temperatures) == 5
+        assert len(densities) == 5
+
+        # Sea level should match ISA standard
+        assert abs(pressures[0] - 101325.0) < 1.0
+        assert abs(temperatures[0] - 288.15) < 0.1
+        assert abs(densities[0] - 1.225) < 0.001
+
+        # Pressure should decrease with altitude
+        for i in range(1, len(pressures)):
+            assert pressures[i] < pressures[i - 1]
+
+    def test_isa_vectorized_consistency_with_scalar(self):
+        """Test that vectorized ISA matches scalar calculations."""
+        from aerospace_mcp.integrations._array_backend import np
+        from aerospace_mcp.integrations.atmosphere import (
+            _isa_manual,
+            _isa_manual_vectorized,
+        )
+
+        test_altitudes = [0, 1000, 5000, 11000, 15000, 25000]
+
+        for alt in test_altitudes:
+            # Scalar calculation
+            p_scalar, t_scalar, d_scalar = _isa_manual(alt)
+
+            # Vectorized calculation
+            p_vec, t_vec, d_vec = _isa_manual_vectorized(np.array([alt]))
+
+            # Should match within numerical precision
+            assert abs(p_scalar - float(p_vec[0])) < 1e-6
+            assert abs(t_scalar - float(t_vec[0])) < 1e-6
+            assert abs(d_scalar - float(d_vec[0])) < 1e-10
+
+    def test_isa_vectorized_layer_boundaries(self):
+        """Test vectorized ISA at atmosphere layer boundaries."""
+        from aerospace_mcp.integrations._array_backend import np
+        from aerospace_mcp.integrations.atmosphere import _isa_manual_vectorized
+
+        # Test near layer boundaries
+        altitudes = np.array([10999, 11000, 11001, 19999, 20000, 20001])
+        pressures, temperatures, densities = _isa_manual_vectorized(altitudes)
+
+        # Should handle layer transitions smoothly
+        assert all(p > 0 for p in pressures)
+        assert all(t > 0 for t in temperatures)
+        assert all(d > 0 for d in densities)
+
+
+class TestVectorizedWindModel:
+    """Test vectorized wind model calculations."""
+
+    def test_wind_model_vectorization(self):
+        """Test that wind model uses vectorized operations."""
+
+        altitudes = [0, 10, 50, 100, 500, 1000]
+        profile = wind_model_simple(altitudes, 10.0)
+
+        # Check all altitudes processed
+        assert len(profile) == len(altitudes)
+
+        # Verify expected behavior
+        assert profile[0].wind_speed_mps == 0.0  # At surface
+        assert profile[-1].wind_speed_mps > 10.0  # Above reference height
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

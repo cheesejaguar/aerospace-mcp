@@ -311,5 +311,147 @@ class TestNumericalStability:
             )  # Relaxed for high latitude/altitude cases
 
 
+class TestVectorizedCoordinateTransforms:
+    """Test vectorized coordinate transformation functions."""
+
+    def test_vectorized_ecef_to_geodetic(self):
+        """Test vectorized ECEF to geodetic conversion."""
+        from aerospace_mcp.integrations._array_backend import np
+        from aerospace_mcp.integrations.frames import (
+            _manual_ecef_to_geodetic_vectorized,
+        )
+
+        # Test points (San Francisco, Tokyo, London approximately)
+        x = np.array([-2699490.0, -3946792.0, 3979261.0])
+        y = np.array([-4293565.0, 3366090.0, -14416.0])
+        z = np.array([3855273.0, 3698041.0, 4969426.0])
+
+        lat, lon, alt = _manual_ecef_to_geodetic_vectorized(x, y, z)
+
+        # Check correct array lengths
+        assert len(lat) == 3
+        assert len(lon) == 3
+        assert len(alt) == 3
+
+        # All latitudes should be in valid range
+        assert all(-90 <= lat_val <= 90 for lat_val in lat)
+        # All longitudes should be in valid range
+        assert all(-180 <= lon_val <= 180 for lon_val in lon)
+
+    def test_vectorized_geodetic_to_ecef(self):
+        """Test vectorized geodetic to ECEF conversion."""
+        from aerospace_mcp.integrations._array_backend import np
+        from aerospace_mcp.integrations.frames import (
+            _manual_geodetic_to_ecef_vectorized,
+        )
+
+        lat = np.array([37.7749, 35.6762, 51.5074])
+        lon = np.array([-122.4194, 139.6503, -0.1278])
+        alt = np.array([0.0, 0.0, 0.0])
+
+        x, y, z = _manual_geodetic_to_ecef_vectorized(lat, lon, alt)
+
+        # Check correct array lengths
+        assert len(x) == 3
+        assert len(y) == 3
+        assert len(z) == 3
+
+        # All coordinates should be within Earth surface range
+        for i in range(3):
+            dist = math.sqrt(float(x[i]) ** 2 + float(y[i]) ** 2 + float(z[i]) ** 2)
+            assert 6.3e6 < dist < 6.5e6
+
+    def test_vectorized_consistency_with_scalar(self):
+        """Test that vectorized transforms match scalar transforms."""
+        from aerospace_mcp.integrations._array_backend import np
+        from aerospace_mcp.integrations.frames import (
+            _manual_ecef_to_geodetic,
+            _manual_ecef_to_geodetic_vectorized,
+            _manual_geodetic_to_ecef,
+            _manual_geodetic_to_ecef_vectorized,
+        )
+
+        # Test ECEF to geodetic
+        x, y, z = -2699490.0, -4293565.0, 3855273.0
+        scalar_result = _manual_ecef_to_geodetic(x, y, z)
+        vector_result = _manual_ecef_to_geodetic_vectorized(
+            np.array([x]), np.array([y]), np.array([z])
+        )
+
+        assert abs(scalar_result[0] - float(vector_result[0][0])) < 1e-10
+        assert abs(scalar_result[1] - float(vector_result[1][0])) < 1e-10
+        assert abs(scalar_result[2] - float(vector_result[2][0])) < 1e-6
+
+        # Test geodetic to ECEF
+        lat, lon, alt = 37.7749, -122.4194, 100.0
+        scalar_result = _manual_geodetic_to_ecef(lat, lon, alt)
+        vector_result = _manual_geodetic_to_ecef_vectorized(
+            np.array([lat]), np.array([lon]), np.array([alt])
+        )
+
+        assert abs(scalar_result[0] - float(vector_result[0][0])) < 1e-6
+        assert abs(scalar_result[1] - float(vector_result[1][0])) < 1e-6
+        assert abs(scalar_result[2] - float(vector_result[2][0])) < 1e-6
+
+
+class TestBatchTransformations:
+    """Test batch coordinate transformation function."""
+
+    def test_transform_frames_batch_same_frame(self):
+        """Test batch transformation with same source and target frame."""
+        from aerospace_mcp.integrations.frames import transform_frames_batch
+
+        xyz_list = [[1e6, 2e6, 3e6], [4e6, 5e6, 6e6], [7e6, 8e6, 9e6]]
+        results = transform_frames_batch(xyz_list, "ECEF", "ECEF")
+
+        assert len(results) == 3
+        for i, result in enumerate(results):
+            assert result.frame == "ECEF"
+            assert result.x == xyz_list[i][0]
+            assert result.y == xyz_list[i][1]
+            assert result.z == xyz_list[i][2]
+
+    def test_transform_frames_batch_ecef_to_geodetic(self):
+        """Test batch ECEF to GEODETIC conversion."""
+        from aerospace_mcp.integrations.frames import transform_frames_batch
+
+        xyz_list = [
+            [-2699490.0, -4293565.0, 3855273.0],  # San Francisco
+            [3979261.0, -14416.0, 4969426.0],  # London
+        ]
+        results = transform_frames_batch(xyz_list, "ECEF", "GEODETIC")
+
+        assert len(results) == 2
+        for result in results:
+            assert result.frame == "GEODETIC"
+            assert -90 <= result.x <= 90  # latitude
+            assert -180 <= result.y <= 180  # longitude
+
+    def test_transform_frames_batch_geodetic_to_ecef(self):
+        """Test batch GEODETIC to ECEF conversion."""
+        from aerospace_mcp.integrations.frames import transform_frames_batch
+
+        # Lat, Lon, Alt as x, y, z
+        xyz_list = [
+            [37.7749, -122.4194, 0.0],  # San Francisco
+            [51.5074, -0.1278, 0.0],  # London
+        ]
+        results = transform_frames_batch(xyz_list, "GEODETIC", "ECEF")
+
+        assert len(results) == 2
+        for result in results:
+            assert result.frame == "ECEF"
+            # Should be valid ECEF coordinates
+            dist = math.sqrt(result.x**2 + result.y**2 + result.z**2)
+            assert 6.3e6 < dist < 6.5e6
+
+    def test_transform_frames_batch_empty_list(self):
+        """Test batch transformation with empty list."""
+        from aerospace_mcp.integrations.frames import transform_frames_batch
+
+        results = transform_frames_batch([], "ECEF", "GEODETIC")
+        assert results == []
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
