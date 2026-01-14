@@ -333,7 +333,7 @@ def transform_frames_batch(
     if from_frame == to_frame:
         return [
             CoordinatePoint(x=float(xi), y=float(yi), z=float(zi), frame=to_frame, epoch=epoch_iso)
-            for xi, yi, zi in zip(to_numpy(x), to_numpy(y), to_numpy(z))
+            for xi, yi, zi in zip(to_numpy(x), to_numpy(y), to_numpy(z), strict=False)
         ]
 
     # Vectorized transformations for supported cases
@@ -341,19 +341,19 @@ def transform_frames_batch(
         lat, lon, alt = _manual_ecef_to_geodetic_vectorized(x, y, z)
         return [
             CoordinatePoint(x=float(lati), y=float(loni), z=float(alti), frame="GEODETIC", epoch=epoch_iso)
-            for lati, loni, alti in zip(to_numpy(lat), to_numpy(lon), to_numpy(alt))
+            for lati, loni, alti in zip(to_numpy(lat), to_numpy(lon), to_numpy(alt), strict=False)
         ]
 
     elif from_frame == "GEODETIC" and to_frame == "ECEF":
         x_new, y_new, z_new = _manual_geodetic_to_ecef_vectorized(x, y, z)
         return [
             CoordinatePoint(x=float(xi), y=float(yi), z=float(zi), frame="ECEF", epoch=epoch_iso)
-            for xi, yi, zi in zip(to_numpy(x_new), to_numpy(y_new), to_numpy(z_new))
+            for xi, yi, zi in zip(to_numpy(x_new), to_numpy(y_new), to_numpy(z_new), strict=False)
         ]
 
     # Fall back to single-point transformation for other cases
     return [transform_frames([float(xi), float(yi), float(zi)], from_frame, to_frame, epoch_iso)
-            for xi, yi, zi in zip(to_numpy(x), to_numpy(y), to_numpy(z))]
+            for xi, yi, zi in zip(to_numpy(x), to_numpy(y), to_numpy(z), strict=False)]
 
 
 def ecef_to_geodetic(x: float, y: float, z: float) -> GeodeticPoint:
