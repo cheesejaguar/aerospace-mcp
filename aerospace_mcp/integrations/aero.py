@@ -4,13 +4,17 @@ Aircraft Aerodynamics Tools
 Provides aircraft aerodynamics analysis including VLM wing analysis,
 airfoil polars, and basic aerodynamic calculations. Falls back to
 simplified methods when optional dependencies are unavailable.
-"""
 
-import math
+Uses NumPy for vectorized calculations with CuPy compatibility for GPU acceleration.
+"""
 
 from pydantic import BaseModel, Field
 
 from . import update_availability
+from ._array_backend import np, to_numpy
+
+# Constants
+PI = np.pi
 
 # Optional library imports
 AEROSANDBOX_AVAILABLE = False
@@ -132,63 +136,76 @@ def _simple_wing_analysis(
 ) -> list[WingAnalysisPoint]:
     """
     Simple wing analysis using lifting line theory approximations.
-    Used as fallback when advanced libraries are unavailable.
+    Uses vectorized NumPy calculations for efficiency.
     """
-    results = []
+    # Convert to NumPy array
+    alphas_deg = np.asarray(alpha_deg_list, dtype=np.float64)
+    alphas_rad = np.radians(alphas_deg)
 
     # Wing parameters
-    S = (
-        geometry.span_m * (geometry.chord_root_m + geometry.chord_tip_m) / 2
-    )  # Wing area
+    S = geometry.span_m * (geometry.chord_root_m + geometry.chord_tip_m) / 2  # Area
     AR = geometry.span_m**2 / S  # Aspect ratio
-    # taper_ratio used implicitly in the lifting line corrections
 
-    # Get airfoil properties (assume root airfoil for simplicity)
+    # Get airfoil properties
     airfoil_data = AIRFOIL_DATABASE.get(
         geometry.airfoil_root, AIRFOIL_DATABASE["NACA2412"]
     )
 
     # Prandtl lifting line corrections
-    e = 0.85  # Oswald efficiency (typical for clean wing)
+    e = 0.85  # Oswald efficiency
     CL_alpha_2d = airfoil_data["cl_alpha"]
-    CL_alpha_3d = CL_alpha_2d / (1 + CL_alpha_2d / (math.pi * AR * e))
+    CL_alpha_3d = CL_alpha_2d / (1 + CL_alpha_2d / (PI * AR * e))
 
-    # Mach number corrections (simplified)
-    beta = math.sqrt(max(0.01, 1 - mach**2))
+    # Mach number corrections
+    beta = np.sqrt(max(0.01, 1 - mach**2))
     CL_alpha_3d = CL_alpha_3d / beta
 
-    for alpha_deg in alpha_deg_list:
-        alpha_rad = math.radians(alpha_deg)
+    # Vectorized lift coefficient calculation
+    cl0 = airfoil_data.get("cl0", 0.0)
+    CL = cl0 + CL_alpha_3d * alphas_rad
 
-        # Basic lift coefficient (includes zero-angle lift coefficient)
-        CL = airfoil_data.get("cl0", 0.0) + CL_alpha_3d * alpha_rad
+    # Vectorized drag coefficient
+    CD0 = airfoil_data["cd0"] * 1.1  # Wing CD0 slightly higher than airfoil
+    CDi = CL**2 / (PI * AR * e)  # Induced drag
+    CD = CD0 + CDi
 
-        # Drag coefficient (simplified drag polar)
-        CD0 = airfoil_data["cd0"] * 1.1  # Wing CD0 slightly higher than airfoil
-        CDi = CL**2 / (math.pi * AR * e)  # Induced drag
-        CD = CD0 + CDi
+    # Pitching moment
+    CM = airfoil_data["cm0"] + 0.02 * CL
 
-        # Pitching moment (very simplified)
-        CM = airfoil_data["cm0"] + 0.02 * CL  # Approximate CM variation
+    # Apply stall model (vectorized)
+    alpha_stall = airfoil_data["alpha_stall_deg"]
+    stalled = np.abs(alphas_deg) > alpha_stall
+    stall_factor = np.where(
+        stalled,
+        np.maximum(0.3, 1.0 - 0.1 * (np.abs(alphas_deg) - alpha_stall)),
+        1.0,
+    )
+    CL = CL * stall_factor
 
-        # Apply stall model
-        if abs(alpha_deg) > airfoil_data["alpha_stall_deg"]:
-            stall_factor = 1.0 - 0.1 * (
-                abs(alpha_deg) - airfoil_data["alpha_stall_deg"]
-            )
-            stall_factor = max(0.3, stall_factor)
-            CL *= stall_factor
-            CD *= 1.5 + 0.1 * (abs(alpha_deg) - airfoil_data["alpha_stall_deg"])
+    drag_multiplier = np.where(
+        stalled, 1.5 + 0.1 * (np.abs(alphas_deg) - alpha_stall), 1.0
+    )
+    CD = CD * drag_multiplier
 
-        L_D = CL / CD if CD > 0.001 else 0.0
+    # L/D ratio
+    L_D = np.where(CD > 0.001, CL / CD, 0.0)
 
+    # Convert to output format
+    results = []
+    alphas_np = to_numpy(alphas_deg)
+    CL_np = to_numpy(CL)
+    CD_np = to_numpy(CD)
+    CM_np = to_numpy(CM)
+    L_D_np = to_numpy(L_D)
+
+    for i in range(len(alphas_np)):
         results.append(
             WingAnalysisPoint(
-                alpha_deg=alpha_deg,
-                CL=CL,
-                CD=CD,
-                CM=CM,
-                L_D_ratio=L_D,
+                alpha_deg=float(alphas_np[i]),
+                CL=float(CL_np[i]),
+                CD=float(CD_np[i]),
+                CM=float(CM_np[i]),
+                L_D_ratio=float(L_D_np[i]),
                 span_efficiency=e,
             )
         )
@@ -204,6 +221,8 @@ def wing_vlm_analysis(
 ) -> list[WingAnalysisPoint]:
     """
     Vortex Lattice Method wing analysis.
+
+    Uses NumPy for vectorized calculations when using fallback methods.
 
     Args:
         geometry: Wing planform geometry
@@ -233,6 +252,8 @@ def _aerosandbox_wing_analysis(
     reynolds: float | None,
 ) -> list[WingAnalysisPoint]:
     """AeroSandbox-based VLM analysis."""
+    import math  # AeroSandbox uses Python math, not numpy
+
     # Create wing geometry
     wing = asb.Wing(
         name="MainWing",
@@ -307,6 +328,8 @@ def airfoil_polar_analysis(
     """
     Generate airfoil polar data.
 
+    Uses NumPy for vectorized calculations when using fallback methods.
+
     Args:
         airfoil_name: Airfoil designation (e.g., "NACA2412")
         alpha_deg_list: Angles of attack to analyze
@@ -332,55 +355,68 @@ def airfoil_polar_analysis(
 def _database_airfoil_polar(
     airfoil_name: str, alpha_deg_list: list[float], reynolds: float, mach: float
 ) -> list[AirfoilPoint]:
-    """Generate airfoil polar from database coefficients."""
+    """Generate airfoil polar from database coefficients using vectorized NumPy."""
     # Get airfoil data from database
     airfoil_data = AIRFOIL_DATABASE.get(airfoil_name, AIRFOIL_DATABASE["NACA2412"])
 
+    # Convert to NumPy arrays
+    alphas_deg = np.asarray(alpha_deg_list, dtype=np.float64)
+    alphas_rad = np.radians(alphas_deg)
+
+    # Reynolds number corrections
+    re_factor = min(1.2, (reynolds / 1e6) ** 0.1)
+
+    # Mach number corrections
+    beta = np.sqrt(max(0.01, 1 - mach**2))
+
+    # Vectorized lift coefficient calculation
+    cl0 = airfoil_data.get("cl0", 0.0)
+    cl_alpha = airfoil_data["cl_alpha"]
+    cl = (cl0 + cl_alpha * alphas_rad) / beta * re_factor
+
+    # Apply stall model (vectorized)
+    alpha_stall = airfoil_data["alpha_stall_deg"]
+    stalled = np.abs(alphas_deg) > alpha_stall
+    stall_factor = np.where(
+        stalled,
+        np.maximum(0.2, 1.0 - 0.15 * (np.abs(alphas_deg) - alpha_stall)),
+        1.0,
+    )
+    cl = cl * stall_factor
+
+    # Vectorized drag coefficient calculation
+    cd0 = airfoil_data["cd0"]
+    cd0 = cd0 * (1e6 / reynolds) ** 0.2  # Reynolds correction
+
+    # Mach corrections for drag
+    if mach > 0.3:
+        cd0 = cd0 * (1 + 0.2 * (mach - 0.3) ** 2)
+
+    cd = cd0 + 0.01 * cl**2  # Simplified induced drag approximation
+
+    # Moment coefficient
+    cm = airfoil_data["cm0"] + 0.01 * cl
+
+    # L/D ratio
+    cl_cd = np.where(cd > 0.001, cl / cd, 0.0)
+
+    # Convert to output format
     results = []
+    alphas_np = to_numpy(alphas_deg)
+    cl_np = to_numpy(cl)
+    cd_np = to_numpy(cd)
+    cm_np = to_numpy(cm)
+    cl_cd_np = to_numpy(cl_cd)
 
-    for alpha_deg in alpha_deg_list:
-        alpha_rad = math.radians(alpha_deg)
-
-        # Reynolds number corrections (simplified)
-        re_factor = min(1.2, (reynolds / 1e6) ** 0.1)
-
-        # Mach number corrections
-        beta = math.sqrt(max(0.01, 1 - mach**2))
-
-        # Lift coefficient (includes zero-angle lift coefficient)
-        cl = (
-            (airfoil_data.get("cl0", 0.0) + airfoil_data["cl_alpha"] * alpha_rad)
-            / beta
-            * re_factor
-        )
-
-        # Apply stall model
-        if abs(alpha_deg) > airfoil_data["alpha_stall_deg"]:
-            stall_factor = 1.0 - 0.15 * (
-                abs(alpha_deg) - airfoil_data["alpha_stall_deg"]
-            )
-            stall_factor = max(0.2, stall_factor)
-            cl *= stall_factor
-
-        # Drag coefficient (simplified drag polar)
-        cd0 = airfoil_data["cd0"]
-        # Reynolds correction for cd0
-        cd0 *= (1e6 / reynolds) ** 0.2
-
-        # Mach corrections for drag
-        if mach > 0.3:
-            cd0 *= 1 + 0.2 * (mach - 0.3) ** 2
-
-        cd = cd0 + 0.01 * cl**2  # Simplified induced drag approximation
-
-        # Moment coefficient
-        cm = airfoil_data["cm0"] + 0.01 * cl
-
-        # L/D ratio
-        cl_cd = cl / cd if cd > 0.001 else 0.0
-
+    for i in range(len(alphas_np)):
         results.append(
-            AirfoilPoint(alpha_deg=alpha_deg, cl=cl, cd=cd, cm=cm, cl_cd_ratio=cl_cd)
+            AirfoilPoint(
+                alpha_deg=float(alphas_np[i]),
+                cl=float(cl_np[i]),
+                cd=float(cd_np[i]),
+                cm=float(cm_np[i]),
+                cl_cd_ratio=float(cl_cd_np[i]),
+            )
         )
 
     return results
@@ -438,6 +474,8 @@ def calculate_stability_derivatives(
     """
     Calculate basic longitudinal stability derivatives.
 
+    Uses NumPy for efficient calculations.
+
     Args:
         geometry: Wing geometry
         alpha_deg: Reference angle of attack
@@ -455,20 +493,19 @@ def calculate_stability_derivatives(
         geometry.airfoil_root, AIRFOIL_DATABASE["NACA2412"]
     )
 
-    # 3D lift curve slope
+    # 3D lift curve slope using NumPy
     e = 0.85  # Oswald efficiency
-    beta = math.sqrt(max(0.01, 1 - mach**2))
+    beta = float(np.sqrt(max(0.01, 1 - mach**2)))
     CL_alpha_2d = airfoil_data["cl_alpha"]
-    CL_alpha = CL_alpha_2d / (1 + CL_alpha_2d / (math.pi * AR * e)) / beta
+    CL_alpha = CL_alpha_2d / (1 + CL_alpha_2d / (PI * AR * e)) / beta
 
     # Pitching moment slope (simplified)
-    # Typically negative for stable aircraft
-    CM_alpha = -0.1 * CL_alpha  # Rough approximation
+    CM_alpha = -0.1 * CL_alpha
 
     return StabilityDerivatives(
-        CL_alpha=CL_alpha,
-        CM_alpha=CM_alpha,
-        CL_alpha_dot=None,  # Would need unsteady analysis
+        CL_alpha=float(CL_alpha),
+        CM_alpha=float(CM_alpha),
+        CL_alpha_dot=None,
         CM_alpha_dot=None,
     )
 
@@ -481,6 +518,8 @@ def get_airfoil_database() -> dict[str, dict[str, float]]:
 def estimate_wing_area(geometry: WingGeometry) -> dict[str, float]:
     """
     Calculate wing geometric properties.
+
+    Uses NumPy for efficient calculations.
 
     Args:
         geometry: Wing planform geometry
@@ -506,8 +545,8 @@ def estimate_wing_area(geometry: WingGeometry) -> dict[str, float]:
     )
 
     # Sweep of mean aerodynamic chord (approximate)
-    sweep_MAC_deg = geometry.sweep_deg - math.degrees(
-        math.atan(4 / AR * (0.25) * (1 - taper_ratio) / (1 + taper_ratio))
+    sweep_MAC_deg = geometry.sweep_deg - float(
+        np.degrees(np.arctan(4 / AR * (0.25) * (1 - taper_ratio) / (1 + taper_ratio)))
     )
 
     return {
