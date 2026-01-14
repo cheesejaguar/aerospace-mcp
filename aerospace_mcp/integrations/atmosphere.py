@@ -3,13 +3,14 @@ Atmosphere Models and Wind Profiles
 
 Provides ISA/COESA atmosphere models and wind profile calculations.
 Falls back to manual ISA calculations when optional dependencies unavailable.
-"""
 
-import math
+Uses NumPy for vectorized calculations with CuPy compatibility for GPU acceleration.
+"""
 
 from pydantic import BaseModel, Field
 
 from . import update_availability
+from ._array_backend import np, to_numpy
 
 # Constants
 R_SPECIFIC = 287.0528  # J/(kg·K) - specific gas constant for dry air
@@ -17,6 +18,16 @@ GAMMA = 1.4  # ratio of specific heats
 G0 = 9.80665  # m/s² - standard gravity
 
 # ISA Standard atmosphere layers (altitude_m, temp_K, lapse_rate_K_per_m)
+# Stored as NumPy arrays for vectorized lookups
+ISA_LAYER_ALTITUDES = np.array([0, 11000, 20000, 32000, 47000, 51000, 71000, 84852])
+ISA_LAYER_TEMPS = np.array(
+    [288.15, 216.65, 216.65, 228.65, 270.65, 270.65, 214.65, 186.946]
+)
+ISA_LAYER_LAPSE_RATES = np.array(
+    [-0.0065, 0.0, 0.001, 0.0028, 0.0, -0.0028, -0.002, 0.0]
+)
+
+# Legacy list format for compatibility
 ISA_LAYERS = [
     (0, 288.15, -0.0065),  # Troposphere
     (11000, 216.65, 0.0),  # Tropopause
@@ -66,44 +77,79 @@ class WindPoint(BaseModel):
     )
 
 
+def _isa_manual_vectorized(
+    altitudes: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Vectorized ISA calculation for multiple altitudes.
+    Returns: (pressure_pa, temperature_k, density_kg_m3) as arrays
+    """
+    altitudes = np.asarray(altitudes)
+    n = len(altitudes)
+
+    # Output arrays
+    pressures = np.zeros(n)
+    temperatures = np.zeros(n)
+    densities = np.zeros(n)
+
+    # Pre-compute base pressures at each layer boundary
+    layer_base_pressures = np.zeros(len(ISA_LAYERS))
+    layer_base_pressures[0] = 101325.0  # Sea level
+
+    for j in range(len(ISA_LAYERS) - 1):
+        h_base, T_base, lapse_rate = ISA_LAYERS[j]
+        h_top = ISA_LAYERS[j + 1][0]
+        dh = h_top - h_base
+
+        if abs(lapse_rate) < 1e-10:  # Isothermal
+            layer_base_pressures[j + 1] = layer_base_pressures[j] * np.exp(
+                -G0 * dh / (R_SPECIFIC * T_base)
+            )
+        else:  # Temperature gradient
+            T_top = T_base + lapse_rate * dh
+            layer_base_pressures[j + 1] = layer_base_pressures[j] * (
+                T_top / T_base
+            ) ** (-G0 / (R_SPECIFIC * lapse_rate))
+
+    # Process each altitude
+    for idx, h in enumerate(to_numpy(altitudes)):
+        # Find layer index
+        layer_idx = 0
+        for i in range(len(ISA_LAYERS) - 1):
+            if h >= ISA_LAYERS[i + 1][0]:
+                layer_idx = i + 1
+            else:
+                break
+
+        h_base, T_base, lapse_rate = ISA_LAYERS[layer_idx]
+        p_base = layer_base_pressures[layer_idx]
+        dh = h - h_base
+
+        if abs(lapse_rate) < 1e-10:  # Isothermal
+            T = T_base
+            p_ratio = np.exp(-G0 * dh / (R_SPECIFIC * T_base))
+        else:  # Temperature gradient
+            T = T_base + lapse_rate * dh
+            p_ratio = (T / T_base) ** (-G0 / (R_SPECIFIC * lapse_rate))
+
+        pressure = p_base * p_ratio
+        density = pressure / (R_SPECIFIC * T)
+
+        pressures[idx] = pressure
+        temperatures[idx] = T
+        densities[idx] = density
+
+    return pressures, temperatures, densities
+
+
 def _isa_manual(altitude_m: float) -> tuple[float, float, float]:
     """
     Manual ISA calculation for fallback when ambiance unavailable.
     Returns: (pressure_pa, temperature_k, density_kg_m3)
     """
-    h = altitude_m
-
-    # Find appropriate layer
-    for i, (h_base, T_base, lapse_rate) in enumerate(ISA_LAYERS):
-        if i == len(ISA_LAYERS) - 1 or h < ISA_LAYERS[i + 1][0]:
-            break
-
-    dh = h - h_base
-
-    if abs(lapse_rate) < 1e-10:  # Isothermal layer
-        T = T_base
-        p_ratio = math.exp(-G0 * dh / (R_SPECIFIC * T_base))
-    else:  # Temperature gradient layer
-        T = T_base + lapse_rate * dh
-        p_ratio = (T / T_base) ** (-G0 / (R_SPECIFIC * lapse_rate))
-
-    # Get base pressure from previous layer
-    p_base = 101325.0  # Sea level pressure
-    for j in range(i):
-        h_layer_base, T_layer_base, lr = ISA_LAYERS[j]
-        h_layer_top = ISA_LAYERS[j + 1][0]
-        dh_layer = h_layer_top - h_layer_base
-
-        if abs(lr) < 1e-10:
-            p_base *= math.exp(-G0 * dh_layer / (R_SPECIFIC * T_layer_base))
-        else:
-            T_layer_top = T_layer_base + lr * dh_layer
-            p_base *= (T_layer_top / T_layer_base) ** (-G0 / (R_SPECIFIC * lr))
-
-    pressure = p_base * p_ratio
-    density = pressure / (R_SPECIFIC * T)
-
-    return pressure, T, density
+    # Use vectorized version for consistency
+    pressures, temperatures, densities = _isa_manual_vectorized(np.array([altitude_m]))
+    return float(pressures[0]), float(temperatures[0]), float(densities[0])
 
 
 def get_atmosphere_profile(
@@ -111,6 +157,8 @@ def get_atmosphere_profile(
 ) -> list[AtmospherePoint]:
     """
     Get atmospheric properties at specified altitudes.
+
+    Uses vectorized NumPy calculations for efficient batch processing.
 
     Args:
         altitudes_m: List of geometric altitudes in meters (0-81020m when using ambiance, 0-86000m for manual ISA)
@@ -122,20 +170,24 @@ def get_atmosphere_profile(
     if model_type not in ["ISA", "COESA"]:
         raise ValueError(f"Unknown model type: {model_type}. Use 'ISA' or 'COESA'")
 
+    # Convert to NumPy array for vectorized operations
+    altitudes = np.asarray(altitudes_m, dtype=np.float64)
+
+    # Validate altitude range
+    max_altitude = 81020 if AMBIANCE_AVAILABLE else 86000
+    alt_numpy = to_numpy(altitudes)
+    if np.any(alt_numpy < 0) or np.any(alt_numpy > max_altitude):
+        range_str = f"0-{max_altitude}m"
+        raise ValueError(f"Altitude out of ISA range ({range_str})")
+
     results = []
 
-    for altitude in altitudes_m:
-        # Use appropriate limits based on availability of ambiance library
-        max_altitude = 81020 if AMBIANCE_AVAILABLE else 86000
-        if altitude < 0 or altitude > max_altitude:
-            range_str = f"0-{max_altitude}m"
-            raise ValueError(f"Altitude {altitude}m out of ISA range ({range_str})")
-
-        if AMBIANCE_AVAILABLE and model_type == "ISA":
-            # Use ambiance library if available
+    if AMBIANCE_AVAILABLE and model_type == "ISA":
+        # Use ambiance library if available (already vectorized internally)
+        for altitude in alt_numpy:
             atm = ambiance.Atmosphere(altitude)
             point = AtmospherePoint(
-                altitude_m=altitude,
+                altitude_m=float(altitude),
                 pressure_pa=float(atm.pressure),
                 temperature_k=float(atm.temperature),
                 density_kg_m3=float(atm.density),
@@ -146,21 +198,23 @@ def get_atmosphere_profile(
                     else None
                 ),
             )
-        else:
-            # Fall back to manual calculation
-            pressure, temperature, density = _isa_manual(altitude)
-            speed_of_sound = math.sqrt(GAMMA * R_SPECIFIC * temperature)
+            results.append(point)
+    else:
+        # Use vectorized manual calculation
+        pressures, temperatures, densities = _isa_manual_vectorized(altitudes)
+        speeds_of_sound = np.sqrt(GAMMA * R_SPECIFIC * temperatures)
 
+        # Convert to output format
+        for i, altitude in enumerate(alt_numpy):
             point = AtmospherePoint(
-                altitude_m=altitude,
-                pressure_pa=pressure,
-                temperature_k=temperature,
-                density_kg_m3=density,
-                speed_of_sound_mps=speed_of_sound,
+                altitude_m=float(altitude),
+                pressure_pa=float(pressures[i]),
+                temperature_k=float(temperatures[i]),
+                density_kg_m3=float(densities[i]),
+                speed_of_sound_mps=float(speeds_of_sound[i]),
                 viscosity_pa_s=None,  # Not calculated in manual mode
             )
-
-        results.append(point)
+            results.append(point)
 
     return results
 
@@ -176,6 +230,8 @@ def wind_model_simple(
     """
     Simple wind profile models for low-altitude studies.
 
+    Uses vectorized NumPy calculations for efficient batch processing.
+
     Args:
         altitudes_m: Altitude points for wind calculation
         surface_wind_mps: Wind speed at reference height
@@ -190,37 +246,55 @@ def wind_model_simple(
     if model not in ["logarithmic", "power"]:
         raise ValueError(f"Unknown wind model: {model}. Use 'logarithmic' or 'power'")
 
+    if model == "logarithmic" and roughness_length_m <= 0:
+        raise ValueError("Roughness length must be positive")
+
+    # Convert to NumPy array for vectorized operations
+    altitudes = np.asarray(altitudes_m, dtype=np.float64)
+    heights_agl = altitudes - surface_altitude_m
+
+    # Initialize wind speeds
+    wind_speeds = np.zeros_like(altitudes)
+
+    # Below ground mask
+    below_ground = heights_agl < 0
+    wind_speeds[below_ground] = 0.0
+
+    # Below reference height - linear interpolation
+    below_ref = (heights_agl >= 0) & (heights_agl < reference_height_m)
+    wind_speeds[below_ref] = (
+        surface_wind_mps * heights_agl[below_ref] / reference_height_m
+    )
+
+    # Above reference height
+    above_ref = heights_agl >= reference_height_m
+
+    if model == "logarithmic":
+        # Logarithmic wind profile
+        log_ratio_ref = np.log(reference_height_m / roughness_length_m)
+        wind_speeds[above_ref] = surface_wind_mps * (
+            np.log(heights_agl[above_ref] / roughness_length_m) / log_ratio_ref
+        )
+    else:  # power law
+        # Power law with typical exponent
+        alpha = 0.143  # Typical for open terrain
+        wind_speeds[above_ref] = (
+            surface_wind_mps * (heights_agl[above_ref] / reference_height_m) ** alpha
+        )
+
+    # Ensure non-negative
+    wind_speeds = np.maximum(wind_speeds, 0.0)
+
+    # Convert to output format
     results = []
+    alt_numpy = to_numpy(altitudes)
+    ws_numpy = to_numpy(wind_speeds)
 
-    for altitude in altitudes_m:
-        height_agl = altitude - surface_altitude_m
-
-        if height_agl < 0:
-            wind_speed = 0.0  # Below ground
-        elif height_agl < reference_height_m:
-            # Linear interpolation below reference height
-            wind_speed = surface_wind_mps * (height_agl / reference_height_m)
-        else:
-            if model == "logarithmic":
-                # Logarithmic wind profile
-                if roughness_length_m <= 0:
-                    raise ValueError("Roughness length must be positive")
-
-                wind_speed = surface_wind_mps * (
-                    math.log(height_agl / roughness_length_m)
-                    / math.log(reference_height_m / roughness_length_m)
-                )
-            else:  # power law
-                # Power law with typical exponent
-                alpha = 0.143  # Typical for open terrain
-                wind_speed = (
-                    surface_wind_mps * (height_agl / reference_height_m) ** alpha
-                )
-
+    for i, altitude in enumerate(alt_numpy):
         results.append(
             WindPoint(
-                altitude_m=altitude,
-                wind_speed_mps=max(0.0, wind_speed),  # Ensure non-negative
+                altitude_m=float(altitude),
+                wind_speed_mps=float(ws_numpy[i]),
             )
         )
 

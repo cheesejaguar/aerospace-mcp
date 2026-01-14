@@ -3,13 +3,14 @@ Coordinate Frame Transformations
 
 Provides transformations between different coordinate reference frames
 commonly used in aerospace applications (ECI, ECEF, ITRF, etc.).
-"""
 
-import math
+Uses NumPy for vectorized calculations with CuPy compatibility for GPU acceleration.
+"""
 
 from pydantic import BaseModel, Field
 
 from . import update_availability
+from ._array_backend import np, to_numpy
 
 # Earth parameters (WGS84)
 EARTH_A = 6378137.0  # Semi-major axis (m)
@@ -75,48 +76,116 @@ def _manual_ecef_to_geodetic(
 ) -> tuple[float, float, float]:
     """
     Convert ECEF to geodetic coordinates using iterative method.
+    Uses NumPy for efficient calculations.
     Returns (lat_deg, lon_deg, alt_m).
     """
     # Longitude
-    lon_rad = math.atan2(y, x)
+    lon_rad = float(np.arctan2(y, x))
 
     # Distance from z-axis
-    p = math.sqrt(x**2 + y**2)
+    p = float(np.sqrt(x**2 + y**2))
 
     # Initial guess for latitude
-    lat_rad = math.atan2(z, p * (1.0 - EARTH_E2))
+    lat_rad = float(np.arctan2(z, p * (1.0 - EARTH_E2)))
 
     # Iterative solution for latitude and altitude
     for _ in range(10):  # Usually converges in 2-3 iterations
-        sin_lat = math.sin(lat_rad)
-        N = EARTH_A / math.sqrt(1.0 - EARTH_E2 * sin_lat**2)
-        alt = p / math.cos(lat_rad) - N
-        lat_rad_new = math.atan2(z, p * (1.0 - EARTH_E2 * N / (N + alt)))
+        sin_lat = np.sin(lat_rad)
+        N = EARTH_A / float(np.sqrt(1.0 - EARTH_E2 * sin_lat**2))
+        alt = p / float(np.cos(lat_rad)) - N
+        lat_rad_new = float(np.arctan2(z, p * (1.0 - EARTH_E2 * N / (N + alt))))
 
         if abs(lat_rad_new - lat_rad) < 1e-12:
             break
         lat_rad = lat_rad_new
 
-    return math.degrees(lat_rad), math.degrees(lon_rad), alt
+    return float(np.degrees(lat_rad)), float(np.degrees(lon_rad)), alt
+
+
+def _manual_ecef_to_geodetic_vectorized(
+    x: np.ndarray, y: np.ndarray, z: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Vectorized ECEF to geodetic conversion for multiple points.
+    Returns (lat_deg, lon_deg, alt_m) as arrays.
+    """
+    x = np.asarray(x)
+    y = np.asarray(y)
+    z = np.asarray(z)
+
+    # Longitude
+    lon_rad = np.arctan2(y, x)
+
+    # Distance from z-axis
+    p = np.sqrt(x**2 + y**2)
+
+    # Initial guess for latitude
+    lat_rad = np.arctan2(z, p * (1.0 - EARTH_E2))
+
+    # Iterative solution
+    for _ in range(10):
+        sin_lat = np.sin(lat_rad)
+        N = EARTH_A / np.sqrt(1.0 - EARTH_E2 * sin_lat**2)
+        cos_lat = np.cos(lat_rad)
+        # Avoid division by zero at poles
+        alt = np.where(
+            np.abs(cos_lat) > 1e-10, p / cos_lat - N, np.abs(z) - EARTH_B
+        )
+        lat_rad_new = np.arctan2(z, p * (1.0 - EARTH_E2 * N / (N + alt)))
+
+        if np.all(np.abs(lat_rad_new - lat_rad) < 1e-12):
+            break
+        lat_rad = lat_rad_new
+
+    return np.degrees(lat_rad), np.degrees(lon_rad), alt
 
 
 def _manual_geodetic_to_ecef(
     lat_deg: float, lon_deg: float, alt_m: float
 ) -> tuple[float, float, float]:
     """
-    Convert geodetic to ECEF coordinates.
+    Convert geodetic to ECEF coordinates using NumPy.
     Returns (x, y, z) in meters.
     """
-    lat_rad = math.radians(lat_deg)
-    lon_rad = math.radians(lon_deg)
+    lat_rad = np.radians(lat_deg)
+    lon_rad = np.radians(lon_deg)
 
-    sin_lat = math.sin(lat_rad)
-    cos_lat = math.cos(lat_rad)
-    sin_lon = math.sin(lon_rad)
-    cos_lon = math.cos(lon_rad)
+    sin_lat = float(np.sin(lat_rad))
+    cos_lat = float(np.cos(lat_rad))
+    sin_lon = float(np.sin(lon_rad))
+    cos_lon = float(np.cos(lon_rad))
 
     # Radius of curvature in prime vertical
-    N = EARTH_A / math.sqrt(1.0 - EARTH_E2 * sin_lat**2)
+    N = EARTH_A / float(np.sqrt(1.0 - EARTH_E2 * sin_lat**2))
+
+    x = (N + alt_m) * cos_lat * cos_lon
+    y = (N + alt_m) * cos_lat * sin_lon
+    z = (N * (1.0 - EARTH_E2) + alt_m) * sin_lat
+
+    return x, y, z
+
+
+def _manual_geodetic_to_ecef_vectorized(
+    lat_deg: np.ndarray, lon_deg: np.ndarray, alt_m: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Vectorized geodetic to ECEF conversion.
+    Returns (x, y, z) arrays in meters.
+    """
+    lat_deg = np.asarray(lat_deg)
+    lon_deg = np.asarray(lon_deg)
+    alt_m = np.asarray(alt_m)
+
+    lat_rad = np.radians(lat_deg)
+    lon_rad = np.radians(lon_deg)
+
+    sin_lat = np.sin(lat_rad)
+    cos_lat = np.cos(lat_rad)
+    sin_lon = np.sin(lon_rad)
+    cos_lon = np.cos(lon_rad)
+
+    # Radius of curvature in prime vertical
+    N = EARTH_A / np.sqrt(1.0 - EARTH_E2 * sin_lat**2)
 
     x = (N + alt_m) * cos_lat * cos_lon
     y = (N + alt_m) * cos_lat * sin_lon
@@ -145,6 +214,8 @@ def transform_frames(
 ) -> CoordinatePoint:
     """
     Transform coordinates between reference frames.
+
+    Uses NumPy for efficient calculations.
 
     Args:
         xyz: [x, y, z] coordinates in meters
@@ -224,9 +295,72 @@ def transform_frames(
     )
 
 
+def transform_frames_batch(
+    xyz_list: list[list[float]],
+    from_frame: str,
+    to_frame: str,
+    epoch_iso: str = "2000-01-01T12:00:00",
+) -> list[CoordinatePoint]:
+    """
+    Batch transform multiple coordinates between reference frames.
+
+    Uses vectorized NumPy calculations for efficiency.
+
+    Args:
+        xyz_list: List of [x, y, z] coordinates in meters
+        from_frame: Source frame
+        to_frame: Target frame
+        epoch_iso: Reference epoch in ISO format
+
+    Returns:
+        List of CoordinatePoint with transformed coordinates
+    """
+    if not xyz_list:
+        return []
+
+    # Validate frame names
+    valid_frames = {"ECEF", "ECI", "ITRF", "GCRS", "GEODETIC"}
+    if from_frame not in valid_frames or to_frame not in valid_frames:
+        raise ValueError(f"Frame must be one of {valid_frames}")
+
+    # Convert to NumPy arrays
+    coords = np.array(xyz_list)
+    x = coords[:, 0]
+    y = coords[:, 1]
+    z = coords[:, 2]
+
+    # Same frame - no transformation needed
+    if from_frame == to_frame:
+        return [
+            CoordinatePoint(x=float(xi), y=float(yi), z=float(zi), frame=to_frame, epoch=epoch_iso)
+            for xi, yi, zi in zip(to_numpy(x), to_numpy(y), to_numpy(z))
+        ]
+
+    # Vectorized transformations for supported cases
+    if from_frame == "ECEF" and to_frame == "GEODETIC":
+        lat, lon, alt = _manual_ecef_to_geodetic_vectorized(x, y, z)
+        return [
+            CoordinatePoint(x=float(lati), y=float(loni), z=float(alti), frame="GEODETIC", epoch=epoch_iso)
+            for lati, loni, alti in zip(to_numpy(lat), to_numpy(lon), to_numpy(alt))
+        ]
+
+    elif from_frame == "GEODETIC" and to_frame == "ECEF":
+        x_new, y_new, z_new = _manual_geodetic_to_ecef_vectorized(x, y, z)
+        return [
+            CoordinatePoint(x=float(xi), y=float(yi), z=float(zi), frame="ECEF", epoch=epoch_iso)
+            for xi, yi, zi in zip(to_numpy(x_new), to_numpy(y_new), to_numpy(z_new))
+        ]
+
+    # Fall back to single-point transformation for other cases
+    return [transform_frames([float(xi), float(yi), float(zi)], from_frame, to_frame, epoch_iso)
+            for xi, yi, zi in zip(to_numpy(x), to_numpy(y), to_numpy(z))]
+
+
 def ecef_to_geodetic(x: float, y: float, z: float) -> GeodeticPoint:
     """
     Convert ECEF coordinates to geodetic (WGS84).
+
+    Uses NumPy for efficient calculations.
 
     Args:
         x, y, z: ECEF coordinates in meters
@@ -244,6 +378,8 @@ def geodetic_to_ecef(
 ) -> CoordinatePoint:
     """
     Convert geodetic coordinates to ECEF.
+
+    Uses NumPy for efficient calculations.
 
     Args:
         latitude_deg: Latitude in degrees (-90 to +90)
@@ -278,9 +414,11 @@ def get_frame_info() -> dict[str, any]:
             "skyfield": SKYFIELD_AVAILABLE,
         },
         "manual_transforms": ["ECEF <-> GEODETIC", "ECI <-> ECEF (approximate)"],
+        "vectorized_batch": True,
         "notes": [
             "High-precision transformations require astropy",
             "Manual transforms use simplified models",
             "ECI/ECEF transforms ignore Earth rotation (approximate)",
+            "Batch operations use vectorized NumPy for efficiency",
         ],
     }
