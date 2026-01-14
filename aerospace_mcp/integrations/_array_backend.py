@@ -21,6 +21,7 @@ To force NumPy (CPU):
 """
 
 import importlib
+import importlib.util
 from typing import Any
 
 # Default backend
@@ -38,15 +39,11 @@ try:
     _NUMPY_AVAILABLE = True
     _BACKEND_MODULE = numpy
 except ImportError:
+    # NumPy not installed - module will have limited functionality
     pass
 
-# Try to import CuPy (don't switch to it by default)
-try:
-    import importlib.util
-
-    _CUPY_AVAILABLE = importlib.util.find_spec("cupy") is not None
-except ImportError:
-    pass
+# Check if CuPy is available (without importing it to avoid overhead)
+_CUPY_AVAILABLE = importlib.util.find_spec("cupy") is not None
 
 
 def set_backend(backend: str) -> None:
@@ -102,13 +99,18 @@ def get_backend_info() -> dict[str, Any]:
         info["numpy_version"] = numpy.__version__
 
     if _CUPY_AVAILABLE:
-        import cupy
-
-        info["cupy_version"] = cupy.__version__
         try:
-            info["cuda_version"] = cupy.cuda.runtime.runtimeGetVersion()
-        except Exception:
-            info["cuda_version"] = "unknown"
+            import cupy
+
+            info["cupy_version"] = cupy.__version__
+            try:
+                info["cuda_version"] = cupy.cuda.runtime.runtimeGetVersion()
+            except Exception:
+                # CUDA runtime not accessible
+                info["cuda_version"] = "unknown"
+        except ImportError:
+            # CuPy detection was wrong, update flag
+            info["cupy_available"] = False
 
     return info
 
@@ -153,8 +155,9 @@ class _BackendProxy:
 
     def __getattr__(self, name: str) -> Any:
         if _BACKEND_MODULE is None:
-            raise ImportError(
-                "No array backend available. Install numpy: pip install numpy"
+            raise AttributeError(
+                f"Cannot access '{name}': No array backend available. "
+                "Install numpy: pip install numpy"
             )
         return getattr(_BACKEND_MODULE, name)
 
