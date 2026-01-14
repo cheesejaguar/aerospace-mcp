@@ -186,14 +186,15 @@ def get_atmosphere_profile(
         # Use ambiance library if available (already vectorized internally)
         for altitude in alt_numpy:
             atm = ambiance.Atmosphere(altitude)
+            # Use .item() to extract scalar from 0-d arrays (NumPy 1.25+ deprecation fix)
             point = AtmospherePoint(
                 altitude_m=float(altitude),
-                pressure_pa=float(atm.pressure),
-                temperature_k=float(atm.temperature),
-                density_kg_m3=float(atm.density),
-                speed_of_sound_mps=float(atm.speed_of_sound),
+                pressure_pa=float(np.asarray(atm.pressure).item()),
+                temperature_k=float(np.asarray(atm.temperature).item()),
+                density_kg_m3=float(np.asarray(atm.density).item()),
+                speed_of_sound_mps=float(np.asarray(atm.speed_of_sound).item()),
                 viscosity_pa_s=(
-                    float(atm.dynamic_viscosity)
+                    float(np.asarray(atm.dynamic_viscosity).item())
                     if hasattr(atm, "dynamic_viscosity")
                     else None
                 ),

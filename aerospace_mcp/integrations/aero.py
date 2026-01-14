@@ -443,13 +443,18 @@ def _aerosandbox_airfoil_polar(
                 cd = result["CD"]
                 cm = result.get("CM", 0.0)
 
+                # Use np.asarray().item() to extract scalar (NumPy 1.25+ deprecation fix)
+                cl_scalar = float(np.asarray(cl).item())
+                cd_scalar = float(np.asarray(cd).item())
+                cm_scalar = float(np.asarray(cm).item())
+
                 results.append(
                     AirfoilPoint(
                         alpha_deg=alpha_deg,
-                        cl=float(cl),
-                        cd=float(cd),
-                        cm=float(cm),
-                        cl_cd_ratio=float(cl / cd) if cd > 0.001 else 0.0,
+                        cl=cl_scalar,
+                        cd=cd_scalar,
+                        cm=cm_scalar,
+                        cl_cd_ratio=cl_scalar / cd_scalar if cd_scalar > 0.001 else 0.0,
                     )
                 )
 
