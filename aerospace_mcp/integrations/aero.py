@@ -141,7 +141,7 @@ def _simple_wing_analysis(
         geometry.span_m * (geometry.chord_root_m + geometry.chord_tip_m) / 2
     )  # Wing area
     AR = geometry.span_m**2 / S  # Aspect ratio
-    geometry.chord_tip_m / geometry.chord_root_m
+    # taper_ratio used implicitly in the lifting line corrections
 
     # Get airfoil properties (assume root airfoil for simplicity)
     airfoil_data = AIRFOIL_DATABASE.get(

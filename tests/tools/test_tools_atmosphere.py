@@ -41,9 +41,8 @@ def test_wind_model_simple_success():
         return [
             StubModel(
                 altitude_m=a,
-                wind_speed_ms=5.0 + i,
+                wind_speed_mps=5.0 + i,  # Correct attribute name
                 wind_direction_deg=270.0,
-                gust_factor=1.0,
             )
             for i, a in enumerate([0.0, 50.0])
         ]

@@ -12,17 +12,46 @@ def wing_vlm_analysis(
     """Analyze wing aerodynamics using Vortex Lattice Method or simplified lifting line theory.
 
     Args:
-        wing_config: Wing configuration (span_m, chord_m, sweep_deg, etc.)
-        flight_conditions: Flight conditions (airspeed_ms, altitude_m, alpha_deg)
-        analysis_options: Optional analysis settings
+        wing_config: Wing configuration with keys:
+            - span_m: Wing span in meters
+            - chord_root_m: Root chord in meters
+            - chord_tip_m: Tip chord in meters (optional, defaults to chord_root_m)
+            - sweep_deg: Quarter-chord sweep in degrees (optional, default 0)
+            - dihedral_deg: Dihedral angle in degrees (optional, default 0)
+            - twist_deg: Tip twist in degrees (optional, default 0)
+            - airfoil_root: Root airfoil name (optional, default 'NACA2412')
+            - airfoil_tip: Tip airfoil name (optional, default matches root)
+        flight_conditions: Flight conditions with keys:
+            - alpha_deg_list: List of angles of attack to analyze (required)
+            - mach: Mach number (optional, default 0.2)
+            - reynolds: Reynolds number (optional)
+        analysis_options: Optional analysis settings (currently unused)
 
     Returns:
         Formatted string with aerodynamic analysis results
     """
     try:
-        from ..integrations.aero import wing_vlm_analysis as _wing_analysis
+        from ..integrations.aero import WingGeometry, wing_vlm_analysis as _wing_analysis
 
-        result = _wing_analysis(wing_config, flight_conditions, analysis_options)
+        # Build WingGeometry from config
+        geometry = WingGeometry(
+            span_m=wing_config.get("span_m", 10.0),
+            chord_root_m=wing_config.get("chord_root_m", wing_config.get("chord_m", 2.0)),
+            chord_tip_m=wing_config.get("chord_tip_m", wing_config.get("chord_root_m", wing_config.get("chord_m", 2.0))),
+            sweep_deg=wing_config.get("sweep_deg", 0.0),
+            dihedral_deg=wing_config.get("dihedral_deg", 0.0),
+            twist_deg=wing_config.get("twist_deg", 0.0),
+            airfoil_root=wing_config.get("airfoil_root", "NACA2412"),
+            airfoil_tip=wing_config.get("airfoil_tip", wing_config.get("airfoil_root", "NACA2412")),
+        )
+
+        # Extract flight conditions
+        alpha_deg_list = flight_conditions.get("alpha_deg_list", [0.0, 2.0, 5.0])
+        mach = flight_conditions.get("mach", 0.2)
+        reynolds = flight_conditions.get("reynolds", None)
+
+        # Call integration function with correct signature
+        analysis_results = _wing_analysis(geometry, alpha_deg_list, mach, reynolds)
 
         # Format response
         result_lines = ["Wing Aerodynamic Analysis (VLM)", "=" * 50]
@@ -31,41 +60,39 @@ def wing_vlm_analysis(
         result_lines.extend(
             [
                 "Configuration:",
-                f"  Span: {wing_config.get('span_m', 0):.1f} m",
-                f"  Chord: {wing_config.get('chord_m', 0):.1f} m",
-                f"  Aspect Ratio: {result.get('aspect_ratio', 0):.1f}",
-                f"  Sweep: {wing_config.get('sweep_deg', 0):.1f}°",
+                f"  Span: {geometry.span_m:.1f} m",
+                f"  Root Chord: {geometry.chord_root_m:.1f} m",
+                f"  Tip Chord: {geometry.chord_tip_m:.1f} m",
+                f"  Sweep: {geometry.sweep_deg:.1f}°",
                 "",
-            ]
-        )
-
-        # Flight conditions
-        result_lines.extend(
-            [
                 "Flight Conditions:",
-                f"  Airspeed: {flight_conditions.get('airspeed_ms', 0):.1f} m/s",
-                f"  Altitude: {flight_conditions.get('altitude_m', 0):.0f} m",
-                f"  Angle of Attack: {flight_conditions.get('alpha_deg', 0):.1f}°",
+                f"  Mach: {mach:.2f}",
                 "",
+                f"{'Alpha (°)':>10} {'CL':>8} {'CD':>8} {'CM':>8} {'L/D':>8}",
             ]
         )
+        result_lines.append("-" * 50)
 
-        # Results
-        result_lines.extend(
-            [
-                "Aerodynamic Results:",
-                f"  Lift Coefficient: {result.get('cl', 0):.3f}",
-                f"  Drag Coefficient: {result.get('cd', 0):.4f}",
-                f"  L/D Ratio: {result.get('cl_cd_ratio', 0):.1f}",
-                f"  Lift (N): {result.get('lift_n', 0):.0f}",
-                f"  Drag (N): {result.get('drag_n', 0):.0f}",
-                "",
-            ]
-        )
+        for point in analysis_results:
+            result_lines.append(
+                f"{point.alpha_deg:10.1f} {point.CL:8.4f} {point.CD:8.5f} "
+                f"{point.CM:8.4f} {point.L_D_ratio:8.1f}"
+            )
 
         # Add JSON data
-        json_data = json.dumps(result, indent=2)
-        result_lines.extend(["JSON Data:", json_data])
+        json_output = [
+            {
+                "alpha_deg": p.alpha_deg,
+                "CL": p.CL,
+                "CD": p.CD,
+                "CM": p.CM,
+                "L_D_ratio": p.L_D_ratio,
+                "span_efficiency": p.span_efficiency,
+            }
+            for p in analysis_results
+        ]
+        json_data = json.dumps(json_output, indent=2)
+        result_lines.extend(["", "JSON Data:", json_data])
 
         return "\n".join(result_lines)
 
@@ -98,8 +125,9 @@ def airfoil_polar_analysis(
 
         alpha_range_deg = alpha_range_deg or list(range(-10, 21, 2))
 
-        result = _airfoil_analysis(
-            airfoil_name, reynolds_number, mach_number, alpha_range_deg
+        # Integration function signature: (airfoil_name, alpha_deg_list, reynolds, mach)
+        polar_results = _airfoil_analysis(
+            airfoil_name, alpha_range_deg, reynolds_number, mach_number
         )
 
         # Format response
@@ -114,15 +142,26 @@ def airfoil_polar_analysis(
         )
         result_lines.append("-" * 50)
 
-        for point in result.get("polar_data", []):
+        # polar_results is a list of AirfoilPoint objects
+        for point in polar_results:
             result_lines.append(
-                f"{point.get('alpha_deg', 0):8.1f} {point.get('cl', 0):8.4f} "
-                f"{point.get('cd', 0):8.5f} {point.get('cm', 0):8.4f} "
-                f"{point.get('cl_cd_ratio', 0):8.1f}"
+                f"{point.alpha_deg:8.1f} {point.cl:8.4f} "
+                f"{point.cd:8.5f} {point.cm:8.4f} "
+                f"{point.cl_cd_ratio:8.1f}"
             )
 
         # Add JSON data
-        json_data = json.dumps(result, indent=2)
+        json_output = [
+            {
+                "alpha_deg": p.alpha_deg,
+                "cl": p.cl,
+                "cd": p.cd,
+                "cm": p.cm,
+                "cl_cd_ratio": p.cl_cd_ratio,
+            }
+            for p in polar_results
+        ]
+        json_data = json.dumps(json_output, indent=2)
         result_lines.extend(["", "JSON Data:", json_data])
 
         return "\n".join(result_lines)
@@ -138,17 +177,52 @@ def calculate_stability_derivatives(wing_config: dict, flight_conditions: dict) 
     """Calculate basic longitudinal stability derivatives for a wing.
 
     Args:
-        wing_config: Wing configuration parameters
-        flight_conditions: Flight conditions
+        wing_config: Wing configuration with keys:
+            - span_m: Wing span in meters
+            - chord_root_m: Root chord in meters
+            - chord_tip_m: Tip chord in meters (optional)
+            - sweep_deg: Quarter-chord sweep (optional, default 0)
+            - dihedral_deg: Dihedral angle (optional, default 0)
+            - twist_deg: Tip twist (optional, default 0)
+            - airfoil_root: Root airfoil name (optional, default 'NACA2412')
+            - airfoil_tip: Tip airfoil name (optional)
+        flight_conditions: Flight conditions with keys:
+            - alpha_deg: Reference angle of attack (optional, default 2.0)
+            - mach: Mach number (optional, default 0.2)
 
     Returns:
         JSON string with stability derivatives
     """
     try:
-        from ..integrations.aero import calculate_stability_derivatives as _stability
+        from ..integrations.aero import WingGeometry, calculate_stability_derivatives as _stability
 
-        result = _stability(wing_config, flight_conditions)
-        return json.dumps(result, indent=2)
+        # Build WingGeometry from config
+        geometry = WingGeometry(
+            span_m=wing_config.get("span_m", 10.0),
+            chord_root_m=wing_config.get("chord_root_m", wing_config.get("chord_m", 2.0)),
+            chord_tip_m=wing_config.get("chord_tip_m", wing_config.get("chord_root_m", wing_config.get("chord_m", 2.0))),
+            sweep_deg=wing_config.get("sweep_deg", 0.0),
+            dihedral_deg=wing_config.get("dihedral_deg", 0.0),
+            twist_deg=wing_config.get("twist_deg", 0.0),
+            airfoil_root=wing_config.get("airfoil_root", "NACA2412"),
+            airfoil_tip=wing_config.get("airfoil_tip", wing_config.get("airfoil_root", "NACA2412")),
+        )
+
+        # Extract flight conditions
+        alpha_deg = flight_conditions.get("alpha_deg", 2.0)
+        mach = flight_conditions.get("mach", 0.2)
+
+        # Integration function signature: (geometry, alpha_deg, mach)
+        result = _stability(geometry, alpha_deg, mach)
+
+        # Format output
+        output = {
+            "CL_alpha": result.CL_alpha,
+            "CM_alpha": result.CM_alpha,
+            "CL_alpha_dot": result.CL_alpha_dot,
+            "CM_alpha_dot": result.CM_alpha_dot,
+        }
+        return json.dumps(output, indent=2)
 
     except ImportError:
         return "Stability analysis not available - install aerodynamics packages"
