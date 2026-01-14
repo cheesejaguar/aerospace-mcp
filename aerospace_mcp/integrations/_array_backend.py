@@ -42,9 +42,9 @@ except ImportError:
 
 # Try to import CuPy (don't switch to it by default)
 try:
-    import cupy
+    import importlib.util
 
-    _CUPY_AVAILABLE = True
+    _CUPY_AVAILABLE = importlib.util.find_spec("cupy") is not None
 except ImportError:
     pass
 

@@ -10,7 +10,7 @@ Uses NumPy for vectorized calculations with CuPy compatibility for GPU accelerat
 from dataclasses import dataclass
 from typing import Any
 
-from ._array_backend import np, to_numpy
+from ._array_backend import np
 from .atmosphere import get_atmosphere_profile
 
 # Constants
@@ -271,7 +271,6 @@ def analyze_rocket_performance(
     machs = np.array([p.mach for p in trajectory])
     dynamic_pressures = np.array([p.dynamic_pressure_pa for p in trajectory])
     thrusts = np.array([p.thrust_n for p in trajectory])
-    masses = np.array([p.mass_kg for p in trajectory])
 
     # Find key performance metrics using NumPy
     max_altitude = float(np.max(altitudes))

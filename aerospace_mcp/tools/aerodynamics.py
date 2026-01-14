@@ -31,7 +31,8 @@ def wing_vlm_analysis(
         Formatted string with aerodynamic analysis results
     """
     try:
-        from ..integrations.aero import WingGeometry, wing_vlm_analysis as _wing_analysis
+        from ..integrations.aero import WingGeometry
+        from ..integrations.aero import wing_vlm_analysis as _wing_analysis
 
         # Build WingGeometry from config
         geometry = WingGeometry(
@@ -194,7 +195,8 @@ def calculate_stability_derivatives(wing_config: dict, flight_conditions: dict) 
         JSON string with stability derivatives
     """
     try:
-        from ..integrations.aero import WingGeometry, calculate_stability_derivatives as _stability
+        from ..integrations.aero import WingGeometry
+        from ..integrations.aero import calculate_stability_derivatives as _stability
 
         # Build WingGeometry from config
         geometry = WingGeometry(
