@@ -33,16 +33,11 @@ def test_search_airports_and_distance(monkeypatch):
     out3 = core_tools.search_airports("  ")
     assert "required" in out3
 
-    # calculate_distance expects great_circle_points providing mapping
+    # calculate_distance expects great_circle_points returning tuple (points, distance_km)
     monkeypatch.setattr(
         core_tools,
         "great_circle_points",
-        lambda a, b, c, d, step_km: {
-            "distance_km": 1000.0,
-            "distance_nm": 539.9,
-            "initial_bearing_deg": 10.0,
-            "final_bearing_deg": 20.0,
-        },
+        lambda a, b, c, d, step_km: ([(0.0, 0.0), (1.0, 1.0)], 1000.0),
     )
     dist = core_tools.calculate_distance(0, 0, 1, 1)
     data = json.loads(dist)
@@ -65,20 +60,15 @@ def test_plan_and_status(monkeypatch):
     monkeypatch.setattr(
         core_tools,
         "_resolve_endpoint",
-        lambda city, country, iata=None: A(iata or "SJC"),
+        lambda city, country, iata=None, role=None: A(iata or "SJC"),
     )
+    # great_circle_points returns tuple (points, distance_km)
     monkeypatch.setattr(
         core_tools,
         "great_circle_points",
-        lambda a, b, c, d, step_km: {
-            "distance_km": 1000.0,
-            "distance_nm": 539.9,
-            "initial_bearing_deg": 10.0,
-            "final_bearing_deg": 20.0,
-            "points": [(0.0, 0.0, 0.0)],
-        },
+        lambda a, b, c, d, step_km: ([(0.0, 0.0), (1.0, 1.0)], 1000.0),
     )
-    # estimates_openap may not be available; return simple tuple
+    # estimates_openap returns tuple (dict, engine_name)
     monkeypatch.setattr(core_tools, "OPENAP_AVAILABLE", True)
     monkeypatch.setattr(
         core_tools,
@@ -133,18 +123,13 @@ def test_plan_optional_fields_and_resolution_error(monkeypatch):
     monkeypatch.setattr(
         core_tools,
         "_resolve_endpoint",
-        lambda city, country, iata=None: A(iata or "SJC", country or "US"),
+        lambda city, country, iata=None, role=None: A(iata or "SJC", country or "US"),
     )
+    # great_circle_points returns tuple (points, distance_km)
     monkeypatch.setattr(
         core_tools,
         "great_circle_points",
-        lambda *a, **k: {
-            "distance_km": 1.0,
-            "distance_nm": 1.0,
-            "initial_bearing_deg": 0.0,
-            "final_bearing_deg": 0.0,
-            "points": [(0, 0, 0)],
-        },
+        lambda *a, **k: ([(0.0, 0.0), (1.0, 1.0)], 1.0),
     )
     out_ok = core_tools.plan_flight(
         {"city": "City", "country": "US"},
@@ -180,7 +165,9 @@ def test_plan_invalid_request(monkeypatch):
             self.lon = 0.0
             self.tz = None
 
-    monkeypatch.setattr(core_tools, "_resolve_endpoint", lambda *a, **k: A("SJC"))
+    monkeypatch.setattr(
+        core_tools, "_resolve_endpoint", lambda *a, role=None, **k: A("SJC")
+    )
     # Build invalid PlanRequest by negative route_step_km
     out = core_tools.plan_flight(
         {"city": "City"},
@@ -204,17 +191,14 @@ def test_plan_openap_error_and_unavailable(monkeypatch):
             self.lon = 0.0
             self.tz = None
 
-    monkeypatch.setattr(core_tools, "_resolve_endpoint", lambda *a, **k: A("SJC"))
+    monkeypatch.setattr(
+        core_tools, "_resolve_endpoint", lambda *a, role=None, **k: A("SJC")
+    )
+    # great_circle_points returns tuple (points, distance_km)
     monkeypatch.setattr(
         core_tools,
         "great_circle_points",
-        lambda *a, **k: {
-            "distance_km": 1.0,
-            "distance_nm": 1.0,
-            "initial_bearing_deg": 0.0,
-            "final_bearing_deg": 0.0,
-            "points": [(0, 0, 0)],
-        },
+        lambda *a, **k: ([(0.0, 0.0), (1.0, 1.0)], 1.0),
     )
     # OpenAP available but raises
     monkeypatch.setattr(core_tools, "OPENAP_AVAILABLE", True)
@@ -259,9 +243,11 @@ def test_get_aircraft_performance_branches(monkeypatch):
     assert "OpenAP library is not available" in core_tools.get_aircraft_performance(
         "A320", 1000
     )
-    # Available success
+    # Available success - estimates_openap returns tuple (dict, engine_name)
     monkeypatch.setattr(core_tools, "OPENAP_AVAILABLE", True)
-    monkeypatch.setattr(core_tools, "estimates_openap", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(
+        core_tools, "estimates_openap", lambda *a, **k: ({"ok": True}, "engine")
+    )
     assert "ok" in core_tools.get_aircraft_performance("A320", 1000)
     # OpenAPError
     from aerospace_mcp.core import OpenAPError
