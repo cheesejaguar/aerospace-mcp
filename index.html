@@ -407,6 +407,193 @@
         .number { color: #f59e0b; }
         .comment { color: #64748b; font-style: italic; }
         .function { color: #06b6d4; }
+
+        /* Mock Terminal Styles */
+        .terminal-section {
+            background: var(--bg-card);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .terminal-tabs {
+            display: flex;
+            background: #1a1a2e;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            overflow-x: auto;
+        }
+
+        .terminal-tab {
+            padding: 0.75rem 1.25rem;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            transition: var(--transition);
+            white-space: nowrap;
+            border-bottom: 2px solid transparent;
+        }
+
+        .terminal-tab:hover {
+            color: var(--text-color);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .terminal-tab.active {
+            color: var(--accent-color);
+            border-bottom-color: var(--accent-color);
+            background: rgba(245, 158, 11, 0.1);
+        }
+
+        .terminal-window {
+            display: none;
+        }
+
+        .terminal-window.active {
+            display: block;
+        }
+
+        .terminal-header {
+            background: linear-gradient(180deg, #3d3d5c 0%, #2d2d44 100%);
+            padding: 0.5rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .terminal-buttons {
+            display: flex;
+            gap: 6px;
+        }
+
+        .terminal-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .terminal-btn.red { background: #ff5f56; }
+        .terminal-btn.yellow { background: #ffbd2e; }
+        .terminal-btn.green { background: #27ca40; }
+
+        .terminal-title {
+            flex: 1;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+
+        .terminal-body {
+            background: #0d1117;
+            padding: 1.5rem;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            min-height: 400px;
+            overflow-x: auto;
+        }
+
+        .terminal-line {
+            margin-bottom: 0.5rem;
+        }
+
+        .terminal-prompt {
+            color: #58a6ff;
+        }
+
+        .terminal-user-input {
+            color: #c9d1d9;
+        }
+
+        .terminal-tool-call {
+            background: rgba(136, 87, 255, 0.1);
+            border-left: 3px solid #8957ff;
+            padding: 0.75rem 1rem;
+            margin: 0.75rem 0;
+            border-radius: 0 6px 6px 0;
+        }
+
+        .terminal-tool-name {
+            color: #d2a8ff;
+            font-weight: 600;
+        }
+
+        .terminal-tool-params {
+            color: #7ee787;
+            margin-left: 1rem;
+        }
+
+        .terminal-response {
+            background: rgba(33, 38, 45, 0.8);
+            border-radius: 6px;
+            padding: 1rem;
+            margin: 0.75rem 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .terminal-response-header {
+            color: var(--accent-color);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .terminal-response-content {
+            color: #8b949e;
+        }
+
+        .terminal-response-content .highlight {
+            color: #58a6ff;
+        }
+
+        .terminal-response-content .value {
+            color: #7ee787;
+        }
+
+        .terminal-response-content .label {
+            color: #d2a8ff;
+        }
+
+        .terminal-json {
+            color: #c9d1d9;
+        }
+
+        .terminal-json .json-key {
+            color: #79c0ff;
+        }
+
+        .terminal-json .json-string {
+            color: #a5d6ff;
+        }
+
+        .terminal-json .json-number {
+            color: #7ee787;
+        }
+
+        .terminal-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 16px;
+            background: #58a6ff;
+            animation: blink 1s step-end infinite;
+            vertical-align: middle;
+            margin-left: 2px;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        .terminal-divider {
+            border: none;
+            border-top: 1px dashed rgba(255, 255, 255, 0.1);
+            margin: 1rem 0;
+        }
     </style>
 </head>
 <!-- Google tag (gtag.js) -->
@@ -623,6 +810,264 @@ flight_plan = response.<span class="function">json</span>()</code>
         </div>
     </section>
 
+    <!-- Mock Terminal Section -->
+    <section class="section">
+        <h2>🖥️ See It In Action</h2>
+        <p style="text-align: center; color: var(--text-secondary); margin-bottom: 2rem; max-width: 700px; margin-left: auto; margin-right: auto;">
+            Experience aerospace-mcp tools through Claude Code. Click the tabs below to see example interactions.
+        </p>
+
+        <div class="terminal-section">
+            <div class="terminal-tabs">
+                <button class="terminal-tab active" onclick="showTerminalTab('airport-search')">
+                    ✈️ Airport Search
+                </button>
+                <button class="terminal-tab" onclick="showTerminalTab('launch-optimization')">
+                    🚀 Launch Optimization
+                </button>
+                <button class="terminal-tab" onclick="showTerminalTab('hohmann-transfer')">
+                    🛰️ Hohmann Transfer
+                </button>
+            </div>
+
+            <!-- Airport Search Example -->
+            <div id="airport-search" class="terminal-window active">
+                <div class="terminal-header">
+                    <div class="terminal-buttons">
+                        <span class="terminal-btn red"></span>
+                        <span class="terminal-btn yellow"></span>
+                        <span class="terminal-btn green"></span>
+                    </div>
+                    <span class="terminal-title">claude — aerospace-mcp</span>
+                </div>
+                <div class="terminal-body">
+                    <div class="terminal-line">
+                        <span class="terminal-prompt">❯ </span>
+                        <span class="terminal-user-input">Find airports in Tokyo, Japan</span>
+                    </div>
+
+                    <div class="terminal-tool-call">
+                        <div><span class="terminal-tool-name">search_airports</span></div>
+                        <div class="terminal-tool-params">
+                            query: <span class="json-string">"Tokyo"</span>, country: <span class="json-string">"JP"</span>, query_type: <span class="json-string">"city"</span>
+                        </div>
+                    </div>
+
+                    <div class="terminal-response">
+                        <div class="terminal-response-header">
+                            ✓ Found 3 airports in Tokyo, Japan
+                        </div>
+                        <div class="terminal-response-content">
+                            <div style="margin-bottom: 0.75rem;">
+                                <span class="highlight">NRT</span> — <span class="label">Narita International Airport</span><br>
+                                <span style="margin-left: 2.5rem;">Coordinates: <span class="value">35.7647°N, 140.3864°E</span></span>
+                            </div>
+                            <div style="margin-bottom: 0.75rem;">
+                                <span class="highlight">HND</span> — <span class="label">Tokyo Haneda International Airport</span><br>
+                                <span style="margin-left: 2.5rem;">Coordinates: <span class="value">35.5494°N, 139.7798°E</span></span>
+                            </div>
+                            <div>
+                                <span class="highlight">NJA</span> — <span class="label">Atsugi Naval Air Facility</span><br>
+                                <span style="margin-left: 2.5rem;">Coordinates: <span class="value">35.4546°N, 139.4500°E</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="terminal-divider">
+
+                    <div class="terminal-line">
+                        <span class="terminal-prompt">❯ </span>
+                        <span class="terminal-user-input">What's the IATA code for San Francisco International?</span>
+                    </div>
+
+                    <div class="terminal-tool-call">
+                        <div><span class="terminal-tool-name">search_airports</span></div>
+                        <div class="terminal-tool-params">
+                            query: <span class="json-string">"San Francisco"</span>, country: <span class="json-string">"US"</span>
+                        </div>
+                    </div>
+
+                    <div class="terminal-response">
+                        <div class="terminal-response-header">
+                            ✓ San Francisco International Airport
+                        </div>
+                        <div class="terminal-response-content">
+                            <span class="highlight">SFO</span> (KSFO) — San Francisco International Airport<br>
+                            City: <span class="value">San Francisco, US</span><br>
+                            Coordinates: <span class="value">37.6213°N, 122.3790°W</span><br>
+                            Timezone: <span class="value">America/Los_Angeles</span>
+                        </div>
+                    </div>
+
+                    <div class="terminal-line" style="margin-top: 1rem;">
+                        <span class="terminal-prompt">❯ </span>
+                        <span class="terminal-cursor"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Launch Optimization Example -->
+            <div id="launch-optimization" class="terminal-window">
+                <div class="terminal-header">
+                    <div class="terminal-buttons">
+                        <span class="terminal-btn red"></span>
+                        <span class="terminal-btn yellow"></span>
+                        <span class="terminal-btn green"></span>
+                    </div>
+                    <span class="terminal-title">claude — aerospace-mcp</span>
+                </div>
+                <div class="terminal-body">
+                    <div class="terminal-line">
+                        <span class="terminal-prompt">❯ </span>
+                        <span class="terminal-user-input">Optimize the launch angle for my sounding rocket to reach maximum altitude. It has 15kg dry mass, 8kg propellant, 0.12m diameter, and 2500N average thrust.</span>
+                    </div>
+
+                    <div class="terminal-tool-call">
+                        <div><span class="terminal-tool-name">optimize_launch_angle</span></div>
+                        <div class="terminal-tool-params">
+                            geometry: { dry_mass_kg: <span class="json-number">15</span>, propellant_mass_kg: <span class="json-number">8</span>, diameter_m: <span class="json-number">0.12</span>, thrust_n: <span class="json-number">2500</span> }<br>
+                            objective: <span class="json-string">"altitude"</span>, angle_range: [<span class="json-number">75</span>, <span class="json-number">90</span>]
+                        </div>
+                    </div>
+
+                    <div class="terminal-response">
+                        <div class="terminal-response-header">
+                            🚀 Launch Angle Optimization Complete
+                        </div>
+                        <div class="terminal-response-content">
+                            <div style="margin-bottom: 1rem;">
+                                <span class="label">Optimal Launch Angle:</span> <span class="value" style="font-size: 1.2rem;">87.3°</span> from horizontal
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem;">
+                                <div><span class="label">Max Altitude:</span> <span class="value">12,847 m</span></div>
+                                <div><span class="label">Apogee Time:</span> <span class="value">45.2 s</span></div>
+                                <div><span class="label">Max Velocity:</span> <span class="value">412 m/s</span></div>
+                                <div><span class="label">Max Mach:</span> <span class="value">1.21</span></div>
+                                <div><span class="label">Burnout Alt:</span> <span class="value">1,234 m</span></div>
+                                <div><span class="label">Max Q:</span> <span class="value">89.4 kPa</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="terminal-divider">
+
+                    <div class="terminal-line">
+                        <span class="terminal-prompt">❯ </span>
+                        <span class="terminal-user-input">Now optimize for maximum downrange distance instead</span>
+                    </div>
+
+                    <div class="terminal-tool-call">
+                        <div><span class="terminal-tool-name">optimize_launch_angle</span></div>
+                        <div class="terminal-tool-params">
+                            geometry: { ... }, objective: <span class="json-string">"range"</span>, angle_range: [<span class="json-number">30</span>, <span class="json-number">60</span>]
+                        </div>
+                    </div>
+
+                    <div class="terminal-response">
+                        <div class="terminal-response-header">
+                            🎯 Range Optimization Complete
+                        </div>
+                        <div class="terminal-response-content">
+                            <span class="label">Optimal Launch Angle:</span> <span class="value" style="font-size: 1.2rem;">47.8°</span> from horizontal<br>
+                            <span class="label">Maximum Range:</span> <span class="value">18,432 m</span> (18.4 km)<br>
+                            <span class="label">Peak Altitude:</span> <span class="value">6,521 m</span><br>
+                            <span class="label">Flight Time:</span> <span class="value">72.3 s</span>
+                        </div>
+                    </div>
+
+                    <div class="terminal-line" style="margin-top: 1rem;">
+                        <span class="terminal-prompt">❯ </span>
+                        <span class="terminal-cursor"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hohmann Transfer Example -->
+            <div id="hohmann-transfer" class="terminal-window">
+                <div class="terminal-header">
+                    <div class="terminal-buttons">
+                        <span class="terminal-btn red"></span>
+                        <span class="terminal-btn yellow"></span>
+                        <span class="terminal-btn green"></span>
+                    </div>
+                    <span class="terminal-title">claude — aerospace-mcp</span>
+                </div>
+                <div class="terminal-body">
+                    <div class="terminal-line">
+                        <span class="terminal-prompt">❯ </span>
+                        <span class="terminal-user-input">Calculate a Hohmann transfer from a 400km LEO parking orbit to geostationary orbit (35,786km)</span>
+                    </div>
+
+                    <div class="terminal-tool-call">
+                        <div><span class="terminal-tool-name">hohmann_transfer</span></div>
+                        <div class="terminal-tool-params">
+                            r1_km: <span class="json-number">6778</span> (400km + Earth radius),
+                            r2_km: <span class="json-number">42164</span> (35786km + Earth radius)
+                        </div>
+                    </div>
+
+                    <div class="terminal-response">
+                        <div class="terminal-response-header">
+                            🛰️ Hohmann Transfer: LEO → GEO
+                        </div>
+                        <div class="terminal-response-content">
+                            <div style="margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                <span class="label">Total Δv Required:</span> <span class="value" style="font-size: 1.3rem;">3,935 m/s</span>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+                                <div>
+                                    <div class="label" style="margin-bottom: 0.5rem;">First Burn (Perigee)</div>
+                                    <span class="highlight">Δv₁:</span> <span class="value">2,457 m/s</span><br>
+                                    <span style="color: #8b949e; font-size: 0.85rem;">Raises apogee to GEO altitude</span>
+                                </div>
+                                <div>
+                                    <div class="label" style="margin-bottom: 0.5rem;">Second Burn (Apogee)</div>
+                                    <span class="highlight">Δv₂:</span> <span class="value">1,478 m/s</span><br>
+                                    <span style="color: #8b949e; font-size: 0.85rem;">Circularizes at GEO</span>
+                                </div>
+                            </div>
+                            <div style="margin-top: 1rem;">
+                                <span class="label">Transfer Time:</span> <span class="value">5 hours 15 minutes</span><br>
+                                <span class="label">Transfer Orbit:</span> <span class="value">400 km × 35,786 km</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="terminal-divider">
+
+                    <div class="terminal-line">
+                        <span class="terminal-prompt">❯ </span>
+                        <span class="terminal-user-input">What about a transfer to lunar orbit at 384,400km?</span>
+                    </div>
+
+                    <div class="terminal-tool-call">
+                        <div><span class="terminal-tool-name">hohmann_transfer</span></div>
+                        <div class="terminal-tool-params">
+                            r1_km: <span class="json-number">6778</span>, r2_km: <span class="json-number">390778</span>
+                        </div>
+                    </div>
+
+                    <div class="terminal-response">
+                        <div class="terminal-response-header">
+                            🌙 Hohmann Transfer: LEO → Lunar Distance
+                        </div>
+                        <div class="terminal-response-content">
+                            <span class="label">Total Δv:</span> <span class="value">3,972 m/s</span><br>
+                            <span class="label">Δv₁ (TLI):</span> <span class="value">3,132 m/s</span> — Trans-Lunar Injection<br>
+                            <span class="label">Δv₂ (LOI):</span> <span class="value">840 m/s</span> — Lunar Orbit Insertion<br>
+                            <span class="label">Transfer Time:</span> <span class="value">~5 days</span>
+                        </div>
+                    </div>
+
+                    <div class="terminal-line" style="margin-top: 1rem;">
+                        <span class="terminal-prompt">❯ </span>
+                        <span class="terminal-cursor"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Quick Start Section -->
     <section id="quick-start" class="section">
         <h2>🚀 Quick Start</h2>
@@ -734,7 +1179,7 @@ client = Client(<span class="string">"stdio"</span>, <span class="string">"uv ru
             }
         }
 
-        // Tab switching functionality
+        // Tab switching functionality for code examples
         function showTab(tabId) {
             // Hide all content
             const contents = document.querySelectorAll('.code-content');
@@ -745,6 +1190,21 @@ client = Client(<span class="string">"stdio"</span>, <span class="string">"uv ru
             tabs.forEach(tab => tab.classList.remove('active'));
 
             // Show selected content and activate tab
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Terminal tab switching functionality
+        function showTerminalTab(tabId) {
+            // Hide all terminal windows
+            const windows = document.querySelectorAll('.terminal-window');
+            windows.forEach(win => win.classList.remove('active'));
+
+            // Remove active class from all terminal tabs
+            const tabs = document.querySelectorAll('.terminal-tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+
+            // Show selected terminal window and activate tab
             document.getElementById(tabId).classList.add('active');
             event.target.classList.add('active');
         }
@@ -811,9 +1271,9 @@ client = Client(<span class="string">"stdio"</span>, <span class="string">"uv ru
             });
         }, observerOptions);
 
-        // Observe all feature cards for animation
+        // Observe all feature cards and terminal section for animation
         document.addEventListener('DOMContentLoaded', function() {
-            const cards = document.querySelectorAll('.feature-card, .install-card');
+            const cards = document.querySelectorAll('.feature-card, .install-card, .terminal-section');
             cards.forEach(card => {
                 card.style.opacity = '0';
                 card.style.transform = 'translateY(30px)';
