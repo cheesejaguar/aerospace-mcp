@@ -164,6 +164,14 @@ uv run aerospace-mcp sse 0.0.0.0 8001
 - ✅ **Lambert problem solving** for two-body trajectory determination
 - ✅ **Porkchop plot generation** for interplanetary transfer opportunity analysis
 - ✅ **Optional SPICE integration** with fallback to simplified ephemeris models
+- ✅ **Density altitude calculation** for performance planning
+- ✅ **Airspeed conversions** (IAS/CAS/EAS/TAS/Mach)
+- ✅ **Stall speed calculation** for different configurations
+- ✅ **Weight and balance** calculations with CG limits
+- ✅ **Takeoff/landing performance** distance and V-speeds
+- ✅ **Fuel reserve calculation** per FAR/ICAO regulations
+- ✅ **Kalman filter state estimation** for sensor fusion
+- ✅ **LQR controller design** for optimal control
 
 ### Technical Features
 
@@ -175,7 +183,7 @@ uv run aerospace-mcp sse 0.0.0.0 8001
 - 📚 **Well-documented**: Complete API documentation with examples
 - ⚡ **Hardware Optimized**: NumPy vectorization with CuPy GPU acceleration support
 - 🔄 **Batch Processing**: Vectorized operations for efficient bulk calculations
-- 🔍 **Tool Discovery**: Dynamic tool search for finding relevant tools from 34+ available
+- 🔍 **Tool Discovery**: Dynamic tool search for finding relevant tools from 44+ available
 
 ## 💾 Installation
 
@@ -798,7 +806,7 @@ The FastMCP refactoring introduced a **modular architecture** with tools organiz
 - **Entry Point**: Now uses `aerospace_mcp.fastmcp_server:run`
 - **Dependencies**: Includes `fastmcp>=2.11.3` instead of raw `mcp`
 - **Server Name**: Still `aerospace-mcp` for client compatibility
-- **All Tools**: All 36 tools maintain exact same names and parameters
+- **All Tools**: All 44 tools maintain exact same names and parameters
 
 ## ⚡ Performance
 
@@ -983,6 +991,16 @@ Error responses include detailed messages:
 | `porkchop_plot_analysis` | Generate porkchop plot for interplanetary transfers | `departure_body`, `arrival_body`, `departure_dates`, `arrival_dates`, `min_tof_days`, `max_tof_days` |
 | `search_aerospace_tools` | Search for tools by name, description, or functionality | `query`, `search_type`, `max_results`, `category` |
 | `list_tool_categories` | List all available tool categories with counts | None |
+| `lambert_problem_solver` | Solve Lambert's problem for orbital transfers | `r1_m`, `r2_m`, `tof_s`, `direction`, `central_body` |
+| `density_altitude_calculator` | Calculate density altitude from pressure altitude and temperature | `pressure_altitude_ft`, `temperature_c` |
+| `true_airspeed_converter` | Convert between IAS/CAS/EAS/TAS/Mach | `speed_value`, `speed_type`, `altitude_ft`, `temperature_c` |
+| `stall_speed_calculator` | Calculate stall speeds for different configurations | `weight_kg`, `wing_area_m2`, `cl_max_clean`, `cl_max_landing` |
+| `weight_and_balance` | Calculate aircraft weight and CG position | `basic_empty_weight_kg`, `fuel_kg`, `payload_items` |
+| `takeoff_performance` | Calculate takeoff distances and V-speeds | `weight_kg`, `pressure_altitude_ft`, `temperature_c`, `wind_kts` |
+| `landing_performance` | Calculate landing distances and approach speeds | `weight_kg`, `pressure_altitude_ft`, `temperature_c`, `runway_condition` |
+| `fuel_reserve_calculator` | Calculate required fuel reserves per regulations | `regulation`, `trip_fuel_kg`, `cruise_fuel_flow_kg_hr` |
+| `kalman_filter_state_estimation` | State estimation using Kalman filter | `initial_state`, `measurements`, `process_noise` |
+| `lqr_controller_design` | Design LQR optimal controller | `A_matrix`, `B_matrix`, `Q_matrix`, `R_matrix` |
 
 ### Claude Desktop Setup
 
@@ -1026,7 +1044,7 @@ search_aerospace_tools("calculate", category="orbits")
 
 # List all categories
 list_tool_categories()
-# Returns: core, atmosphere, frames, aerodynamics, propellers, rockets, orbits, optimization, agents
+# Returns: core, atmosphere, frames, aerodynamics, propellers, rockets, orbits, gnc, performance, optimization, agents
 ```
 
 Available categories:
@@ -1036,8 +1054,10 @@ Available categories:
 - **aerodynamics**: Wing analysis, airfoil polars, stability derivatives
 - **propellers**: BEMT analysis, UAV energy estimation
 - **rockets**: 3DOF trajectory, sizing, launch optimization
-- **orbits**: Orbital elements, propagation, transfers, rendezvous
+- **orbits**: Orbital elements, propagation, transfers, rendezvous, Lambert solver
 - **optimization**: GA, PSO, Monte Carlo, porkchop plots
+- **gnc**: Kalman filter state estimation, LQR controller design
+- **performance**: Density altitude, airspeed conversion, stall speeds, W&B, takeoff/landing
 - **agents**: LLM-powered tool selection and data formatting
 
 ### Deferred Tool Loading
@@ -1082,7 +1102,7 @@ When Claude needs a specific tool, it uses `search_aerospace_tools` which return
 }
 ```
 
-The API automatically expands these references into full tool definitions, keeping context efficient while providing access to all 34+ tools.
+The API automatically expands these references into full tool definitions, keeping context efficient while providing access to all 44+ tools.
 
 ### VS Code Continue Setup
 
@@ -1173,6 +1193,8 @@ aerospace-mcp/
 │   │   ├── orbits.py      # Orbital mechanics tools
 │   │   ├── propellers.py  # Propeller analysis tools
 │   │   ├── optimization.py # Trajectory optimization
+│   │   ├── gnc.py         # GNC tools (Kalman filter, LQR)
+│   │   ├── performance.py # Aircraft performance tools
 │   │   ├── agents.py      # LLM-powered agent tools
 │   │   └── tool_search.py # Tool discovery and search
 │   └── integrations/      # Backend computation modules
@@ -1186,7 +1208,7 @@ aerospace-mcp/
 ├── app/                   # Alternative FastAPI structure
 │   ├── __init__.py
 │   └── main.py
-├── tests/                 # Test suite (311 tests)
+├── tests/                 # Test suite (412 tests)
 │   ├── conftest.py
 │   ├── test_main.py
 │   ├── test_airports.py
@@ -1194,6 +1216,9 @@ aerospace-mcp/
 │   ├── test_mcp.py
 │   ├── test_integrations_*.py  # Integration module tests
 │   └── tools/             # Tool-specific tests
+│       ├── test_tools_performance.py  # Performance tools tests
+│       ├── test_tools_gnc.py          # GNC tools tests
+│       └── test_tools_lambert.py      # Lambert solver tests
 ├── docs/                  # Documentation
 │   ├── API.md
 │   ├── ARCHITECTURE.md

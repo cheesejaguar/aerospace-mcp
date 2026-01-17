@@ -2,8 +2,223 @@
 
 import json
 import logging
+import math
+from typing import Literal
 
 logger = logging.getLogger(__name__)
+
+# Constants
+MU_EARTH = 3.986004418e14  # m³/s² - Earth's gravitational parameter
+MU_SUN = 1.32712440018e20  # m³/s² - Sun's gravitational parameter
+
+# Gravitational parameters for different central bodies
+MU_BODIES = {
+    "earth": MU_EARTH,
+    "sun": MU_SUN,
+    "moon": 4.9048695e12,
+    "mars": 4.282837e13,
+    "venus": 3.24859e14,
+    "jupiter": 1.26686534e17,
+}
+
+
+def lambert_problem_solver(
+    r1_m: list[float],
+    r2_m: list[float],
+    tof_s: float,
+    direction: Literal["prograde", "retrograde"] = "prograde",
+    num_revolutions: int = 0,
+    central_body: str = "earth",
+) -> str:
+    """Solve Lambert's orbital boundary value problem.
+
+    Given two position vectors and time-of-flight, determine the orbit
+    connecting them. This is foundational for interplanetary mission design
+    and rendezvous trajectory planning.
+
+    Args:
+        r1_m: Initial position vector [x, y, z] in meters
+        r2_m: Final position vector [x, y, z] in meters
+        tof_s: Time of flight in seconds
+        direction: Transfer direction - "prograde" or "retrograde"
+        num_revolutions: Number of complete revolutions (default 0 for short path)
+        central_body: Central body name for gravitational parameter
+
+    Returns:
+        JSON string with transfer orbit velocities and orbital elements
+    """
+    try:
+        mu = MU_BODIES.get(central_body.lower(), MU_EARTH)
+
+        # Try to use poliastro if available for accurate solution
+        try:
+            import numpy as np
+            from astropy import units as u
+            from poliastro.iod import izzo
+
+            r1_arr = np.array(r1_m)
+            r2_arr = np.array(r2_m)
+
+            # Solve Lambert's problem using Izzo's algorithm
+            v1_solutions, v2_solutions = izzo.lambert(
+                k=mu * u.m**3 / u.s**2,
+                r0=r1_arr * u.m,
+                r=r2_arr * u.m,
+                tof=tof_s * u.s,
+                M=num_revolutions,
+                prograde=direction == "prograde",
+            )
+
+            # Get first solution
+            v1 = v1_solutions[0].to(u.m / u.s).value.tolist()
+            v2 = v2_solutions[0].to(u.m / u.s).value.tolist()
+            implementation = "poliastro (Izzo algorithm)"
+
+        except ImportError:
+            # Fallback to manual implementation
+            from ..integrations.orbits import lambert_solver_simple
+
+            result = lambert_solver_simple(r1_m, r2_m, tof_s, mu)
+
+            if not result.get("feasible", True):
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": result.get("reason", "Transfer not feasible"),
+                        "v1_ms": [0, 0, 0],
+                        "v2_ms": [0, 0, 0],
+                    },
+                    indent=2,
+                )
+
+            v1 = result.get("v1_ms", [0, 0, 0])
+            v2 = result.get("v2_ms", [0, 0, 0])
+            implementation = "manual (simplified)"
+
+        # Calculate delta-V magnitudes
+        def vec_mag(v):
+            return math.sqrt(sum(x**2 for x in v))
+
+        r1_mag = vec_mag(r1_m)
+        r2_mag = vec_mag(r2_m)
+
+        # Calculate orbital elements of transfer orbit
+        # Specific angular momentum
+        h = [
+            r1_m[1] * v1[2] - r1_m[2] * v1[1],
+            r1_m[2] * v1[0] - r1_m[0] * v1[2],
+            r1_m[0] * v1[1] - r1_m[1] * v1[0],
+        ]
+        h_mag = vec_mag(h)
+
+        # Semi-latus rectum
+        p = h_mag**2 / mu
+
+        # Eccentricity vector
+        v1_mag = vec_mag(v1)
+        e_vec = [
+            (v1_mag**2 / mu - 1 / r1_mag) * r1_m[i]
+            - sum(r1_m[j] * v1[j] for j in range(3)) / mu * v1[i]
+            for i in range(3)
+        ]
+        e = vec_mag(e_vec)
+
+        # Semi-major axis
+        if abs(e - 1.0) > 1e-6:
+            a = p / (1 - e**2)
+        else:
+            a = float("inf")  # Parabolic
+
+        # Inclination
+        i_rad = math.acos(max(-1, min(1, h[2] / h_mag))) if h_mag > 0 else 0
+        i_deg = math.degrees(i_rad)
+
+        # Transfer angle
+        cos_dnu = sum(r1_m[i] * r2_m[i] for i in range(3)) / (r1_mag * r2_mag)
+        cos_dnu = max(-1, min(1, cos_dnu))
+        transfer_angle_deg = math.degrees(math.acos(cos_dnu))
+
+        # Determine if short or long way
+        cross = [
+            r1_m[1] * r2_m[2] - r1_m[2] * r2_m[1],
+            r1_m[2] * r2_m[0] - r1_m[0] * r2_m[2],
+            r1_m[0] * r2_m[1] - r1_m[1] * r2_m[0],
+        ]
+        if cross[2] < 0:
+            transfer_angle_deg = 360 - transfer_angle_deg
+
+        # Orbital period (if elliptical)
+        if a > 0 and e < 1:
+            period_s = 2 * math.pi * math.sqrt(a**3 / mu)
+        else:
+            period_s = float("inf")
+
+        result = {
+            "success": True,
+            "v1_ms": [round(v, 6) for v in v1],
+            "v2_ms": [round(v, 6) for v in v2],
+            "v1_magnitude_ms": round(vec_mag(v1), 3),
+            "v2_magnitude_ms": round(vec_mag(v2), 3),
+            "transfer_orbit": {
+                "semi_major_axis_m": round(a, 0) if a != float("inf") else "parabolic",
+                "eccentricity": round(e, 6),
+                "inclination_deg": round(i_deg, 3),
+                "semi_latus_rectum_m": round(p, 0),
+                "period_s": round(period_s, 1) if period_s != float("inf") else "n/a",
+            },
+            "transfer_parameters": {
+                "transfer_angle_deg": round(transfer_angle_deg, 3),
+                "time_of_flight_s": tof_s,
+                "time_of_flight_hr": round(tof_s / 3600, 2),
+                "direction": direction,
+                "revolutions": num_revolutions,
+            },
+            "positions": {
+                "r1_magnitude_m": round(r1_mag, 0),
+                "r2_magnitude_m": round(r2_mag, 0),
+                "r1_altitude_km": round((r1_mag - 6378137) / 1000, 1),
+                "r2_altitude_km": round((r2_mag - 6378137) / 1000, 1),
+            },
+            "central_body": central_body,
+            "mu_m3_s2": mu,
+            "implementation": implementation,
+        }
+
+        output = f"""
+LAMBERT PROBLEM SOLUTION
+========================
+Central Body: {central_body.title()} (μ = {mu:.4e} m³/s²)
+Time of Flight: {tof_s:.1f} s ({tof_s / 3600:.2f} hr)
+Direction: {direction}
+
+Initial Position: r1 = [{r1_m[0]:.0f}, {r1_m[1]:.0f}, {r1_m[2]:.0f}] m
+Final Position:   r2 = [{r2_m[0]:.0f}, {r2_m[1]:.0f}, {r2_m[2]:.0f}] m
+
+Transfer Velocities:
+  v1 = [{v1[0]:+.3f}, {v1[1]:+.3f}, {v1[2]:+.3f}] m/s  |v1| = {vec_mag(v1):.3f} m/s
+  v2 = [{v2[0]:+.3f}, {v2[1]:+.3f}, {v2[2]:+.3f}] m/s  |v2| = {vec_mag(v2):.3f} m/s
+
+Transfer Orbit:
+  Semi-major axis: {a / 1000:,.0f} km
+  Eccentricity: {e:.6f}
+  Inclination: {i_deg:.3f}°
+  Transfer angle: {transfer_angle_deg:.3f}°
+
+Implementation: {implementation}
+
+{json.dumps(result, indent=2)}
+"""
+        return output.strip()
+
+    except Exception as e:
+        logger.error(f"Lambert problem solver error: {str(e)}", exc_info=True)
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(e),
+            },
+            indent=2,
+        )
 
 
 def elements_to_state_vector(orbital_elements: dict) -> str:

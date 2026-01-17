@@ -45,4 +45,3 @@
 ## Architecture Overview
 - Two interfaces: FastAPI HTTP (`app/`, `main.py`) and MCP tools (`aerospace_mcp/server.py`).
 - OpenAP is optional; when unavailable, performance estimates are disabled gracefully.
-

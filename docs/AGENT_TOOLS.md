@@ -1,6 +1,6 @@
 # Agent Tools Documentation
 
-The Aerospace MCP server includes powerful agent and discovery tools that help users interact more effectively with the 36 aerospace calculation tools.
+The Aerospace MCP server includes powerful agent and discovery tools that help users interact more effectively with the 44 aerospace calculation tools.
 
 ## Overview
 
@@ -11,7 +11,7 @@ The agent tools are divided into two categories:
 Local tool search functionality following [Anthropic's tool search guide](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool):
 
 1. **search_aerospace_tools**: Search for tools by name, description, or functionality using regex or natural language
-2. **list_tool_categories**: List all 9 tool categories with tool counts
+2. **list_tool_categories**: List all 11 tool categories with tool counts
 
 ### LLM-Powered Tools (Requires OpenAI API Key)
 
@@ -76,7 +76,7 @@ List all available tool categories with tool counts.
 **Example Usage:**
 ```python
 result = list_tool_categories()
-# Returns all 9 categories with their tool counts
+# Returns all 11 categories with their tool counts
 ```
 
 **Response Format:**
@@ -88,7 +88,7 @@ result = list_tool_categories()
     {"name": "orbits", "tool_count": 6},
     ...
   ],
-  "total_tools": 36
+  "total_tools": 44
 }
 ```
 
@@ -102,7 +102,9 @@ result = list_tool_categories()
 | aerodynamics | Wing analysis, airfoil polars, stability | 4 |
 | propellers | BEMT analysis, UAV energy | 3 |
 | rockets | 3DOF trajectory, sizing, launch optimization | 3 |
-| orbits | Orbital elements, propagation, transfers | 6 |
+| orbits | Orbital elements, propagation, transfers, Lambert | 7 |
+| gnc | Kalman filter, LQR controller design | 2 |
+| performance | Density altitude, airspeeds, stall, W&B, takeoff/landing | 7 |
 | optimization | GA, PSO, Monte Carlo, porkchop plots | 6 |
 | agents | LLM-powered tools (requires API key) | 2 |
 
@@ -200,7 +202,7 @@ result = select_aerospace_tool(
 
 ## Complete Aerospace Tools Catalog
 
-All 36 aerospace-mcp tools are searchable via `search_aerospace_tools`:
+All 44 aerospace-mcp tools are searchable via `search_aerospace_tools`:
 
 | Category | Tool Name | Description |
 |----------|-----------|-------------|
@@ -230,6 +232,16 @@ All 36 aerospace-mcp tools are searchable via `search_aerospace_tools`:
 | | `calculate_ground_track` | Calculate satellite ground track |
 | | `hohmann_transfer` | Calculate Hohmann transfer orbit |
 | | `orbital_rendezvous_planning` | Plan spacecraft rendezvous maneuvers |
+| | `lambert_problem_solver` | Solve Lambert's problem for orbital transfers |
+| **gnc** | `kalman_filter_state_estimation` | State estimation using Kalman filter |
+| | `lqr_controller_design` | Design LQR optimal controller |
+| **performance** | `density_altitude_calculator` | Calculate density altitude |
+| | `true_airspeed_converter` | Convert between IAS/CAS/EAS/TAS/Mach |
+| | `stall_speed_calculator` | Calculate stall speeds for different configs |
+| | `weight_and_balance` | Calculate aircraft weight and CG position |
+| | `takeoff_performance` | Calculate takeoff distances and V-speeds |
+| | `landing_performance` | Calculate landing distances and speeds |
+| | `fuel_reserve_calculator` | Calculate required fuel reserves per regulations |
 | **optimization** | `optimize_thrust_profile` | Optimize rocket thrust profile |
 | | `trajectory_sensitivity_analysis` | Trajectory parameter sensitivity analysis |
 | | `genetic_algorithm_optimization` | GA-based trajectory optimization |

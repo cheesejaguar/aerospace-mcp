@@ -148,4 +148,3 @@ Notes: Tools are grouped; each lists candidate libraries. Prefer Tier 1 (light) 
 - M2 (Aircraft/Drone, 2 weeks): VLM wing, UAV energy, EKF.
 - M3 (Rockets/TrajOpt, 3–4 weeks): 3DOF ascent, basic pitch optimization.
 - M4 (Space/Advanced, 3–4 weeks): Porkchop, J2 propagation, SPICE/OREKIT optional.
-

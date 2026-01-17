@@ -45,6 +45,10 @@ from .tools.frames import (
     geodetic_to_ecef,
     transform_frames,
 )
+from .tools.gnc import (
+    kalman_filter_state_estimation,
+    lqr_controller_design,
+)
 from .tools.optimization import (
     genetic_algorithm_optimization,
     monte_carlo_uncertainty_analysis,
@@ -57,9 +61,19 @@ from .tools.orbits import (
     calculate_ground_track,
     elements_to_state_vector,
     hohmann_transfer,
+    lambert_problem_solver,
     orbital_rendezvous_planning,
     propagate_orbit_j2,
     state_vector_to_elements,
+)
+from .tools.performance import (
+    density_altitude_calculator,
+    fuel_reserve_calculator,
+    landing_performance,
+    stall_speed_calculator,
+    takeoff_performance,
+    true_airspeed_converter,
+    weight_and_balance,
 )
 from .tools.propellers import (
     get_propeller_database,
@@ -149,6 +163,20 @@ mcp.tool(propagate_orbit_j2)
 mcp.tool(calculate_ground_track)
 mcp.tool(hohmann_transfer)
 mcp.tool(orbital_rendezvous_planning)
+mcp.tool(lambert_problem_solver)
+
+# GNC tools
+mcp.tool(kalman_filter_state_estimation)
+mcp.tool(lqr_controller_design)
+
+# Performance tools
+mcp.tool(density_altitude_calculator)
+mcp.tool(true_airspeed_converter)
+mcp.tool(stall_speed_calculator)
+mcp.tool(weight_and_balance)
+mcp.tool(takeoff_performance)
+mcp.tool(landing_performance)
+mcp.tool(fuel_reserve_calculator)
 
 # Optimization tools
 mcp.tool(optimize_thrust_profile)

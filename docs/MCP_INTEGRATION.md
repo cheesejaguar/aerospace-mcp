@@ -44,7 +44,7 @@ graph TB
     Tools --> OpenAP[OpenAP Database]
     Tools --> AirportDB[Airport Database]
     Tools --> GeographicLib[Geographic Calculations]
-    Tools --> ToolRegistry[Tool Registry<br/>36 tools across 9 categories]
+    Tools --> ToolRegistry[Tool Registry<br/>44 tools across 11 categories]
 ```
 
 ### Key Benefits
