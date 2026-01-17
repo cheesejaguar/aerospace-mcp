@@ -149,7 +149,7 @@ Input Conditions:
   Temperature: {temperature_c:.1f}°C
   ISA Temperature at PA: {isa_temp_k - 273.15:.1f}°C
   ISA Deviation: {delta_isa:+.1f}°C
-  Dewpoint: {dewpoint_c if dewpoint_c else 'Not specified'}°C
+  Dewpoint: {dewpoint_c if dewpoint_c else "Not specified"}°C
 
 Results:
   Density Altitude: {density_alt_ft:,.0f} ft ({density_alt_m:,.0f} m)
@@ -627,9 +627,9 @@ Results:
   CG Position:   {cg_m:>8.4f} m (from datum){mac_str}
 
 Limits Check: {status_str}
-  Max Weight:    {max_takeoff_weight_kg if max_takeoff_weight_kg else 'Not specified':>8} kg
-  Forward CG:    {forward_cg_limit_m if forward_cg_limit_m else 'Not specified':>8} m
-  Aft CG:        {aft_cg_limit_m if aft_cg_limit_m else 'Not specified':>8} m
+  Max Weight:    {max_takeoff_weight_kg if max_takeoff_weight_kg else "Not specified":>8} kg
+  Forward CG:    {forward_cg_limit_m if forward_cg_limit_m else "Not specified":>8} m
+  Aft CG:        {aft_cg_limit_m if aft_cg_limit_m else "Not specified":>8} m
 
 Warnings: {warnings_str}
 
@@ -1129,7 +1129,7 @@ Recommended Extra:       {extra_fuel_recommended:>8.1f} kg
 Total with Extra:        {total_fuel + extra_fuel_recommended:>8.1f} kg
 
 Notes:
-  • {chr(10) + '  • '.join(notes)}
+  • {chr(10) + "  • ".join(notes)}
 
 {json.dumps(result, indent=2)}
 """

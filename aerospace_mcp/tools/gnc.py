@@ -280,7 +280,7 @@ Final State Uncertainty (1σ):
   {final_std_str}
 
 Innovation Statistics (RMS):
-  {', '.join(f'{r:.4f}' for r in innovation_rms) if innovation_rms else 'N/A'}
+  {", ".join(f"{r:.4f}" for r in innovation_rms) if innovation_rms else "N/A"}
 
 Last {min(10, len(filtered_states))} States:
 {chr(10).join(f"  t={i}: {[round(s, 3) for s in state]}" for i, state in enumerate(filtered_states[-10:]))}
