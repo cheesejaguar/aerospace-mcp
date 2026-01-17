@@ -83,7 +83,33 @@ logger = logging.getLogger(__name__)
 # Initialize FastMCP server
 mcp = FastMCP("aerospace-mcp")
 
-# Register all tools
+# =============================================================================
+# TOOL REGISTRATION
+# =============================================================================
+# aerospace-mcp supports deferred tool loading for efficient context usage.
+# When using with Anthropic's API, configure the mcp_toolset like this:
+#
+#   {
+#     "type": "mcp_toolset",
+#     "mcp_server_name": "aerospace-mcp",
+#     "default_config": {"defer_loading": true},
+#     "configs": {
+#       "search_aerospace_tools": {"defer_loading": false},
+#       "list_tool_categories": {"defer_loading": false}
+#     }
+#   }
+#
+# This loads only the discovery tools initially. Claude uses search_aerospace_tools
+# to find relevant tools, which returns tool_reference blocks that the API
+# automatically expands into full tool definitions.
+# =============================================================================
+
+# --- DISCOVERY TOOLS (should NOT be deferred) ---
+# These tools enable Claude to discover other tools dynamically
+mcp.tool(search_aerospace_tools)
+mcp.tool(list_tool_categories)
+
+# --- DISCOVERABLE TOOLS (can be deferred for context efficiency) ---
 # Core flight planning tools
 mcp.tool(search_airports)
 mcp.tool(plan_flight)
@@ -135,10 +161,6 @@ mcp.tool(monte_carlo_uncertainty_analysis)
 # Agent tools for helping users
 mcp.tool(format_data_for_tool)
 mcp.tool(select_aerospace_tool)
-
-# Tool discovery tools
-mcp.tool(search_aerospace_tools)
-mcp.tool(list_tool_categories)
 
 
 def run():

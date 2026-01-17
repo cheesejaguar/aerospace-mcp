@@ -790,10 +790,16 @@ def search_aerospace_tools(
         )
 
     # Format response matching Anthropic's tool_reference pattern
+    # The tool_reference blocks enable deferred tool loading when clients
+    # configure aerospace-mcp with defer_loading: true
     tool_references = [
+        {"type": "tool_reference", "tool_name": tool.name} for tool in results
+    ]
+
+    # Include metadata for human readability alongside the machine-readable references
+    tool_details = [
         {
-            "type": "tool_reference",
-            "tool_name": tool.name,
+            "name": tool.name,
             "description": tool.description,
             "category": tool.category,
         }
@@ -803,6 +809,7 @@ def search_aerospace_tools(
     return json.dumps(
         {
             "tool_references": tool_references,
+            "tool_details": tool_details,
             "total_matches": len(results),
             "query": query,
             "search_type": search_type,

@@ -764,18 +764,27 @@ curl -X <span class="keyword">POST</span> <span class="string">"http://localhost
             </div>
 
             <div id="mcp-client" class="code-content">
-                <h3>MCP Integration (Claude Desktop)</h3>
+                <h3>MCP Integration (Anthropic API with Deferred Loading)</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Enable deferred tool loading for efficient context usage with 34+ tools:</p>
                 <div class="code-block">
                     <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-                    <code><span class="comment">// Add to Claude Desktop configuration</span>
+                    <code><span class="comment">// Anthropic API with deferred tool loading</span>
 {
-  <span class="string">"mcpServers"</span>: {
-    <span class="string">"aerospace-mcp"</span>: {
-      <span class="string">"command"</span>: <span class="string">"uv"</span>,
-      <span class="string">"args"</span>: [<span class="string">"run"</span>, <span class="string">"aerospace-mcp"</span>],
-      <span class="string">"cwd"</span>: <span class="string">"/path/to/aerospace-mcp"</span>
+  <span class="string">"tools"</span>: [
+    {
+      <span class="string">"type"</span>: <span class="string">"tool_search_tool_regex_20251119"</span>,
+      <span class="string">"name"</span>: <span class="string">"tool_search_tool_regex"</span>
+    },
+    {
+      <span class="string">"type"</span>: <span class="string">"mcp_toolset"</span>,
+      <span class="string">"mcp_server_name"</span>: <span class="string">"aerospace-mcp"</span>,
+      <span class="string">"default_config"</span>: { <span class="string">"defer_loading"</span>: <span class="keyword">true</span> },
+      <span class="string">"configs"</span>: {
+        <span class="string">"search_aerospace_tools"</span>: { <span class="string">"defer_loading"</span>: <span class="keyword">false</span> },
+        <span class="string">"list_tool_categories"</span>: { <span class="string">"defer_loading"</span>: <span class="keyword">false</span> }
+      }
     }
-  }
+  ]
 }</code>
                 </div>
             </div>
