@@ -492,7 +492,7 @@
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
             font-size: 0.85rem;
             line-height: 1.6;
-            min-height: 400px;
+            min-height: min(400px, 60vh);
             overflow-x: auto;
         }
 
@@ -593,6 +593,30 @@
             border: none;
             border-top: 1px dashed rgba(255, 255, 255, 0.1);
             margin: 1rem 0;
+        }
+
+        /* Utility classes for terminal content */
+        .terminal-output {
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+
+        .terminal-line-spaced {
+            margin-top: 1rem;
+        }
+
+        .section-intro {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .terminal-explanation {
+            margin-top: 0.5rem;
+            color: #8b949e;
         }
     </style>
 </head>
@@ -738,9 +762,9 @@
 
         <div class="code-section">
             <div class="code-tabs">
-                <button class="code-tab active" onclick="showTab('rest-api')">REST API</button>
-                <button class="code-tab" onclick="showTab('mcp-client')">MCP Client</button>
-                <button class="code-tab" onclick="showTab('python-client')">Python Client</button>
+                <button class="code-tab active" onclick="showTab('rest-api', this)">REST API</button>
+                <button class="code-tab" onclick="showTab('mcp-client', this)">MCP Client</button>
+                <button class="code-tab" onclick="showTab('python-client', this)">Python Client</button>
             </div>
 
             <div id="rest-api" class="code-content active">
@@ -822,25 +846,25 @@ flight_plan = response.<span class="function">json</span>()</code>
     <!-- Mock Terminal Section -->
     <section class="section">
         <h2>🖥️ See It In Action</h2>
-        <p style="text-align: center; color: var(--text-secondary); margin-bottom: 2rem; max-width: 700px; margin-left: auto; margin-right: auto;">
+        <p class="section-intro">
             Experience aerospace-mcp tools through Claude Code. Click the tabs below to see example interactions.
         </p>
 
         <div class="terminal-section">
-            <div class="terminal-tabs">
-                <button class="terminal-tab active" onclick="showTerminalTab('airport-search', this)">
+            <div class="terminal-tabs" role="tablist" aria-label="Terminal examples">
+                <button class="terminal-tab active" role="tab" aria-selected="true" aria-controls="airport-search" id="tab-airport" onclick="showTerminalTab('airport-search', this)">
                     ✈️ Airport Search
                 </button>
-                <button class="terminal-tab" onclick="showTerminalTab('launch-optimization', this)">
+                <button class="terminal-tab" role="tab" aria-selected="false" aria-controls="launch-optimization" id="tab-launch" onclick="showTerminalTab('launch-optimization', this)">
                     🚀 Launch Optimization
                 </button>
-                <button class="terminal-tab" onclick="showTerminalTab('hohmann-transfer', this)">
+                <button class="terminal-tab" role="tab" aria-selected="false" aria-controls="hohmann-transfer" id="tab-hohmann" onclick="showTerminalTab('hohmann-transfer', this)">
                     🛰️ Hohmann Transfer
                 </button>
             </div>
 
             <!-- Airport Search Example -->
-            <div id="airport-search" class="terminal-window active">
+            <div id="airport-search" class="terminal-window active" role="tabpanel" aria-labelledby="tab-airport">
                 <div class="terminal-header">
                     <div class="terminal-buttons">
                         <span class="terminal-btn red"></span>
@@ -863,7 +887,7 @@ flight_plan = response.<span class="function">json</span>()</code>
                     </div>
 
                     <div class="terminal-response">
-                        <div class="terminal-response-content" style="font-family: monospace; white-space: pre-wrap;">Found 3 airport(s):
+                        <div class="terminal-response-content" class="terminal-output">Found 3 airport(s):
 
 • <span class="highlight">NRT</span> (RJAA) - Narita International Airport
   City: <span class="value">Tokyo, JP</span>
@@ -896,7 +920,7 @@ flight_plan = response.<span class="function">json</span>()</code>
                     </div>
 
                     <div class="terminal-response">
-                        <div class="terminal-response-content" style="font-family: monospace; white-space: pre-wrap;">Found 1 airport(s):
+                        <div class="terminal-response-content" class="terminal-output">Found 1 airport(s):
 
 • <span class="highlight">SFO</span> (KSFO) - San Francisco International Airport
   City: <span class="value">San Francisco, US</span>
@@ -904,7 +928,7 @@ flight_plan = response.<span class="function">json</span>()</code>
   Timezone: <span class="value">America/Los_Angeles</span></div>
                     </div>
 
-                    <div class="terminal-line" style="margin-top: 1rem;">
+                    <div class="terminal-line" class="terminal-line-spaced">
                         <span class="terminal-prompt">❯ </span>
                         <span class="terminal-cursor"></span>
                     </div>
@@ -912,7 +936,7 @@ flight_plan = response.<span class="function">json</span>()</code>
             </div>
 
             <!-- Launch Optimization Example -->
-            <div id="launch-optimization" class="terminal-window">
+            <div id="launch-optimization" class="terminal-window" role="tabpanel" aria-labelledby="tab-launch" aria-hidden="true">
                 <div class="terminal-header">
                     <div class="terminal-buttons">
                         <span class="terminal-btn red"></span>
@@ -936,7 +960,7 @@ flight_plan = response.<span class="function">json</span>()</code>
                     </div>
 
                     <div class="terminal-response">
-                        <div class="terminal-response-content" style="font-family: monospace; white-space: pre-wrap;"><span class="highlight">3DOF Rocket Trajectory Analysis</span>
+                        <div class="terminal-response-content" class="terminal-output"><span class="highlight">3DOF Rocket Trajectory Analysis</span>
 ==================================================
 Rocket: <span class="value">2.0m</span> long, <span class="value">0.12m</span> dia
 Mass: <span class="value">15.0 kg</span> dry + <span class="value">8.0 kg</span> prop
@@ -977,7 +1001,7 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
                     </div>
 
                     <div class="terminal-response">
-                        <div class="terminal-response-content" style="font-family: monospace; white-space: pre-wrap;">{
+                        <div class="terminal-response-content" class="terminal-output">{
   <span class="json-key">"optimal_angle_deg"</span>: <span class="json-number">87.3</span>,
   <span class="json-key">"objective"</span>: <span class="json-string">"altitude"</span>,
   <span class="json-key">"max_altitude_m"</span>: <span class="json-number">13102.4</span>,
@@ -988,7 +1012,7 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
 }</div>
                     </div>
 
-                    <div class="terminal-line" style="margin-top: 1rem;">
+                    <div class="terminal-line" class="terminal-line-spaced">
                         <span class="terminal-prompt">❯ </span>
                         <span class="terminal-cursor"></span>
                     </div>
@@ -996,7 +1020,7 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
             </div>
 
             <!-- Hohmann Transfer Example -->
-            <div id="hohmann-transfer" class="terminal-window">
+            <div id="hohmann-transfer" class="terminal-window" role="tabpanel" aria-labelledby="tab-hohmann" aria-hidden="true">
                 <div class="terminal-header">
                     <div class="terminal-buttons">
                         <span class="terminal-btn red"></span>
@@ -1020,7 +1044,7 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
                     </div>
 
                     <div class="terminal-response">
-                        <div class="terminal-response-content" style="font-family: monospace; white-space: pre-wrap;">{
+                        <div class="terminal-response-content" class="terminal-output">{
   <span class="json-key">"delta_v1_ms"</span>: <span class="json-number">2457.61</span>,
   <span class="json-key">"delta_v2_ms"</span>: <span class="json-number">1478.12</span>,
   <span class="json-key">"total_delta_v_ms"</span>: <span class="json-number">3935.73</span>,
@@ -1030,7 +1054,7 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
 }</div>
                     </div>
 
-                    <div class="terminal-line" style="margin-top: 0.5rem; color: #8b949e;">
+                    <div class="terminal-line" class="terminal-explanation">
                         The transfer requires <span class="value">3,936 m/s</span> total Δv: first burn of <span class="value">2,458 m/s</span> at perigee raises apogee to GEO, then <span class="value">1,478 m/s</span> at apogee circularizes the orbit. Transfer time is about <span class="value">5.3 hours</span>.
                     </div>
 
@@ -1049,7 +1073,7 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
                     </div>
 
                     <div class="terminal-response">
-                        <div class="terminal-response-content" style="font-family: monospace; white-space: pre-wrap;">{
+                        <div class="terminal-response-content" class="terminal-output">{
   <span class="json-key">"delta_v1_ms"</span>: <span class="json-number">3132.45</span>,
   <span class="json-key">"delta_v2_ms"</span>: <span class="json-number">839.87</span>,
   <span class="json-key">"total_delta_v_ms"</span>: <span class="json-number">3972.32</span>,
@@ -1059,11 +1083,11 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
 }</div>
                     </div>
 
-                    <div class="terminal-line" style="margin-top: 0.5rem; color: #8b949e;">
+                    <div class="terminal-line" class="terminal-explanation">
                         Trans-Lunar Injection requires <span class="value">3,132 m/s</span>, with a <span class="value">~5 day</span> transfer time. Lunar orbit insertion needs only <span class="value">840 m/s</span> at apogee.
                     </div>
 
-                    <div class="terminal-line" style="margin-top: 1rem;">
+                    <div class="terminal-line" class="terminal-line-spaced">
                         <span class="terminal-prompt">❯ </span>
                         <span class="terminal-cursor"></span>
                     </div>
@@ -1189,7 +1213,7 @@ curl <span class="string">"http://localhost:8080/health"</span></code>
         }
 
         // Tab switching functionality for code examples
-        function showTab(tabId) {
+        function showTab(tabId, element) {
             // Hide all content
             const contents = document.querySelectorAll('.code-content');
             contents.forEach(content => content.classList.remove('active'));
@@ -1200,22 +1224,31 @@ curl <span class="string">"http://localhost:8080/health"</span></code>
 
             // Show selected content and activate tab
             document.getElementById(tabId).classList.add('active');
-            event.target.classList.add('active');
+            element.classList.add('active');
         }
 
         // Terminal tab switching functionality
         function showTerminalTab(tabId, element) {
-            // Hide all terminal windows
+            // Hide all terminal windows and update ARIA
             const windows = document.querySelectorAll('.terminal-window');
-            windows.forEach(win => win.classList.remove('active'));
+            windows.forEach(win => {
+                win.classList.remove('active');
+                win.setAttribute('aria-hidden', 'true');
+            });
 
-            // Remove active class from all terminal tabs
+            // Remove active class from all terminal tabs and update ARIA
             const tabs = document.querySelectorAll('.terminal-tab');
-            tabs.forEach(tab => tab.classList.remove('active'));
+            tabs.forEach(tab => {
+                tab.classList.remove('active');
+                tab.setAttribute('aria-selected', 'false');
+            });
 
             // Show selected terminal window and activate tab
-            document.getElementById(tabId).classList.add('active');
+            const selectedWindow = document.getElementById(tabId);
+            selectedWindow.classList.add('active');
+            selectedWindow.setAttribute('aria-hidden', 'false');
             element.classList.add('active');
+            element.setAttribute('aria-selected', 'true');
         }
 
         // Copy to clipboard functionality
