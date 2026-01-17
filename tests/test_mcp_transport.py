@@ -268,9 +268,9 @@ class TestTransportEnvironmentVariables:
         if proc.poll() is not None:
             # Server exited, check why
             stderr = proc.stderr.read() if proc.stderr else b""
-            assert (
-                b"OPENAI_API_KEY" not in stderr
-            ), "Server should not require OPENAI_API_KEY"
+            assert b"OPENAI_API_KEY" not in stderr, (
+                "Server should not require OPENAI_API_KEY"
+            )
         else:
             proc.terminate()
             proc.wait(timeout=5)

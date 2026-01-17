@@ -152,6 +152,10 @@ cffi==1.17.1 ; platform_python_implementation != 'PyPy' \
     --hash=sha256:f79fc4fc25f1c8698ff97788206bb3c2598949bfe0fef03d299eb1b5356ada99 \
     --hash=sha256:fc48c783f9c87e60831201f2cce7f3b2e4846bf4d8728eabe54d60700b318a0b
     # via cryptography
+cfgv==3.5.0 \
+    --hash=sha256:a8dc6b26ad22ff227d2634a65cb388215ce6cc96bbcc5cfde7641ae87e8dacc0 \
+    --hash=sha256:d5b1034354820651caa73ede66a6294d6e95c1b00acc5e9b098e917404669132
+    # via pre-commit
 charset-normalizer==3.4.3 \
     --hash=sha256:00237675befef519d9af72169d8604a067d92755e84fe76492fef5441db05b91 \
     --hash=sha256:027b776c26d38b7f15b26a5da1044f376455fb3766df8fc38563b4efbc515154 \
@@ -400,6 +404,10 @@ cyclopts==3.23.1 \
     --hash=sha256:8e57c6ea47d72b4b565c6a6c8a9fd56ed048ab4316627991230f4ad24ce2bc29 \
     --hash=sha256:ca6a5e9b326caf156d79f3932e2f88b95629e59fd371c0b3a89732b7619edacb
     # via fastmcp
+distlib==0.4.0 \
+    --hash=sha256:9659f7d87e46584a30b5780e43ac7a2143098441670ff0a49d5f9034c54a6c16 \
+    --hash=sha256:feec40075be03a04501a973d81f633735b4b69f98b05450592310c0f401a4e0d
+    # via virtualenv
 distro==1.9.0 \
     --hash=sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed \
     --hash=sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2
@@ -451,10 +459,12 @@ fastuuid==0.12.0 \
     --hash=sha256:d0bd4e5b35aad2826403f4411937c89e7c88857b1513fe10f696544c03e9bd8e \
     --hash=sha256:ed9f449cba8cf16cced252521aee06e633d50ec48c807683f21cc1d89e193eb0
     # via litellm
-filelock==3.19.1 \
-    --hash=sha256:66eda1888b0171c998b35be2bcc0f6d75c388a7ce20c3f3f37aa8e96c2dddf58 \
-    --hash=sha256:d38e30481def20772f5baf097c122c3babc4fcdb7e14e57049eb9d88c6dc017d
-    # via huggingface-hub
+filelock==3.20.3 \
+    --hash=sha256:18c57ee915c7ec61cff0ecf7f0f869936c7c30191bb0cf406f1341778d0834e1 \
+    --hash=sha256:4b0dda527ee31078689fc205ec4f1c1bf7d56cf88b6dc9426c4f230e46c2dce1
+    # via
+    #   huggingface-hub
+    #   virtualenv
 fonttools==4.59.2 \
     --hash=sha256:036cd87a2dbd7ef72f7b68df8314ced00b8d9973aee296f2464d06a836aeb9a9 \
     --hash=sha256:0476ea74161322e08c7a982f83558a2b81b491509984523a1a540baf8611cc31 \
@@ -641,6 +651,10 @@ huggingface-hub==0.34.4 \
     --hash=sha256:9b365d781739c93ff90c359844221beef048403f1bc1f1c123c191257c3c890a \
     --hash=sha256:a4228daa6fb001be3f4f4bdaf9a0db00e1739235702848df00885c9b5742c85c
     # via tokenizers
+identify==2.6.16 \
+    --hash=sha256:391ee4d77741d994189522896270b787aed8670389bfd60f326d677d64a6dfb0 \
+    --hash=sha256:846857203b5511bbe94d5a352a48ef2359532bc8f6727b5544077a0dcfb24980
+    # via pre-commit
 idna==3.10 \
     --hash=sha256:12f65c9b470abda6dc35cf8e63cc574b1c52b11df2c86030af0ac09b01b13ea9 \
     --hash=sha256:946d195a0d259cbba61165e88e65941f16e9b36ea6ddb97f00452bae8b1287d3
@@ -1085,6 +1099,10 @@ mypy-extensions==1.1.0 \
     # via
     #   black
     #   mypy
+nodeenv==1.10.0 \
+    --hash=sha256:5bb13e3eed2923615535339b3c620e76779af4cb4c6a90deccc9e36b274d3827 \
+    --hash=sha256:996c191ad80897d076bdfba80a41994c2b47c68e224c542b48feba42ba00f8bb
+    # via pre-commit
 numpy==1.26.4 \
     --hash=sha256:03a8c78d01d9781b28a6989f6fa1bb2c4f2d51201cf99d3dd875df6fbd96b23b \
     --hash=sha256:08beddf13648eb95f8d867350f6a018a4be2e5ad54c8d8caed89ebca558b2818 \
@@ -1269,13 +1287,18 @@ pillow==11.3.0 \
 platformdirs==4.4.0 \
     --hash=sha256:abd01743f24e5287cd7a5db3752faf1a2d65353f38ec26d98e25a6db65958c85 \
     --hash=sha256:ca753cf4d81dc309bc67b0ea38fd15dc97bc30ce419a7f58d13eb3bf14c4febf
-    # via black
+    # via
+    #   black
+    #   virtualenv
 pluggy==1.6.0 \
     --hash=sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3 \
     --hash=sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746
     # via
     #   pytest
     #   pytest-cov
+pre-commit==4.5.1 \
+    --hash=sha256:3b3afd891e97337708c1674210f8eba659b52a38ea5f822ff142d10786221f77 \
+    --hash=sha256:eb545fcff725875197837263e977ea257a402056661f09dae08e4b149b030a61
 propcache==0.3.2 \
     --hash=sha256:035e631be25d6975ed87ab23153db6a73426a48db688070d925aa27e996fe93c \
     --hash=sha256:03c89c1b14a5452cf15403e291c0ccd7751d5b9736ecb2c5bab977ad6c5bcd81 \
@@ -1522,6 +1545,7 @@ pyyaml==6.0.2 \
     #   huggingface-hub
     #   jsonschema-path
     #   openap
+    #   pre-commit
     #   uvicorn
 referencing==0.36.2 \
     --hash=sha256:df2e89862cd09deabbdba16944cc3f10feb6b3e6f18e902f7cc25609a34775aa \
@@ -1958,6 +1982,10 @@ uvloop==0.21.0 ; sys_platform != 'win32' \
     # via
     #   aerospace-mcp
     #   uvicorn
+virtualenv==20.36.1 \
+    --hash=sha256:575a8d6b124ef88f6f51d56d656132389f961062a9177016a50e4f507bbcc19f \
+    --hash=sha256:8befb5c81842c641f8ee658481e42641c68b5eab3521d8e092d18320902466ba
+    # via pre-commit
 watchfiles==1.1.0 \
     --hash=sha256:00645eb79a3faa70d9cb15c8d4187bb72970b2470e938670240c7998dad9f13a \
     --hash=sha256:0a7d40b77f07be87c6faa93d0951a0fcd8cbca1ddff60a1b65d741bac6f3a9f6 \

@@ -103,18 +103,18 @@ class TestToolSchemaSnapshots:
         """Test that all tools have non-empty descriptions."""
         for name, schema in current_schemas.items():
             description = schema.get("description", "")
-            assert (
-                len(description) > 10
-            ), f"Tool {name} has too short description: '{description}'"
+            assert len(description) > 10, (
+                f"Tool {name} has too short description: '{description}'"
+            )
 
     def test_tool_parameters_are_documented(self, current_schemas):
         """Test that tools have parameter documentation."""
         for name, schema in current_schemas.items():
             params = schema.get("parameters", {})
             # Parameters can be empty for simple tools, but should be a dict
-            assert isinstance(
-                params, dict
-            ), f"Tool {name} parameters should be a dict, got {type(params)}"
+            assert isinstance(params, dict), (
+                f"Tool {name} parameters should be a dict, got {type(params)}"
+            )
 
 
 class TestToolSchemaStability:
