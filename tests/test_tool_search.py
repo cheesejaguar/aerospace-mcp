@@ -215,16 +215,24 @@ class TestSearchAerospaceTools:
         assert len(data["tool_references"]) > 0
 
     def test_tool_reference_format(self):
-        """Test tool references match Anthropic's format."""
+        """Test tool references match Anthropic's format for deferred loading."""
         result = search_aerospace_tools("airport")
         data = json.loads(result)
 
+        # tool_references should match Anthropic's format exactly
         assert "tool_references" in data
         for ref in data["tool_references"]:
             assert ref["type"] == "tool_reference"
             assert "tool_name" in ref
-            assert "description" in ref
-            assert "category" in ref
+            # Anthropic's format only includes type and tool_name
+            assert set(ref.keys()) == {"type", "tool_name"}
+
+        # tool_details provides human-readable metadata
+        assert "tool_details" in data
+        for detail in data["tool_details"]:
+            assert "name" in detail
+            assert "description" in detail
+            assert "category" in detail
 
     def test_response_includes_metadata(self):
         """Test response includes helpful metadata."""
@@ -257,8 +265,9 @@ class TestSearchAerospaceTools:
         result = search_aerospace_tools(".*", search_type="regex", category="rockets")
         data = json.loads(result)
 
-        for ref in data["tool_references"]:
-            assert ref["category"] == "rockets"
+        # Check tool_details for category (tool_references only has type/tool_name)
+        for detail in data["tool_details"]:
+            assert detail["category"] == "rockets"
 
     def test_regex_error_handling(self):
         """Test invalid regex returns error."""
@@ -343,4 +352,6 @@ class TestToolDiscoveryScenarios:
         data = json.loads(result)
 
         assert len(data["tool_references"]) > 0
-        assert all(ref["category"] == "optimization" for ref in data["tool_references"])
+        assert all(
+            detail["category"] == "optimization" for detail in data["tool_details"]
+        )

@@ -1040,6 +1040,50 @@ Available categories:
 - **optimization**: GA, PSO, Monte Carlo, porkchop plots
 - **agents**: LLM-powered tool selection and data formatting
 
+### Deferred Tool Loading
+
+For applications with many tools, aerospace-mcp supports [deferred tool loading](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool#deferred-tool-loading) to keep context windows efficient. When using the Anthropic API with MCP, configure your `mcp_toolset` to defer loading of all tools except the discovery tools:
+
+```json
+{
+  "tools": [
+    {
+      "type": "tool_search_tool_regex_20251119",
+      "name": "tool_search_tool_regex"
+    },
+    {
+      "type": "mcp_toolset",
+      "mcp_server_name": "aerospace-mcp",
+      "default_config": {
+        "defer_loading": true
+      },
+      "configs": {
+        "search_aerospace_tools": { "defer_loading": false },
+        "list_tool_categories": { "defer_loading": false }
+      }
+    }
+  ]
+}
+```
+
+This configuration:
+1. **Loads discovery tools immediately** (`search_aerospace_tools`, `list_tool_categories`)
+2. **Defers all other tools** until Claude searches for them
+3. **Automatically expands** `tool_reference` blocks from search results into full definitions
+
+When Claude needs a specific tool, it uses `search_aerospace_tools` which returns `tool_reference` blocks:
+
+```json
+{
+  "tool_references": [
+    { "type": "tool_reference", "tool_name": "hohmann_transfer" },
+    { "type": "tool_reference", "tool_name": "propagate_orbit_j2" }
+  ]
+}
+```
+
+The API automatically expands these references into full tool definitions, keeping context efficient while providing access to all 34+ tools.
+
 ### VS Code Continue Setup
 
 Add to your `config.json`:
