@@ -1,20 +1,16 @@
 """Tool schema contract tests.
 
-These tests snapshot tool schemas to catch breaking changes and ensure
+These tests verify tool schemas to catch breaking changes and ensure
 consistent API contracts. They also test error shapes for invalid inputs.
 """
 
 import json
-from pathlib import Path
 from typing import Any
 
 import pytest
 
 # Mark all tests in this module as contract tests
 pytestmark = [pytest.mark.contract]
-
-# Path to schema snapshots
-SNAPSHOTS_DIR = Path(__file__).parent / "snapshots"
 
 
 def get_tool_schemas() -> dict[str, dict[str, Any]]:
@@ -179,9 +175,15 @@ class TestToolErrorShapes:
         """Test calculate_distance error shape for invalid coordinates."""
         from aerospace_mcp.tools.core import calculate_distance
 
-        # Invalid coordinates
+        # Invalid coordinates (lat/lon values of 999 are out of valid range)
         result = calculate_distance(lat1=999, lon1=999, lat2=999, lon2=999)
         assert isinstance(result, str)
+        # Should indicate error or handle gracefully - verify error-related content
+        result_lower = result.lower()
+        assert any(
+            keyword in result_lower
+            for keyword in ["error", "invalid", "failed", "distance"]
+        ), f"Expected error indication or distance result, got: {result[:200]}"
 
     def test_get_aircraft_performance_invalid_type(self):
         """Test get_aircraft_performance error for invalid aircraft."""
@@ -192,7 +194,18 @@ class TestToolErrorShapes:
             distance_km=1000,
         )
         assert isinstance(result, str)
-        # Should indicate error or unavailable
+        # Should indicate error or unavailable aircraft
+        result_lower = result.lower()
+        assert any(
+            keyword in result_lower
+            for keyword in [
+                "error",
+                "not available",
+                "unavailable",
+                "not found",
+                "unknown",
+            ]
+        ), f"Expected error indication for invalid aircraft, got: {result[:200]}"
 
 
 class TestToolResponseShapes:

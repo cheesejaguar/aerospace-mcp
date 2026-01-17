@@ -1,13 +1,12 @@
 """Protocol smoke tests for MCP server.
 
 These tests spawn the MCP server as a subprocess and test it like a real client would,
-verifying the protocol handshake, tool listing, and basic tool calls work correctly.
+verifying server startup, lifecycle, and basic process management.
 
 This catches framing/stdio quirks, env var wiring, and lifecycle issues that
 in-process tests might miss.
 """
 
-import json
 import subprocess
 import sys
 import time
@@ -46,41 +45,17 @@ class TestMCPProtocolSmoke:
         except subprocess.TimeoutExpired:
             proc.kill()
 
-    def _send_jsonrpc(
-        self, proc, method: str, params: dict = None, id: int = 1
-    ) -> dict:
-        """Send a JSON-RPC request and get response."""
-        request = {
-            "jsonrpc": "2.0",
-            "method": method,
-            "id": id,
-        }
-        if params:
-            request["params"] = params
-
-        request_str = json.dumps(request) + "\n"
-        proc.stdin.write(request_str)
-        proc.stdin.flush()
-
-        # Read response (may need to handle Content-Length header for full MCP)
-        response_line = proc.stdout.readline()
-        if response_line:
-            try:
-                return json.loads(response_line)
-            except json.JSONDecodeError:
-                return {"raw": response_line}
-        return {}
-
-    def test_server_starts_and_responds(self, server_process):
-        """Test that server starts and responds to basic requests."""
+    def test_server_starts(self, server_process):
+        """Test that server process starts and is running."""
         proc = server_process
         assert proc.poll() is None, "Server should be running"
 
     @pytest.mark.skip(reason="MCP protocol requires proper framing - needs MCP client")
     def test_list_tools_returns_expected_tools(self, server_process):
         """Test that list_tools returns the expected aerospace tools."""
-        # This would require proper MCP client implementation
-        # For now, we verify the server is running
+        # This would require proper MCP client implementation with
+        # Content-Length framing per the MCP protocol specification.
+        # For now, we verify the server is running.
         proc = server_process
         assert proc.poll() is None
 

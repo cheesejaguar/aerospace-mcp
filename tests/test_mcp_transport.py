@@ -83,6 +83,8 @@ class MCPStdioClient:
         try:
             self.process.stdin.close()
         except Exception:
+            # Ignore errors while closing stdin during test teardown; the process
+            # may already have exited or the pipe may already be closed.
             pass
         self.process.terminate()
         try:
@@ -208,7 +210,17 @@ class TestSSETransport:
         assert proc.poll() is None, "SSE server should be running"
 
     def test_sse_server_responds(self, sse_server):
-        """Test that SSE server responds to requests."""
+        """Test that SSE server accepts connections on the expected endpoint.
+
+        Note: This test accepts 200, 404, or 405 as valid responses because:
+        - 200: SSE endpoint exists and is working
+        - 404: Server is running but SSE endpoint not configured at /sse
+        - 405: Server is running but GET method not allowed on /sse
+
+        The key assertion is that the server is running and accepting HTTP
+        connections, not that SSE is fully functional (which would require
+        a proper SSE client implementation).
+        """
         import httpx
 
         url, proc = sse_server
@@ -217,12 +229,13 @@ class TestSSETransport:
             # Use streaming to avoid blocking on SSE connections
             # SSE is a long-lived connection, so we just check we can connect
             with httpx.stream("GET", f"{url}/sse", timeout=2.0) as response:
-                # Just check we get a response, don't consume the stream
+                # Server is responding - any of these status codes is acceptable
                 assert response.status_code in [200, 404, 405]
         except httpx.ConnectError:
             pytest.skip("Could not connect to SSE server")
         except httpx.ReadTimeout:
-            # SSE connections are long-lived, timeout is expected
+            # SSE connections are long-lived, timeout after connection is expected
+            # This actually indicates success - we connected and the server is streaming
             pass
 
 
@@ -294,10 +307,22 @@ class TestTransportConcurrency:
 
 
 class TestTransportErrorRecovery:
-    """Test server recovery from transport errors."""
+    """Test server recovery from transport errors.
+
+    These tests verify that the server doesn't crash when receiving
+    malformed input. The MCP protocol expects Content-Length framed
+    JSON-RPC messages, so sending raw text or empty lines tests the
+    server's robustness to protocol violations.
+    """
 
     def test_server_handles_malformed_json(self):
-        """Test server handles malformed JSON gracefully."""
+        """Test server handles malformed JSON without crashing.
+
+        Expected behavior: Server should remain stable when receiving
+        malformed input (not proper MCP framing). It may ignore the
+        input, log an error, or close the connection - but should not
+        crash or hang indefinitely.
+        """
         proc = subprocess.Popen(
             [sys.executable, "-m", "aerospace_mcp.fastmcp_server"],
             stdin=subprocess.PIPE,
@@ -307,17 +332,23 @@ class TestTransportErrorRecovery:
         )
 
         time.sleep(0.3)
+        assert proc.poll() is None, "Server should start successfully"
 
         try:
-            # Send malformed JSON
+            # Send malformed JSON (not proper MCP Content-Length framing)
             proc.stdin.write("not valid json\n")
             proc.stdin.flush()
 
-            # Server should either ignore or handle gracefully
             time.sleep(0.3)
 
-            # Server might still be running or have exited - both acceptable
-            # The important thing is it doesn't crash hard
+            # Server should not have crashed - it may still be running
+            # or may have exited cleanly. Either is acceptable behavior
+            # for handling protocol violations.
+            exit_code = proc.poll()
+            if exit_code is not None:
+                # Server exited - verify it was a clean exit (0) or
+                # controlled shutdown, not a crash (segfault = -11, etc.)
+                assert exit_code >= 0, f"Server crashed with signal {-exit_code}"
         finally:
             proc.terminate()
             try:
@@ -326,7 +357,11 @@ class TestTransportErrorRecovery:
                 proc.kill()
 
     def test_server_handles_empty_input(self):
-        """Test server handles empty input."""
+        """Test server handles empty input without crashing.
+
+        Expected behavior: Server should remain running when receiving
+        empty lines. Empty input should be ignored or handled gracefully.
+        """
         proc = subprocess.Popen(
             [sys.executable, "-m", "aerospace_mcp.fastmcp_server"],
             stdin=subprocess.PIPE,
@@ -336,6 +371,7 @@ class TestTransportErrorRecovery:
         )
 
         time.sleep(0.3)
+        assert proc.poll() is None, "Server should start successfully"
 
         try:
             # Send empty lines
@@ -343,7 +379,9 @@ class TestTransportErrorRecovery:
             proc.stdin.flush()
 
             time.sleep(0.3)
-            # Should handle gracefully
+
+            # Server should still be running after receiving empty input
+            assert proc.poll() is None, "Server should remain running after empty input"
         finally:
             proc.terminate()
             try:
