@@ -130,6 +130,7 @@ dev-dependencies = [
     "mypy>=1.6.0",
     "types-requests>=2.31.0",
     "pandas>=2.3.2",
+    "pre-commit>=4.5.1",
 ]
 
 [tool.uv.sources]
@@ -189,6 +190,11 @@ asyncio_mode = "auto"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "protocol: marks tests as MCP protocol smoke tests",
+    "transport: marks tests as transport-realistic tests",
+    "contract: marks tests as schema contract tests",
+    "e2e: marks tests as end-to-end tests",
 ]
 
 # Coverage configuration
