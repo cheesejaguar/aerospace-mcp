@@ -69,9 +69,31 @@ def lambert_problem_solver(
                 prograde=direction == "prograde",
             )
 
-            # Get first solution
-            v1 = v1_solutions[0].to(u.m / u.s).value.tolist()
-            v2 = v2_solutions[0].to(u.m / u.s).value.tolist()
+            # Get first solution - handle both single solution and array of solutions
+            # poliastro may return a single Quantity or a tuple of Quantities
+            if hasattr(v1_solutions, "__len__") and not isinstance(
+                v1_solutions.value, int | float
+            ):
+                # It's an array-like with multiple elements
+                if len(v1_solutions.shape) > 1:
+                    # Multiple solutions, take first
+                    v1 = v1_solutions[0].to(u.m / u.s).value.tolist()
+                    v2 = v2_solutions[0].to(u.m / u.s).value.tolist()
+                else:
+                    # Single solution as 1D array
+                    v1 = v1_solutions.to(u.m / u.s).value.tolist()
+                    v2 = v2_solutions.to(u.m / u.s).value.tolist()
+            else:
+                # Single scalar (shouldn't happen for velocity vectors)
+                v1 = v1_solutions.to(u.m / u.s).value.tolist()
+                v2 = v2_solutions.to(u.m / u.s).value.tolist()
+
+            # Ensure v1 and v2 are lists
+            if not isinstance(v1, list):
+                v1 = [float(v1)] if isinstance(v1, int | float) else list(v1)
+            if not isinstance(v2, list):
+                v2 = [float(v2)] if isinstance(v2, int | float) else list(v2)
+
             implementation = "poliastro (Izzo algorithm)"
 
         except ImportError:

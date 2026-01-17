@@ -455,6 +455,10 @@ def lqr_controller_design(
         # Check closed-loop stability
         stable = all(e < 0 for e in E_list)
 
+        # Convert numpy booleans to Python booleans for JSON serialization
+        controllable = bool(controllable)
+        stable = bool(stable)
+
         result = {
             "input": {
                 "A_matrix_shape": f"{n}x{n}",
