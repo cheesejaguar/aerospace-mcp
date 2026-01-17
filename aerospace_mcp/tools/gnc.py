@@ -12,6 +12,28 @@ import math
 logger = logging.getLogger(__name__)
 
 
+def _convert_to_native(obj):
+    """Convert numpy types to native Python types for JSON serialization."""
+    try:
+        import numpy as np
+
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, dict):
+            return {k: _convert_to_native(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [_convert_to_native(item) for item in obj]
+        return obj
+    except ImportError:
+        return obj
+
+
 def kalman_filter_state_estimation(
     initial_state: list[float],
     initial_covariance: list[list[float]],
@@ -237,25 +259,29 @@ def kalman_filter_state_estimation(
             final_cov = [initial_covariance[i][i] for i in range(n)]
             innovation_rms = []
 
-        result = {
-            "input": {
-                "initial_state": initial_state,
-                "dynamics_model": dynamics_model,
-                "num_measurements": len(measurements),
-            },
-            "output": {
-                "final_state": [round(s, 6) for s in final_state],
-                "final_state_std": [round(math.sqrt(max(0, c)), 6) for c in final_cov],
-                "num_states_estimated": len(filtered_states),
-            },
-            "statistics": {
-                "innovation_rms": [round(r, 6) for r in innovation_rms],
-            },
-            "filtered_states": [
-                [round(s, 6) for s in state] for state in filtered_states[-10:]
-            ],
-            "implementation": "filterpy" if use_filterpy else "manual",
-        }
+        result = _convert_to_native(
+            {
+                "input": {
+                    "initial_state": initial_state,
+                    "dynamics_model": dynamics_model,
+                    "num_measurements": len(measurements),
+                },
+                "output": {
+                    "final_state": [round(s, 6) for s in final_state],
+                    "final_state_std": [
+                        round(math.sqrt(max(0, c)), 6) for c in final_cov
+                    ],
+                    "num_states_estimated": len(filtered_states),
+                },
+                "statistics": {
+                    "innovation_rms": [round(r, 6) for r in innovation_rms],
+                },
+                "filtered_states": [
+                    [round(s, 6) for s in state] for state in filtered_states[-10:]
+                ],
+                "implementation": "filterpy" if use_filterpy else "manual",
+            }
+        )
 
         state_labels = ["x", "y", "vx", "vy", "ax", "ay"][:n]
         final_state_str = ", ".join(
@@ -459,30 +485,34 @@ def lqr_controller_design(
         controllable = bool(controllable)
         stable = bool(stable)
 
-        result = {
-            "input": {
-                "A_matrix_shape": f"{n}x{n}",
-                "B_matrix_shape": f"{n}x{m}",
-                "state_names": state_names[:n],
-                "input_names": input_names[:m],
-            },
-            "controllability": {
-                "is_controllable": controllable,
-                "rank": ctrb_rank if use_control else n,
-                "required_rank": n,
-            },
-            "lqr_solution": {
-                "gain_matrix_K": [[round(k, 6) for k in row] for row in K_list],
-                "cost_matrix_S_diagonal": [round(S_list[i][i], 6) for i in range(n)],
-            },
-            "stability_analysis": {
-                "closed_loop_stable": stable,
-                "open_loop_eigenvalues": [round(e, 6) for e in ol_eig_list],
-                "closed_loop_eigenvalues": [round(e, 6) for e in E_list],
-                "poles_info": cl_poles_info,
-            },
-            "implementation": "control" if use_control else "manual_approximation",
-        }
+        result = _convert_to_native(
+            {
+                "input": {
+                    "A_matrix_shape": f"{n}x{n}",
+                    "B_matrix_shape": f"{n}x{m}",
+                    "state_names": state_names[:n],
+                    "input_names": input_names[:m],
+                },
+                "controllability": {
+                    "is_controllable": controllable,
+                    "rank": ctrb_rank if use_control else n,
+                    "required_rank": n,
+                },
+                "lqr_solution": {
+                    "gain_matrix_K": [[round(k, 6) for k in row] for row in K_list],
+                    "cost_matrix_S_diagonal": [
+                        round(S_list[i][i], 6) for i in range(n)
+                    ],
+                },
+                "stability_analysis": {
+                    "closed_loop_stable": stable,
+                    "open_loop_eigenvalues": [round(e, 6) for e in ol_eig_list],
+                    "closed_loop_eigenvalues": [round(e, 6) for e in E_list],
+                    "poles_info": cl_poles_info,
+                },
+                "implementation": "control" if use_control else "manual_approximation",
+            }
+        )
 
         # Format gain matrix display
         K_str = "\n    ".join(
