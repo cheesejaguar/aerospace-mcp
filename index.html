@@ -1045,17 +1045,17 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
 
                     <div class="terminal-response">
                         <div class="terminal-response-content" class="terminal-output">{
-  <span class="json-key">"delta_v1_ms"</span>: <span class="json-number">2457.61</span>,
-  <span class="json-key">"delta_v2_ms"</span>: <span class="json-number">1478.12</span>,
-  <span class="json-key">"total_delta_v_ms"</span>: <span class="json-number">3935.73</span>,
-  <span class="json-key">"transfer_time_s"</span>: <span class="json-number">19072.34</span>,
-  <span class="json-key">"transfer_time_h"</span>: <span class="json-number">5.30</span>,
+  <span class="json-key">"delta_v1_ms"</span>: <span class="json-number">2397.51</span>,
+  <span class="json-key">"delta_v2_ms"</span>: <span class="json-number">1456.50</span>,
+  <span class="json-key">"total_delta_v_ms"</span>: <span class="json-number">3854.01</span>,
+  <span class="json-key">"transfer_time_s"</span>: <span class="json-number">19048.40</span>,
+  <span class="json-key">"transfer_time_h"</span>: <span class="json-number">5.29</span>,
   <span class="json-key">"transfer_semi_major_axis_m"</span>: <span class="json-number">24471000</span>
 }</div>
                     </div>
 
                     <div class="terminal-line" class="terminal-explanation">
-                        The transfer requires <span class="value">3,936 m/s</span> total Δv: first burn of <span class="value">2,458 m/s</span> at perigee raises apogee to GEO, then <span class="value">1,478 m/s</span> at apogee circularizes the orbit. Transfer time is about <span class="value">5.3 hours</span>.
+                        The transfer requires <span class="value">3,854 m/s</span> total Δv: first burn of <span class="value">2,398 m/s</span> at perigee raises apogee to GEO, then <span class="value">1,457 m/s</span> at apogee circularizes the orbit. Transfer time is about <span class="value">5.3 hours</span>.
                     </div>
 
                     <hr class="terminal-divider">
@@ -1068,23 +1068,23 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
                     <div class="terminal-tool-call">
                         <div><span class="terminal-tool-name">hohmann_transfer</span></div>
                         <div class="terminal-tool-params">
-                            r1_m: <span class="json-number">6778000</span>, r2_m: <span class="json-number">390778000</span>
+                            r1_m: <span class="json-number">6778000</span>, r2_m: <span class="json-number">384400000</span> <span style="color: #8b949e;">(Earth-centered distance)</span>
                         </div>
                     </div>
 
                     <div class="terminal-response">
                         <div class="terminal-response-content" class="terminal-output">{
-  <span class="json-key">"delta_v1_ms"</span>: <span class="json-number">3132.45</span>,
-  <span class="json-key">"delta_v2_ms"</span>: <span class="json-number">839.87</span>,
-  <span class="json-key">"total_delta_v_ms"</span>: <span class="json-number">3972.32</span>,
-  <span class="json-key">"transfer_time_s"</span>: <span class="json-number">432167.82</span>,
-  <span class="json-key">"transfer_time_h"</span>: <span class="json-number">120.05</span>,
-  <span class="json-key">"transfer_semi_major_axis_m"</span>: <span class="json-number">198778000</span>
+  <span class="json-key">"delta_v1_ms"</span>: <span class="json-number">3082.09</span>,
+  <span class="json-key">"delta_v2_ms"</span>: <span class="json-number">828.74</span>,
+  <span class="json-key">"total_delta_v_ms"</span>: <span class="json-number">3910.82</span>,
+  <span class="json-key">"transfer_time_s"</span>: <span class="json-number">430416.00</span>,
+  <span class="json-key">"transfer_time_h"</span>: <span class="json-number">119.56</span>,
+  <span class="json-key">"transfer_semi_major_axis_m"</span>: <span class="json-number">195589000</span>
 }</div>
                     </div>
 
                     <div class="terminal-line" class="terminal-explanation">
-                        Trans-Lunar Injection requires <span class="value">3,132 m/s</span>, with a <span class="value">~5 day</span> transfer time. Lunar orbit insertion needs only <span class="value">840 m/s</span> at apogee.
+                        A Hohmann transfer to lunar distance requires <span class="value">3,082 m/s</span> at perigee, with a <span class="value">~5 day</span> coast. Note: real lunar missions use 3-body trajectories (~3 days) and require separate LOI burns relative to the Moon.
                     </div>
 
                     <div class="terminal-line" class="terminal-line-spaced">
