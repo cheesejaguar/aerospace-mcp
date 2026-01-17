@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import sys
 
-import pytest
-
 from tests.tools.test_tools_common import (
     StubPerf,
     StubPoint,
@@ -17,17 +15,6 @@ class RocketGeometry:
         self.diameter_m = kwargs.get("diameter_m", 0.3)
         self.dry_mass_kg = kwargs.get("dry_mass_kg", 10.0)
         self.propellant_mass_kg = kwargs.get("propellant_mass_kg", 5.0)
-
-
-@pytest.fixture(autouse=True)
-def restore_rockets_module():
-    """Save and restore the rockets integration module after each test."""
-    original = sys.modules.get("aerospace_mcp.integrations.rockets")
-    yield
-    if original is not None:
-        sys.modules["aerospace_mcp.integrations.rockets"] = original
-    elif "aerospace_mcp.integrations.rockets" in sys.modules:
-        del sys.modules["aerospace_mcp.integrations.rockets"]
 
 
 def test_rocket_3dof_trajectory_success():
