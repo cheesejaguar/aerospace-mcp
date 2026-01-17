@@ -1,12 +1,8 @@
-# Minimal dependencies for Vercel HTTP API deployment
-# Excludes openap to stay under 250MB serverless limit
-# Flight planning works but without fuel/performance calculations
+# Dependencies for Vercel HTTP API deployment
 
 fastapi>=0.104.0
 pydantic>=2.0.0
 airportsdata>=20231201
 geographiclib>=2.0
 python-dotenv>=1.0.0
-
-# Note: openap excluded (pulls numpy/pandas/scipy ~200MB+)
-# The API gracefully degrades - routes work, fuel estimates return 0
+openap>=1.3.0

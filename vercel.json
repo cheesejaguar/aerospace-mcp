@@ -3,46 +3,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "50mb",
-        "runtime": "python3.11"
-      }
+      "src": "main.py",
+      "use": "@vercel/python"
     }
   ],
   "routes": [
     {
-      "src": "/health",
-      "dest": "/api/index.py"
-    },
-    {
-      "src": "/airports/(.*)",
-      "dest": "/api/index.py"
-    },
-    {
-      "src": "/plan",
-      "dest": "/api/index.py"
-    },
-    {
-      "src": "/docs",
-      "dest": "/api/index.py"
-    },
-    {
-      "src": "/openapi.json",
-      "dest": "/api/index.py"
-    },
-    {
-      "src": "/redoc",
-      "dest": "/api/index.py"
-    },
-    {
-      "src": "/.well-known/(.*)",
-      "dest": "/api/index.py"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/index.py"
+      "src": "/(.*)",
+      "dest": "main.py"
     }
   ],
   "env": {
