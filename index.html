@@ -1106,19 +1106,24 @@ curl <span class="string">"http://localhost:8080/health"</span></code>
             </div>
 
             <div class="install-card">
-                <h3>🤖 MCP Server</h3>
-                <p>Direct integration with Claude Desktop and other MCP clients.</p>
+                <h3>🤖 Claude Code MCP</h3>
+                <p>Add aerospace-mcp to your Claude Code settings for full tool access.</p>
                 <div class="code-block">
                     <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-                    <code><span class="comment"># Run MCP server</span>
-uv run aerospace-mcp
-
-<span class="comment"># Or in TCP mode for debugging</span>
-uv run aerospace-mcp --tcp localhost:<span class="number">8000</span>
-
-<span class="comment"># Test with MCP client</span>
-<span class="keyword">from</span> mcp <span class="keyword">import</span> Client
-client = Client(<span class="string">"stdio"</span>, <span class="string">"uv run aerospace-mcp"</span>)</code>
+                    <code><span class="comment">// Add to ~/.claude/settings.json</span>
+{
+  <span class="string">"mcpServers"</span>: {
+    <span class="string">"aerospace-mcp"</span>: {
+      <span class="string">"command"</span>: <span class="string">"uv"</span>,
+      <span class="string">"args"</span>: [
+        <span class="string">"--directory"</span>,
+        <span class="string">"/path/to/aerospace-mcp"</span>,
+        <span class="string">"run"</span>,
+        <span class="string">"aerospace-mcp"</span>
+      ]
+    }
+  }
+}</code>
                 </div>
             </div>
         </div>
