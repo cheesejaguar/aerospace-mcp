@@ -351,4 +351,3 @@ config.local.toml
 .env.production
 .env.staging
 docker-compose.override.local.yml
-.vercel
