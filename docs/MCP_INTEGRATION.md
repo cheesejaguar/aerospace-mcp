@@ -28,7 +28,7 @@ graph TB
     MCP --> Server[Aerospace MCP Server]
     Server --> Tools[Flight Planning Tools]
 
-    subgraph "Available Tools"
+    subgraph "Core Tools"
         SearchAirports[search_airports]
         PlanFlight[plan_flight]
         CalcDistance[calculate_distance]
@@ -36,9 +36,15 @@ graph TB
         SystemStatus[get_system_status]
     end
 
+    subgraph "Tool Discovery"
+        SearchTools[search_aerospace_tools]
+        ListCategories[list_tool_categories]
+    end
+
     Tools --> OpenAP[OpenAP Database]
     Tools --> AirportDB[Airport Database]
     Tools --> GeographicLib[Geographic Calculations]
+    Tools --> ToolRegistry[Tool Registry<br/>36 tools across 9 categories]
 ```
 
 ### Key Benefits
@@ -164,6 +170,43 @@ Assistant: Uses get_aircraft_performance tool with specified parameters
 ```
 User: "Is the flight planning system working?"
 Assistant: Uses get_system_status tool to check service health
+```
+
+### 6. search_aerospace_tools
+
+**Description**: Search for aerospace-mcp tools by name, description, or functionality. Implements Anthropic's tool search pattern for dynamic tool discovery.
+
+**Parameters**:
+```typescript
+{
+  query: string;              // Search query (regex pattern or natural language)
+  search_type?: string;       // "regex", "text", or "auto" (default: "auto")
+  max_results?: number;       // Maximum results to return (default: 5, max: 10)
+  category?: string;          // Optional category filter
+}
+```
+
+**Example Usage**:
+```
+User: "What tools can help with orbital mechanics?"
+Assistant: Uses search_aerospace_tools with query="orbital mechanics"
+Returns: propagate_orbit_j2, elements_to_state_vector, hohmann_transfer, etc.
+
+User: "Find all rocket-related tools"
+Assistant: Uses search_aerospace_tools with query=".*rocket.*", search_type="regex"
+Returns: rocket_3dof_trajectory, estimate_rocket_sizing, optimize_launch_angle
+```
+
+### 7. list_tool_categories
+
+**Description**: List all available tool categories with tool counts.
+
+**Parameters**: None
+
+**Example Usage**:
+```
+User: "What categories of tools are available?"
+Assistant: Uses list_tool_categories to show all 9 categories with tool counts
 ```
 
 ## 🖥️ Claude Desktop Setup

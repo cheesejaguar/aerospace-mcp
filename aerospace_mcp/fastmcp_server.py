@@ -71,6 +71,10 @@ from .tools.rockets import (
     optimize_launch_angle,
     rocket_3dof_trajectory,
 )
+from .tools.tool_search import (
+    list_tool_categories,
+    search_aerospace_tools,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -131,6 +135,10 @@ mcp.tool(monte_carlo_uncertainty_analysis)
 # Agent tools for helping users
 mcp.tool(format_data_for_tool)
 mcp.tool(select_aerospace_tool)
+
+# Tool discovery tools
+mcp.tool(search_aerospace_tools)
+mcp.tool(list_tool_categories)
 
 
 def run():

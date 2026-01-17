@@ -1,15 +1,114 @@
 # Agent Tools Documentation
 
-The Aerospace MCP server now includes two powerful agent tools that help users interact more effectively with the aerospace calculation tools using AI assistance.
+The Aerospace MCP server includes powerful agent and discovery tools that help users interact more effectively with the 36 aerospace calculation tools.
 
 ## Overview
+
+The agent tools are divided into two categories:
+
+### Tool Discovery (No API Key Required)
+
+Local tool search functionality following [Anthropic's tool search guide](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool):
+
+1. **search_aerospace_tools**: Search for tools by name, description, or functionality using regex or natural language
+2. **list_tool_categories**: List all 9 tool categories with tool counts
+
+### LLM-Powered Tools (Requires OpenAI API Key)
 
 These tools use **OpenAI's GPT-5-Medium model** through **LiteLLM** to provide intelligent assistance for:
 
 1. **Data Formatting**: Automatically format user data into the correct structure for aerospace tools
 2. **Tool Selection**: Help users choose the right aerospace tool for their specific task
 
-## Configuration
+## Tool Discovery (No Configuration Required)
+
+The tool search tools work out of the box with no API keys or configuration needed.
+
+### search_aerospace_tools
+
+Search for aerospace-mcp tools by name, description, or functionality.
+
+**Parameters:**
+- `query` (str): Search query - regex pattern or natural language
+- `search_type` (str, optional): "regex", "text", or "auto" (default: "auto")
+- `max_results` (int, optional): Maximum results to return (default: 5, max: 10)
+- `category` (str, optional): Filter by category
+
+**Example Usage:**
+```python
+# Natural language search
+result = search_aerospace_tools("atmospheric pressure altitude")
+# Returns: get_atmosphere_profile, wind_model_simple
+
+# Regex pattern search
+result = search_aerospace_tools("(?i)orbit", search_type="regex")
+# Returns: propagate_orbit_j2, elements_to_state_vector, hohmann_transfer, ...
+
+# Category-filtered search
+result = search_aerospace_tools("calculate", category="orbits")
+# Returns only orbital mechanics tools matching "calculate"
+```
+
+**Response Format:**
+```json
+{
+  "tool_references": [
+    {
+      "type": "tool_reference",
+      "tool_name": "propagate_orbit_j2",
+      "description": "Propagate satellite orbit with J2 perturbations",
+      "category": "orbits"
+    }
+  ],
+  "total_matches": 5,
+  "query": "orbit",
+  "search_type": "text",
+  "available_categories": ["core", "atmosphere", "frames", ...]
+}
+```
+
+### list_tool_categories
+
+List all available tool categories with tool counts.
+
+**Parameters:** None
+
+**Example Usage:**
+```python
+result = list_tool_categories()
+# Returns all 9 categories with their tool counts
+```
+
+**Response Format:**
+```json
+{
+  "categories": [
+    {"name": "core", "tool_count": 5},
+    {"name": "atmosphere", "tool_count": 2},
+    {"name": "orbits", "tool_count": 6},
+    ...
+  ],
+  "total_tools": 36
+}
+```
+
+### Available Categories
+
+| Category | Description | Tool Count |
+|----------|-------------|------------|
+| core | Flight planning, airports, distance, performance | 5 |
+| atmosphere | ISA profiles, wind modeling | 2 |
+| frames | Coordinate transformations (ECEF, ECI, geodetic) | 3 |
+| aerodynamics | Wing analysis, airfoil polars, stability | 4 |
+| propellers | BEMT analysis, UAV energy | 3 |
+| rockets | 3DOF trajectory, sizing, launch optimization | 3 |
+| orbits | Orbital elements, propagation, transfers | 6 |
+| optimization | GA, PSO, Monte Carlo, porkchop plots | 6 |
+| agents | LLM-powered tools (requires API key) | 2 |
+
+---
+
+## LLM-Powered Tools Configuration
 
 ### Environment Variables
 
@@ -99,22 +198,48 @@ result = select_aerospace_tool(
 # Returns detailed guidance on which tools to use and how
 ```
 
-## Supported Aerospace Tools Catalog
+## Complete Aerospace Tools Catalog
 
-The agent tools are aware of these aerospace-mcp tools:
+All 36 aerospace-mcp tools are searchable via `search_aerospace_tools`:
 
-| Tool Name | Description |
-|-----------|-------------|
-| `search_airports` | Search for airports by IATA code or city name |
-| `plan_flight` | Generate complete flight plan between airports |
-| `calculate_distance` | Calculate great-circle distance between airports |
-| `get_aircraft_performance` | Get performance estimates for aircraft |
-| `get_atmosphere_profile` | Calculate atmospheric conditions at various altitudes |
-| `wind_model_simple` | Calculate wind profiles at various altitudes |
-| `elements_to_state_vector` | Convert orbital elements to state vector |
-| `propagate_orbit_j2` | Propagate satellite orbit with J2 perturbations |
-| `hohmann_transfer` | Calculate Hohmann transfer orbit between two circular orbits |
-| `rocket_3dof_trajectory` | Simulate 3DOF rocket trajectory with atmospheric effects |
+| Category | Tool Name | Description |
+|----------|-----------|-------------|
+| **core** | `search_airports` | Search for airports by IATA code or city name |
+| | `plan_flight` | Generate complete flight plan between airports |
+| | `calculate_distance` | Calculate great-circle distance between airports |
+| | `get_aircraft_performance` | Get performance estimates for aircraft |
+| | `get_system_status` | Get system health and capabilities |
+| **atmosphere** | `get_atmosphere_profile` | Calculate atmospheric conditions at various altitudes |
+| | `wind_model_simple` | Calculate wind profiles at various altitudes |
+| **frames** | `transform_frames` | Transform coordinates between reference frames |
+| | `geodetic_to_ecef` | Convert geodetic to ECEF coordinates |
+| | `ecef_to_geodetic` | Convert ECEF to geodetic coordinates |
+| **aerodynamics** | `wing_vlm_analysis` | Vortex Lattice Method wing analysis |
+| | `airfoil_polar_analysis` | Generate airfoil polar data |
+| | `calculate_stability_derivatives` | Calculate longitudinal stability derivatives |
+| | `get_airfoil_database` | Look up airfoil data from database |
+| **propellers** | `propeller_bemt_analysis` | Blade Element Momentum Theory analysis |
+| | `uav_energy_estimate` | Estimate UAV flight time and energy |
+| | `get_propeller_database` | Look up propeller data from database |
+| **rockets** | `rocket_3dof_trajectory` | Simulate 3DOF rocket trajectory |
+| | `estimate_rocket_sizing` | Estimate rocket sizing for mission |
+| | `optimize_launch_angle` | Optimize launch angle for max range/altitude |
+| **orbits** | `elements_to_state_vector` | Convert orbital elements to state vector |
+| | `state_vector_to_elements` | Convert state vector to orbital elements |
+| | `propagate_orbit_j2` | Propagate orbit with J2 perturbations |
+| | `calculate_ground_track` | Calculate satellite ground track |
+| | `hohmann_transfer` | Calculate Hohmann transfer orbit |
+| | `orbital_rendezvous_planning` | Plan spacecraft rendezvous maneuvers |
+| **optimization** | `optimize_thrust_profile` | Optimize rocket thrust profile |
+| | `trajectory_sensitivity_analysis` | Trajectory parameter sensitivity analysis |
+| | `genetic_algorithm_optimization` | GA-based trajectory optimization |
+| | `particle_swarm_optimization` | PSO-based trajectory optimization |
+| | `porkchop_plot_analysis` | Interplanetary transfer opportunity analysis |
+| | `monte_carlo_uncertainty_analysis` | Monte Carlo uncertainty quantification |
+| **agents** | `format_data_for_tool` | LLM-powered data formatting |
+| | `select_aerospace_tool` | LLM-powered tool selection |
+| **discovery** | `search_aerospace_tools` | Search tools by name/description |
+| | `list_tool_categories` | List all tool categories |
 
 ## Integration Examples
 

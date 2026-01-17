@@ -86,10 +86,18 @@ The system follows a layered architecture with shared business logic:
 - OpenAPI documentation at `/docs` and AI plugin manifest at `/.well-known/ai-plugin.json`
 
 **MCP Interface** (`aerospace_mcp/fastmcp_server.py`):
-- 30+ MCP tools organized across 8 domain modules (core, atmosphere, frames, aerodynamics, propellers, rockets, orbits, optimization)
+- 36 MCP tools organized across 9 domain modules (core, atmosphere, frames, aerodynamics, propellers, rockets, orbits, optimization, agents)
 - FastMCP framework for simplified tool development with decorators and automatic schema generation
 - Modular architecture with tools organized by aerospace domain
+- **Tool search tool** for dynamic tool discovery following Anthropic's guide
 - Full compatibility with traditional MCP protocol
+
+**Tool Discovery** (`aerospace_mcp/tools/tool_search.py`):
+- `search_aerospace_tools`: Search tools by name, description, or functionality
+- Supports regex patterns (e.g., `".*orbit.*"`) and natural language queries
+- Category filtering for targeted discovery
+- Returns `tool_reference` blocks compatible with Anthropic's tool search protocol
+- `list_tool_categories`: Lists all 9 tool categories with tool counts
 
 ### Key Components
 

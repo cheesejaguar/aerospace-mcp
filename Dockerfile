@@ -77,7 +77,7 @@ CMD ["sh", "-c", "if [ \"$AEROSPACE_MCP_MODE\" = \"mcp\" ]; then aerospace-mcp; 
 # Labels for metadata
 LABEL maintainer="Aaron <hello@aeroastro.org>"
 LABEL description="Aerospace MCP server for flight planning operations"
-LABEL version="0.0.1"
+LABEL version="0.0.2"
 LABEL org.opencontainers.image.source="https://github.com/username/aerospace-mcp"
 LABEL org.opencontainers.image.description="MCP server for aerospace and flight planning operations"
 LABEL org.opencontainers.image.licenses="MIT"

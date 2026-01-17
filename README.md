@@ -175,6 +175,7 @@ uv run aerospace-mcp sse 0.0.0.0 8001
 - 📚 **Well-documented**: Complete API documentation with examples
 - ⚡ **Hardware Optimized**: NumPy vectorization with CuPy GPU acceleration support
 - 🔄 **Batch Processing**: Vectorized operations for efficient bulk calculations
+- 🔍 **Tool Discovery**: Dynamic tool search for finding relevant tools from 34+ available
 
 ## 💾 Installation
 
@@ -797,7 +798,7 @@ The FastMCP refactoring introduced a **modular architecture** with tools organiz
 - **Entry Point**: Now uses `aerospace_mcp.fastmcp_server:run`
 - **Dependencies**: Includes `fastmcp>=2.11.3` instead of raw `mcp`
 - **Server Name**: Still `aerospace-mcp` for client compatibility
-- **All Tools**: All 30+ tools maintain exact same names and parameters
+- **All Tools**: All 36 tools maintain exact same names and parameters
 
 ## ⚡ Performance
 
@@ -980,6 +981,8 @@ Error responses include detailed messages:
 | `particle_swarm_optimization` | Trajectory optimization using PSO | `initial_trajectory`, `objective`, `constraints` |
 | `monte_carlo_uncertainty_analysis` | Monte Carlo trajectory uncertainty analysis | `trajectory`, `uncertainty_params`, `num_samples` |
 | `porkchop_plot_analysis` | Generate porkchop plot for interplanetary transfers | `departure_body`, `arrival_body`, `departure_dates`, `arrival_dates`, `min_tof_days`, `max_tof_days` |
+| `search_aerospace_tools` | Search for tools by name, description, or functionality | `query`, `search_type`, `max_results`, `category` |
+| `list_tool_categories` | List all available tool categories with counts | None |
 
 ### Claude Desktop Setup
 
@@ -1003,6 +1006,39 @@ Error responses include detailed messages:
 
 3. Restart Claude Desktop
 4. Test with: "Search for airports in Tokyo"
+
+### Tool Discovery
+
+With 34+ aerospace tools available, the MCP server includes a **tool search tool** following [Anthropic's guide](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool) for dynamic tool discovery:
+
+```python
+# Search by natural language
+search_aerospace_tools("atmospheric pressure altitude")
+# Returns: get_atmosphere_profile, wind_model_simple, ...
+
+# Search by regex pattern
+search_aerospace_tools("(?i)orbit", search_type="regex")
+# Returns: propagate_orbit_j2, elements_to_state_vector, hohmann_transfer, ...
+
+# Filter by category
+search_aerospace_tools("calculate", category="orbits")
+# Returns only orbital mechanics tools matching "calculate"
+
+# List all categories
+list_tool_categories()
+# Returns: core, atmosphere, frames, aerodynamics, propellers, rockets, orbits, optimization, agents
+```
+
+Available categories:
+- **core**: Flight planning, airports, distance, aircraft performance
+- **atmosphere**: ISA profiles, wind modeling
+- **frames**: Coordinate transformations (ECEF, ECI, geodetic)
+- **aerodynamics**: Wing analysis, airfoil polars, stability derivatives
+- **propellers**: BEMT analysis, UAV energy estimation
+- **rockets**: 3DOF trajectory, sizing, launch optimization
+- **orbits**: Orbital elements, propagation, transfers, rendezvous
+- **optimization**: GA, PSO, Monte Carlo, porkchop plots
+- **agents**: LLM-powered tool selection and data formatting
 
 ### VS Code Continue Setup
 
@@ -1092,7 +1128,9 @@ aerospace-mcp/
 │   │   ├── rockets.py     # Rocket trajectory tools
 │   │   ├── orbits.py      # Orbital mechanics tools
 │   │   ├── propellers.py  # Propeller analysis tools
-│   │   └── optimization.py # Trajectory optimization
+│   │   ├── optimization.py # Trajectory optimization
+│   │   ├── agents.py      # LLM-powered agent tools
+│   │   └── tool_search.py # Tool discovery and search
 │   └── integrations/      # Backend computation modules
 │       ├── _array_backend.py # NumPy/CuPy abstraction (GPU support)
 │       ├── atmosphere.py  # Vectorized ISA calculations
