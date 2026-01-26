@@ -6,6 +6,7 @@ import pytest
 
 from aerospace_mcp.tools.agents import (
     AEROSPACE_TOOLS,
+    LITELLM_AVAILABLE,
     format_data_for_tool,
     select_aerospace_tool,
 )
@@ -25,6 +26,7 @@ class TestAgentTools:
             assert isinstance(tool.parameters, dict)
             assert isinstance(tool.examples, list)
 
+    @pytest.mark.skipif(not LITELLM_AVAILABLE, reason="litellm not installed")
     def test_format_data_for_tool_invalid_tool(self):
         """Test format_data_for_tool with invalid tool name when LLM enabled."""
         # Temporarily enable LLM tools and set API key
@@ -77,7 +79,11 @@ class TestAgentTools:
                 tool_name="search_airports", user_requirements="Find airports in Tokyo"
             )
 
-            assert "Error: LLM agent tools are disabled" in result
+            # If litellm not installed, we get that error first
+            if not LITELLM_AVAILABLE:
+                assert "Error: litellm not installed" in result
+            else:
+                assert "Error: LLM agent tools are disabled" in result
         finally:
             # Restore original setting
             if original_enabled is not None:
@@ -85,6 +91,7 @@ class TestAgentTools:
             else:
                 os.environ.pop("LLM_TOOLS_ENABLED", None)
 
+    @pytest.mark.skipif(not LITELLM_AVAILABLE, reason="litellm not installed")
     def test_format_data_for_tool_valid_tool_no_api_key(self):
         """Test format_data_for_tool with valid tool but no API key."""
         # Temporarily set LLM_TOOLS_ENABLED to true and remove API key
@@ -135,7 +142,11 @@ class TestAgentTools:
                 user_task="Plan a flight", user_context="Using A320 aircraft"
             )
 
-            assert "Error: LLM agent tools are disabled" in result
+            # If litellm not installed, we get that error first
+            if not LITELLM_AVAILABLE:
+                assert "Error: litellm not installed" in result
+            else:
+                assert "Error: LLM agent tools are disabled" in result
         finally:
             # Restore original setting
             if original_enabled is not None:
@@ -143,6 +154,7 @@ class TestAgentTools:
             else:
                 os.environ.pop("LLM_TOOLS_ENABLED", None)
 
+    @pytest.mark.skipif(not LITELLM_AVAILABLE, reason="litellm not installed")
     def test_select_aerospace_tool_no_api_key(self):
         """Test select_aerospace_tool with no API key."""
         # Temporarily set LLM_TOOLS_ENABLED to true and remove API key
@@ -176,9 +188,10 @@ class TestAgentTools:
                 os.environ["OPENAI_API_KEY"] = original_key
 
     @pytest.mark.skipif(
-        "OPENAI_API_KEY" not in os.environ
+        not LITELLM_AVAILABLE
+        or "OPENAI_API_KEY" not in os.environ
         or os.environ.get("LLM_TOOLS_ENABLED", "false").lower() != "true",
-        reason="OPENAI_API_KEY not available or LLM tools disabled",
+        reason="litellm not installed, OPENAI_API_KEY not available, or LLM tools disabled",
     )
     def test_format_data_for_tool_with_api_key(self):
         """Integration test for format_data_for_tool with API key."""
@@ -194,9 +207,10 @@ class TestAgentTools:
         assert result.startswith("{") or result.startswith("[")
 
     @pytest.mark.skipif(
-        "OPENAI_API_KEY" not in os.environ
+        not LITELLM_AVAILABLE
+        or "OPENAI_API_KEY" not in os.environ
         or os.environ.get("LLM_TOOLS_ENABLED", "false").lower() != "true",
-        reason="OPENAI_API_KEY not available or LLM tools disabled",
+        reason="litellm not installed, OPENAI_API_KEY not available, or LLM tools disabled",
     )
     def test_select_aerospace_tool_with_api_key(self):
         """Integration test for select_aerospace_tool with API key."""
@@ -224,3 +238,19 @@ class TestAgentTools:
 
         for tool in essential_tools:
             assert tool in tool_names, f"Essential tool '{tool}' missing from catalog"
+
+    @pytest.mark.skipif(LITELLM_AVAILABLE, reason="litellm is installed")
+    def test_litellm_not_installed_error(self):
+        """Test that appropriate error is returned when litellm is not installed."""
+        result = format_data_for_tool(
+            tool_name="search_airports",
+            user_requirements="Find airports in Tokyo",
+        )
+        assert "Error: litellm not installed" in result
+        assert "pip install aerospace-mcp[agents]" in result
+
+        result = select_aerospace_tool(
+            user_task="Plan a flight",
+            user_context="Using A320 aircraft",
+        )
+        assert "Error: litellm not installed" in result

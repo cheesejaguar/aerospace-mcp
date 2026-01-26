@@ -9,7 +9,6 @@ import pytest
 from aerospace_mcp.integrations._array_backend import np
 from aerospace_mcp.integrations.frames import (
     ASTROPY_AVAILABLE,
-    SKYFIELD_AVAILABLE,
     _manual_ecef_to_geodetic,
     _manual_ecef_to_geodetic_vectorized,
     _manual_geodetic_to_ecef,
@@ -185,7 +184,7 @@ class TestFrameTransformations:
         xyz = [1000000.0, 2000000.0, 3000000.0]
 
         # Without high-precision libraries, should still provide approximate results
-        if not ASTROPY_AVAILABLE and not SKYFIELD_AVAILABLE:
+        if not ASTROPY_AVAILABLE:
             result = transform_frames(xyz, "GCRS", "ITRF")
             assert result.frame == "ITRF"
             assert result.x == xyz[0]  # Simplified approximation keeps same coordinates
@@ -236,14 +235,12 @@ class TestFrameInfo:
 
         assert "libraries" in info
         assert "astropy" in info["libraries"]
-        assert "skyfield" in info["libraries"]
 
         assert "manual_transforms" in info
         assert "notes" in info
 
         # Check library availability reporting
         assert info["libraries"]["astropy"] == ASTROPY_AVAILABLE
-        assert info["libraries"]["skyfield"] == SKYFIELD_AVAILABLE
         assert info["high_precision_available"] == ASTROPY_AVAILABLE
 
 

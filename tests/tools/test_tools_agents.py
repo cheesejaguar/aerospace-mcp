@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import pytest
 
+from aerospace_mcp.tools.agents import LITELLM_AVAILABLE
+
+
+@pytest.mark.skipif(not LITELLM_AVAILABLE, reason="litellm not installed")
 def test_agents_errors(monkeypatch):
     import importlib
 
@@ -29,6 +34,7 @@ def test_agents_errors(monkeypatch):
     assert "not set" in agents2.select_aerospace_tool("plan").lower()
 
 
+@pytest.mark.skipif(not LITELLM_AVAILABLE, reason="litellm not installed")
 def test_agents_success(monkeypatch):
     import importlib
 
@@ -59,6 +65,7 @@ def test_agents_success(monkeypatch):
     assert "search_airports" in out
 
 
+@pytest.mark.skipif(not LITELLM_AVAILABLE, reason="litellm not installed")
 def test_agents_exception_paths(monkeypatch):
     import importlib
 
@@ -77,6 +84,7 @@ def test_agents_exception_paths(monkeypatch):
     assert "error" in agents.select_aerospace_tool("task").lower()
 
 
+@pytest.mark.skipif(not LITELLM_AVAILABLE, reason="litellm not installed")
 def test_select_tool_success(monkeypatch):
     import importlib
 
@@ -104,6 +112,7 @@ def test_select_tool_success(monkeypatch):
     assert "PRIMARY_TOOL" in out
 
 
+@pytest.mark.skipif(not LITELLM_AVAILABLE, reason="litellm not installed")
 def test_format_data_invalid_json(monkeypatch):
     import importlib
 

@@ -20,7 +20,6 @@ EARTH_E2 = 2.0 * EARTH_F - EARTH_F**2  # First eccentricity squared
 
 # Optional library imports
 ASTROPY_AVAILABLE = False
-SKYFIELD_AVAILABLE = False
 
 try:
     import astropy
@@ -33,23 +32,14 @@ try:
 except ImportError:
     pass
 
-try:
-    import skyfield
+# Note: skyfield was previously imported here but never actually used.
+# All frame transformations use either astropy or manual numpy calculations.
+# Removed to reduce dependency bloat. If skyfield functionality is needed in
+# the future, install with: pip install skyfield
 
-    # from skyfield.api import load, utc  # Available if needed
-    # from skyfield.positionlib import position_of_radec  # Available if needed
-
-    SKYFIELD_AVAILABLE = True
-    if not ASTROPY_AVAILABLE:  # Only set if astropy not available
-        try:
-            version = skyfield.__version__
-        except AttributeError:
-            version = "unknown"
-        update_availability("frames", True, {"skyfield": version})
-except ImportError:
-    if not ASTROPY_AVAILABLE:
-        # Frames module is still available with manual calculations
-        update_availability("frames", True, {})
+if not ASTROPY_AVAILABLE:
+    # Frames module is still available with manual calculations
+    update_availability("frames", True, {})
 
 
 # Data models
@@ -427,7 +417,6 @@ def get_frame_info() -> dict[str, any]:
         "high_precision_available": ASTROPY_AVAILABLE,
         "libraries": {
             "astropy": ASTROPY_AVAILABLE,
-            "skyfield": SKYFIELD_AVAILABLE,
         },
         "manual_transforms": ["ECEF <-> GEODETIC", "ECI <-> ECEF (approximate)"],
         "vectorized_batch": True,

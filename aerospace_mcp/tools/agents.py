@@ -5,19 +5,31 @@ import logging
 import os
 from typing import Any
 
-import litellm
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
+# Check if litellm is available (optional dependency)
+LITELLM_AVAILABLE = False
+litellm = None
+try:
+    import litellm as _litellm
+
+    litellm = _litellm
+    LITELLM_AVAILABLE = True
+    litellm.set_verbose = False
+except ImportError:
+    logger.info(
+        "litellm not installed. Install with: pip install aerospace-mcp[agents]"
+    )
+
 # Check if LLM tools are enabled via environment variable
 LLM_TOOLS_ENABLED = os.environ.get("LLM_TOOLS_ENABLED", "false").lower() == "true"
 
-# Configure LiteLLM for OpenAI GPT-5-Medium
-litellm.set_verbose = False
-
 # Log status of LLM tools
-if not LLM_TOOLS_ENABLED:
+if not LITELLM_AVAILABLE:
+    pass  # Already logged above
+elif not LLM_TOOLS_ENABLED:
     logger.info("LLM tools disabled via LLM_TOOLS_ENABLED environment variable.")
 elif "OPENAI_API_KEY" not in os.environ:
     logger.warning(
@@ -184,6 +196,10 @@ def format_data_for_tool(
     Returns:
         Formatted JSON string with the correct parameters for the tool
     """
+    # Check if litellm is available
+    if not LITELLM_AVAILABLE:
+        return "Error: litellm not installed. Install with: pip install aerospace-mcp[agents]"
+
     # Check if LLM tools are enabled
     if not LLM_TOOLS_ENABLED:
         return "Error: LLM agent tools are disabled. Set LLM_TOOLS_ENABLED=true to enable them."
@@ -261,6 +277,10 @@ def select_aerospace_tool(user_task: str, user_context: str = "") -> str:
     Returns:
         Recommendation with tool name(s) and usage guidance
     """
+    # Check if litellm is available
+    if not LITELLM_AVAILABLE:
+        return "Error: litellm not installed. Install with: pip install aerospace-mcp[agents]"
+
     # Check if LLM tools are enabled
     if not LLM_TOOLS_ENABLED:
         return "Error: LLM agent tools are disabled. Set LLM_TOOLS_ENABLED=true to enable them."

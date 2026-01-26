@@ -33,8 +33,8 @@ dependencies = [
     "pydantic>=2.0.0",
     "fastmcp>=2.11.3",
     "uvloop>=0.19.0; sys_platform != 'win32'",
-    "litellm>=1.76.1",
     "python-dotenv>=1.0.0",
+    "numpy>=1.20.0",
 ]
 
 [project.optional-dependencies]
@@ -56,14 +56,14 @@ aircraft = [
     # "machupx>=2.0.0",  # Not available on PyPI
 ]
 rockets = [
-    "rocketpy>=1.0.0",
+    # "rocketpy>=1.0.0",  # Removed: not imported anywhere in codebase
     # "rocketcea>=1.1.0",  # May not be available on all platforms
 ]
 space = [
     "poliastro>=0.17.0",
     "astropy>=5.0",
     "spiceypy>=5.0.0",
-    "skyfield>=1.45",
+    # "skyfield>=1.45",  # Removed: imported but never actually used (API calls commented out)
 ]
 trajopt = [
     # Heavy optimization packages - optional for advanced users
@@ -75,22 +75,26 @@ gnc = [
     "filterpy>=1.4.5",
     "control>=0.9.0",
 ]
+agents = [
+    "litellm>=1.76.1",  # Moved from core: only used for optional LLM agent tools
+]
 all = [
     "ambiance>=1.3.0",
     "aerosandbox>=0.9.0",
     # "machupx>=2.0.0",  # Not available on PyPI
-    "rocketpy>=1.0.0",
+    # "rocketpy>=1.0.0",  # Removed: not imported anywhere in codebase
     # "rocketcea>=1.1.0",  # May not be available on all platforms
     "poliastro>=0.17.0",
     "astropy>=5.0",
     "spiceypy>=5.0.0",
-    "skyfield>=1.45",
+    # "skyfield>=1.45",  # Removed: imported but never actually used
     # Heavy packages commented out for CI performance
     # "openmdao>=3.0",
     # "dymos>=1.0",
     # "casadi>=3.6.0",
     "filterpy>=1.4.5",
     "control>=0.9.0",
+    "litellm>=1.76.1",  # Optional LLM agent tools
 ]
 
 [project.scripts]
