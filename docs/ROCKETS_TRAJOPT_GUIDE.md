@@ -7,7 +7,7 @@ This guide covers Phase 3 of the aerospace-mcp project: rocket trajectory analys
 The Phase 3 implementation adds comprehensive rocket trajectory modeling and optimization capabilities to the aerospace MCP server. These tools enable:
 
 - 3DOF rocket trajectory simulation with atmosphere integration
-- Rocket sizing estimation for mission planning  
+- Rocket sizing estimation for mission planning
 - Launch angle optimization for maximum performance
 - Thrust profile optimization using gradient descent
 - Sensitivity analysis for design parameter studies
@@ -22,7 +22,7 @@ Simulates 3-degree-of-freedom rocket trajectories using numerical integration.
 **Parameters:**
 - `geometry`: Rocket geometry and mass properties
   - `dry_mass_kg`: Rocket dry mass (0.1-100000 kg)
-  - `propellant_mass_kg`: Initial propellant mass (0.1-500000 kg) 
+  - `propellant_mass_kg`: Initial propellant mass (0.1-500000 kg)
   - `diameter_m`: Rocket diameter (0.01-10 m)
   - `length_m`: Total rocket length (0.1-100 m)
   - `cd`: Drag coefficient (0.1-2.0, default 0.3)
@@ -67,7 +67,7 @@ Optimizes rocket thrust profile for better performance using multi-segment optim
 
 **Returns:** Optimized thrust profile with segment multipliers and performance analysis.
 
-#### `trajectory_sensitivity_analysis` 
+#### `trajectory_sensitivity_analysis`
 Performs sensitivity analysis on rocket trajectory parameters to identify critical design variables.
 
 **Parameters:**
@@ -85,7 +85,7 @@ The 3DOF trajectory simulation uses Euler integration with the following physics
 
 **Forces:**
 - Thrust: From user-defined thrust curve with linear interpolation
-- Weight: mg with varying mass due to propellant consumption  
+- Weight: mg with varying mass due to propellant consumption
 - Drag: ½ρv²SCD with altitude-dependent atmospheric properties
 
 **Mass Model:**
@@ -101,7 +101,7 @@ The 3DOF trajectory simulation uses Euler integration with the following physics
 
 #### Golden Section Search (1D)
 - Used for launch angle optimization
-- Convergence tolerance: 0.1° 
+- Convergence tolerance: 0.1°
 - Maximum iterations: 50
 - Robust for single-parameter optimization
 
@@ -118,7 +118,7 @@ Uses the rocket equation with simplified loss models:
 1. **Delta-V Estimation:**
    - Potential energy: mgh_target
    - Gravity losses: ~1.5x theoretical
-   - Drag losses: ~0.3x theoretical  
+   - Drag losses: ~0.3x theoretical
    - Total factor: 1.8x theoretical
 
 2. **Mass Breakdown:**
@@ -153,7 +153,7 @@ Uses the rocket equation with simplified loss models:
 
 ```json
 {
-  "tool": "estimate_rocket_sizing", 
+  "tool": "estimate_rocket_sizing",
   "arguments": {
     "target_altitude_m": 10000.0,
     "payload_mass_kg": 5.0,
@@ -170,7 +170,7 @@ Uses the rocket equation with simplified loss models:
   "arguments": {
     "geometry": {
       "dry_mass_kg": 20.0,
-      "propellant_mass_kg": 80.0, 
+      "propellant_mass_kg": 80.0,
       "diameter_m": 0.18,
       "length_m": 1.8,
       "thrust_curve": [[0.0, 1800.0], [6.0, 1800.0], [6.1, 0.0]]
@@ -190,7 +190,7 @@ Uses the rocket equation with simplified loss models:
     "geometry": {
       "dry_mass_kg": 30.0,
       "propellant_mass_kg": 120.0,
-      "diameter_m": 0.25, 
+      "diameter_m": 0.25,
       "length_m": 2.5,
       "cd": 0.35
     },
@@ -220,7 +220,7 @@ Uses the rocket equation with simplified loss models:
       "propellant_mass_kg": [65.0, 75.0, 85.0],
       "cd": [0.3, 0.4, 0.5]
     },
-    "objective": "max_altitude"  
+    "objective": "max_altitude"
   }
 }
 ```
@@ -229,7 +229,7 @@ Uses the rocket equation with simplified loss models:
 
 ### Computational Performance
 - Trajectory simulation: ~50-200ms per run
-- Launch angle optimization: ~2-5 seconds  
+- Launch angle optimization: ~2-5 seconds
 - Thrust profile optimization: ~10-30 seconds
 - Sensitivity analysis: ~1-10 seconds per parameter
 
@@ -252,7 +252,7 @@ Uses the rocket equation with simplified loss models:
 - Density and sound speed for drag/Mach calculations
 - Graceful fallback for extreme altitudes
 
-### Phase 2 Integration (Aerodynamics)  
+### Phase 2 Integration (Aerodynamics)
 - Compatible coordinate systems and units
 - Complementary analysis workflows
 - Shared atmospheric property calculations
@@ -263,12 +263,12 @@ The implementation includes comprehensive test suites covering:
 
 ### Rocket Trajectory Tests
 - Basic trajectory physics validation
-- Mass consumption accuracy 
+- Mass consumption accuracy
 - Thrust curve interpolation
 - Performance analysis consistency
 - Edge cases and error handling
 
-### Optimization Tests  
+### Optimization Tests
 - Algorithm convergence properties
 - Parameter bound enforcement
 - Objective function evaluation

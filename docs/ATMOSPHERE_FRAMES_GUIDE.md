@@ -71,7 +71,7 @@ Transform coordinates between different reference frames commonly used in aerosp
 
 **Supported Frames:**
 - `ECEF`: Earth-Centered, Earth-Fixed
-- `ECI`: Earth-Centered Inertial  
+- `ECI`: Earth-Centered Inertial
 - `GEODETIC`: Latitude/Longitude/Altitude
 - `ITRF`: International Terrestrial Reference Frame
 - `GCRS`: Geocentric Celestial Reference System
@@ -81,7 +81,7 @@ Transform coordinates between different reference frames commonly used in aerosp
 {
   "xyz": [1000000.0, 2000000.0, 3000000.0],
   "from_frame": "ECEF",
-  "to_frame": "GEODETIC", 
+  "to_frame": "GEODETIC",
   "epoch_iso": "2023-01-01T12:00:00"
 }
 ```
@@ -130,7 +130,7 @@ Install optional dependencies for improved accuracy and additional features:
 # Atmosphere enhancements
 uv pip install --optional-dependencies atmosphere
 
-# Coordinate frame enhancements  
+# Coordinate frame enhancements
 uv pip install --optional-dependencies space
 
 # Install all optional dependencies
@@ -207,7 +207,7 @@ wind_conditions = await mcp_client.call_tool("wind_model_simple", {
 mission_alt = 500  # meters AGL
 environment = await mcp_client.call_tool("get_atmosphere_profile", {
     "altitudes_m": [mission_alt],
-    "model_type": "ISA" 
+    "model_type": "ISA"
 })
 
 # Wind conditions for energy planning
@@ -225,7 +225,7 @@ wind_profile = await mcp_client.call_tool("wind_model_simple", {
 
 The ISA implementation follows ICAO Document 7488 with proper handling of:
 - Troposphere (0-11km): Linear temperature lapse
-- Stratosphere layers with different lapse rates  
+- Stratosphere layers with different lapse rates
 - Proper pressure/density calculations using hydrostatic equation
 - Speed of sound using ideal gas relationships
 
@@ -242,7 +242,7 @@ The ISA implementation follows ICAO Document 7488 with proper handling of:
 - Astropy: Full IAU-compliant transformations with proper time systems
 - Skyfield: JPL ephemeris support for planetary applications
 
-**Accuracy:** 
+**Accuracy:**
 - Manual ECEF↔Geodetic: <1mm for typical Earth surface coordinates
 - With astropy: <1μm with proper time/reference frame handling
 
@@ -276,7 +276,7 @@ All tools provide graceful degradation and clear error messages:
 The new atmosphere and coordinate tools integrate seamlessly with existing flight planning:
 
 1. **Enhanced Flight Planning:** Atmosphere data improves altitude-dependent performance calculations
-2. **Wind Corrections:** Surface wind models support runway analysis and approach planning  
+2. **Wind Corrections:** Surface wind models support runway analysis and approach planning
 3. **Coordinate Consistency:** All tools use consistent SI units and WGS84 reference frame
 4. **System Status:** `get_system_status` reports availability of all optional libraries
 
@@ -288,7 +288,7 @@ The new atmosphere and coordinate tools integrate seamlessly with existing fligh
 # Test atmosphere calculations
 python -m pytest tests/test_integrations_atmosphere.py -v
 
-# Test coordinate transformations  
+# Test coordinate transformations
 python -m pytest tests/test_integrations_frames.py -v
 
 # Run all tests

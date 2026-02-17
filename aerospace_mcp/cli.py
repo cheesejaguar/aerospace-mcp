@@ -231,8 +231,7 @@ def coerce_value(raw_value: str, annotation: Any) -> Any:
                 if str(a) == raw_value:
                     return a
         raise ValueError(
-            f"Value '{raw_value}' not in allowed values: "
-            f"{[str(a) for a in allowed]}"
+            f"Value '{raw_value}' not in allowed values: {[str(a) for a in allowed]}"
         )
 
     # dict types — parse as JSON
@@ -339,8 +338,7 @@ def cmd_list(category: str | None = None) -> None:
         tools = [t for t in tools if t.category.lower() == cat_lower]
         if not tools:
             print(
-                f"No tools in category '{category}'. "
-                f"Available: {', '.join(CATEGORIES)}"
+                f"No tools in category '{category}'. Available: {', '.join(CATEGORIES)}"
             )
             return
 

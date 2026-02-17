@@ -91,7 +91,7 @@ Calculate longitudinal stability derivatives for aircraft design.
 
 **Outputs:**
 - **CL_α**: Lift curve slope (per radian and per degree)
-- **CM_α**: Pitching moment curve slope  
+- **CM_α**: Pitching moment curve slope
 - **Stability Assessment**: Static stability evaluation
 - **Wing Properties**: Area, aspect ratio, MAC, taper ratio
 
@@ -306,7 +306,7 @@ for i, prop_geom in enumerate(propeller_options):
         "rpm_list": rpm_range,
         "velocity_ms": 0.0
     })
-    
+
     # Cruise efficiency analysis
     cruise_perf = await mcp_client.call_tool("propeller_bemt_analysis", {
         "geometry": prop_geom,
@@ -354,7 +354,7 @@ for battery in battery_options:
             "altitude_m": 100.0
         }
     })
-    
+
     print(f"Battery: {battery['capacity_ah']}Ah {battery['voltage_nominal_v']}V")
     print(f"Flight time: {energy_analysis['flight_time_min']:.1f} min")
     print(f"Range: {energy_analysis['range_km']:.1f} km")
@@ -377,10 +377,10 @@ for airfoil in airfoil_candidates:
         "reynolds": reynolds_number,
         "mach": 0.08
     })
-    
+
     # Find best L/D ratio
     max_ld_point = max(polar_data, key=lambda x: x['cl_cd_ratio'])
-    
+
     airfoil_comparison[airfoil] = {
         "max_ld": max_ld_point['cl_cd_ratio'],
         "best_alpha": max_ld_point['alpha_deg'],
@@ -389,7 +389,7 @@ for airfoil in airfoil_candidates:
     }
 
 # Select airfoil with best L/D for efficiency
-best_airfoil = max(airfoil_comparison.keys(), 
+best_airfoil = max(airfoil_comparison.keys(),
                    key=lambda x: airfoil_comparison[x]['max_ld'])
 ```
 
@@ -460,7 +460,7 @@ for point in design_points:
         "battery_config": battery_configuration,
         "mission_profile": point
     })
-    
+
     performance_map[f"V{point['velocity_ms']}_Alt{point['altitude_m']}"] = {
         "power_w": energy_result['power_required_w'],
         "efficiency": energy_result['efficiency_overall'],
@@ -485,7 +485,7 @@ for alt in altitudes:
     atmosphere = await mcp_client.call_tool("get_atmosphere_profile", {
         "altitudes_m": [alt]
     })
-    
+
     # Analyze propeller at altitude
     prop_perf = await mcp_client.call_tool("propeller_bemt_analysis", {
         "geometry": prop_geometry,
@@ -493,7 +493,7 @@ for alt in altitudes:
         "velocity_ms": 12.0,
         "altitude_m": alt
     })
-    
+
     # UAV performance at altitude
     uav_perf = await mcp_client.call_tool("uav_energy_estimate", {
         "uav_config": uav_config,
@@ -510,13 +510,13 @@ wind_speeds = [0, 5, 10, 15]  # m/s headwind
 
 for wind in wind_speeds:
     effective_velocity = cruise_velocity + wind  # Headwind increases power
-    
+
     energy_analysis = await mcp_client.call_tool("uav_energy_estimate", {
         "uav_config": uav_config,
         "battery_config": battery_config,
         "mission_profile": {"velocity_ms": effective_velocity, "altitude_m": 100}
     })
-    
+
     print(f"Headwind {wind} m/s: Range = {energy_analysis['range_km']:.1f} km")
 ```
 
