@@ -31,7 +31,7 @@ For real flight planning, always use certified aviation software and consult off
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Clone and setup
-git clone https://github.com/username/aerospace-mcp.git
+git clone https://github.com/cheesejaguar/aerospace-mcp.git
 cd aerospace-mcp
 uv venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
 uv sync
@@ -53,7 +53,7 @@ curl "http://localhost:8080/health"
 ### Option 2: Docker
 
 ```bash
-git clone https://github.com/username/aerospace-mcp.git
+git clone https://github.com/cheesejaguar/aerospace-mcp.git
 cd aerospace-mcp
 docker build -t aerospace-mcp .
 docker run -p 8080:8080 aerospace-mcp
@@ -204,7 +204,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh  # Linux/macOS
 # Or: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
 
 # Clone repository
-git clone https://github.com/username/aerospace-mcp.git
+git clone https://github.com/cheesejaguar/aerospace-mcp.git
 cd aerospace-mcp
 
 # Create virtual environment
@@ -233,7 +233,7 @@ python -c "import main; print('✅ Installation successful')"
 
 ```bash
 # Clone repository
-git clone https://github.com/username/aerospace-mcp.git
+git clone https://github.com/cheesejaguar/aerospace-mcp.git
 cd aerospace-mcp
 
 # Create virtual environment
@@ -263,7 +263,7 @@ python -c "import main; print('✅ Installation successful')"
 
 ```bash
 # Clone repository
-git clone https://github.com/username/aerospace-mcp.git
+git clone https://github.com/cheesejaguar/aerospace-mcp.git
 cd aerospace-mcp
 
 # Build image
@@ -290,7 +290,7 @@ conda create -n aerospace-mcp python=3.11
 conda activate aerospace-mcp
 
 # Clone repository
-git clone https://github.com/username/aerospace-mcp.git
+git clone https://github.com/cheesejaguar/aerospace-mcp.git
 cd aerospace-mcp
 
 # Install dependencies
@@ -680,8 +680,8 @@ graph TB
    - Auto-generated OpenAPI documentation
    - Request/response validation with Pydantic
 
-2. **MCP Server** (`aerospace_mcp/server.py`)
-   - Model Context Protocol implementation
+2. **MCP Server** (`aerospace_mcp/fastmcp_server.py`)
+   - Model Context Protocol implementation via FastMCP
    - Tool-based interface for AI assistants
    - Async request handling
 
@@ -742,30 +742,7 @@ Tool(
 async def handle_call_tool(name: str, arguments: dict):
     if name == "search_airports":
         return await _handle_search_airports(arguments)
-    # ... 30+ more tool handlers
-```
-
-## ⚙️ Configuration (.env)
-
-Both the HTTP server and MCP servers automatically load environment variables from a local `.env` (via `python-dotenv`).
-
-- `AEROSPACE_MCP_MODE`: `http` or `mcp` (Docker entrypoint switch)
-- `AEROSPACE_MCP_HOST`: Bind host for HTTP (default `0.0.0.0`)
-- `AEROSPACE_MCP_PORT`: Port for HTTP (default `8080`)
-- `AEROSPACE_MCP_LOG_LEVEL`: `debug|info|warning|error` (default `info`)
-- `AEROSPACE_MCP_ENV`: `development|production` (controls reload)
-- `LLM_TOOLS_ENABLED`: `true|false` to enable AI agent tools (default `false`)
-- `OPENAI_API_KEY`: Required if LLM tools are enabled
-
-Example `.env`:
-
-```
-AEROSPACE_MCP_MODE=http
-AEROSPACE_MCP_HOST=0.0.0.0
-AEROSPACE_MCP_PORT=8080
-AEROSPACE_MCP_LOG_LEVEL=debug
-LLM_TOOLS_ENABLED=false
-# OPENAI_API_KEY=sk-...
+    # ... 40+ more tool handlers
 ```
 
 **After (FastMCP):**
@@ -807,6 +784,29 @@ The FastMCP refactoring introduced a **modular architecture** with tools organiz
 - **Dependencies**: Includes `fastmcp>=2.11.3` instead of raw `mcp`
 - **Server Name**: Still `aerospace-mcp` for client compatibility
 - **All Tools**: All 44 tools maintain exact same names and parameters
+
+## ⚙️ Configuration (.env)
+
+Both the HTTP server and MCP servers automatically load environment variables from a local `.env` (via `python-dotenv`).
+
+- `AEROSPACE_MCP_MODE`: `http` or `mcp` (Docker entrypoint switch)
+- `AEROSPACE_MCP_HOST`: Bind host for HTTP (default `0.0.0.0`)
+- `AEROSPACE_MCP_PORT`: Port for HTTP (default `8080`)
+- `AEROSPACE_MCP_LOG_LEVEL`: `debug|info|warning|error` (default `info`)
+- `AEROSPACE_MCP_ENV`: `development|production` (controls reload)
+- `LLM_TOOLS_ENABLED`: `true|false` to enable AI agent tools (default `false`)
+- `OPENAI_API_KEY`: Required if LLM tools are enabled
+
+Example `.env`:
+
+```
+AEROSPACE_MCP_MODE=http
+AEROSPACE_MCP_HOST=0.0.0.0
+AEROSPACE_MCP_PORT=8080
+AEROSPACE_MCP_LOG_LEVEL=debug
+LLM_TOOLS_ENABLED=false
+# OPENAI_API_KEY=sk-...
+```
 
 ## ⚡ Performance
 
@@ -1011,12 +1011,9 @@ Error responses include detailed messages:
 {
   "mcpServers": {
     "aerospace-mcp": {
-      "command": "python",
-      "args": ["-m", "aerospace_mcp.server"],
-      "cwd": "/path/to/aerospace-mcp",
-      "env": {
-        "PYTHONPATH": "/path/to/aerospace-mcp"
-      }
+      "command": "uv",
+      "args": ["run", "aerospace-mcp"],
+      "cwd": "/path/to/aerospace-mcp"
     }
   }
 }
@@ -1027,7 +1024,7 @@ Error responses include detailed messages:
 
 ### Tool Discovery
 
-With 34+ aerospace tools available, the MCP server includes a **tool search tool** following [Anthropic's guide](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool) for dynamic tool discovery:
+With 44+ aerospace tools available, the MCP server includes a **tool search tool** following [Anthropic's guide](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool) for dynamic tool discovery:
 
 ```python
 # Search by natural language
@@ -1113,8 +1110,8 @@ Add to your `config.json`:
   "mcpServers": [
     {
       "name": "aerospace-mcp",
-      "command": "python",
-      "args": ["-m", "aerospace_mcp.server"],
+      "command": "uv",
+      "args": ["run", "aerospace-mcp"],
       "workingDirectory": "/path/to/aerospace-mcp"
     }
   ]
@@ -1127,7 +1124,7 @@ Add to your `config.json`:
 
 ```bash
 # Clone and setup
-git clone https://github.com/username/aerospace-mcp.git
+git clone https://github.com/cheesejaguar/aerospace-mcp.git
 cd aerospace-mcp
 
 # Create development environment
@@ -1181,8 +1178,8 @@ aerospace-mcp/
 ├── main.py                 # FastAPI application
 ├── aerospace_mcp/          # MCP server implementation
 │   ├── __init__.py
-│   ├── server.py          # MCP server
-│   ├── fastmcp_server.py  # FastMCP server entry point
+│   ├── server.py          # Legacy MCP server (deprecated)
+│   ├── fastmcp_server.py  # FastMCP server entry point (primary)
 │   ├── core.py            # Shared business logic
 │   ├── tools/             # MCP tool definitions
 │   │   ├── core.py        # Flight planning tools
@@ -1290,14 +1287,6 @@ We welcome contributions! Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for
 - [**Deployment Guide**](docs/DEPLOYMENT.md) - Production deployment strategies
 - [**Contributing Guide**](docs/CONTRIBUTING.md) - Development and contribution guidelines
 - [**Integration Guide**](docs/INTEGRATION.md) - Client integration examples
-
-### Examples Repository
-
-Check out the [examples repository](https://github.com/username/aerospace-mcp-examples) for:
-- Complete client implementations
-- Integration patterns
-- Performance benchmarks
-- Real-world use cases
 
 ## 📄 License
 

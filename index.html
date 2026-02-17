@@ -4,9 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aerospace MCP - Comprehensive Flight Planning & Space Operations API</title>
-    <meta name="description" content="Open-source aerospace research platform with flight planning, orbital mechanics, and spacecraft trajectory optimization. Features 30+ tools, 28,000+ airports, and FastMCP integration.">
+    <meta name="description" content="Open-source aerospace research platform with flight planning, orbital mechanics, and spacecraft trajectory optimization. Features 44+ tools, 28,000+ airports, and FastMCP integration.">
     <meta name="keywords" content="aerospace, flight planning, orbital mechanics, MCP, FastAPI, space operations, aviation API, aircraft performance">
     <meta name="author" content="Aerospace MCP Project">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Aerospace MCP - Flight Planning & Space Operations API">
+    <meta property="og:description" content="Open-source aerospace research platform with 44+ tools for flight planning, orbital mechanics, and spacecraft trajectory optimization.">
+    <meta property="og:url" content="https://aeroastro.org">
+    <meta property="og:site_name" content="Aerospace MCP">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Aerospace MCP - Flight Planning & Space Operations API">
+    <meta name="twitter:description" content="Open-source aerospace research platform with 44+ tools for flight planning, orbital mechanics, and spacecraft trajectory optimization.">
+
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
 
     <style>
@@ -188,7 +201,12 @@
 
         .feature-card:hover {
             transform: translateY(-5px);
-            box-shadow: var(--shadow);
+            box-shadow: 0 10px 40px rgba(30, 64, 175, 0.2);
+            border-color: transparent;
+            background-image: linear-gradient(var(--bg-card), var(--bg-card)),
+                              linear-gradient(135deg, var(--primary-color), var(--secondary-color), var(--accent-color));
+            background-origin: border-box;
+            background-clip: padding-box, border-box;
         }
 
         .feature-icon {
@@ -358,26 +376,152 @@
             margin: 0 auto;
         }
 
-        .footer-links {
-            display: flex;
-            justify-content: center;
-            gap: 2rem;
-            margin: 2rem 0;
-            flex-wrap: wrap;
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 3rem;
+            text-align: left;
+            max-width: 1000px;
+            margin: 0 auto 2rem;
         }
 
-        .footer-links a {
+        .footer-brand h3 {
+            color: var(--accent-color);
+            margin-bottom: 0.75rem;
+        }
+
+        .footer-brand p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .footer-col {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .footer-col h4 {
+            color: var(--text-color);
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .footer-col a {
             color: var(--text-secondary);
             text-decoration: none;
-            transition: var(--transition);
+            font-size: 0.9rem;
+            transition: color 0.2s ease;
         }
 
-        .footer-links a:hover {
+        .footer-col a:hover {
             color: var(--accent-color);
+        }
+
+        .footer-bottom {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 1.5rem;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Sticky Navigation */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            padding: 1rem 2rem;
+            transition: background 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .navbar.scrolled {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .navbar-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar-logo {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+
+        .navbar-links {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .navbar-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.95rem;
+            transition: color 0.2s ease;
+        }
+
+        .navbar-links a:hover {
+            color: var(--accent-color);
+        }
+
+        /* Scroll-to-top button */
+        .scroll-top-btn {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            color: var(--bg-dark);
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease;
+            z-index: 999;
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+        }
+
+        .scroll-top-btn.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .scroll-top-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+        }
+
+        /* Scroll offset for anchor targets */
+        section[id] {
+            scroll-margin-top: 80px;
         }
 
         /* Responsive Design */
         @media (max-width: 768px) {
+            .navbar {
+                padding: 0.75rem 1rem;
+            }
+
+            .navbar-links {
+                gap: 1rem;
+                font-size: 0.85rem;
+            }
+
             .section {
                 padding: 3rem 1rem;
             }
@@ -398,6 +542,12 @@
 
             .code-tabs {
                 flex-direction: column;
+            }
+
+            .footer-grid {
+                grid-template-columns: 1fr;
+                text-align: center;
+                gap: 2rem;
             }
         }
 
@@ -619,17 +769,29 @@
             color: #8b949e;
         }
     </style>
-</head>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-PNQSKR40DH"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
 
-  gtag('config', 'G-PNQSKR40DH');
-</script>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-PNQSKR40DH"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-PNQSKR40DH');
+    </script>
+</head>
 <body>
+    <!-- Navigation Bar -->
+    <nav class="navbar" id="navbar">
+        <div class="navbar-content">
+            <a href="#" class="navbar-logo">Aerospace MCP</a>
+            <div class="navbar-links">
+                <a href="#features">Features</a>
+                <a href="#quick-start">Quick Start</a>
+                <a href="https://github.com/cheesejaguar/aerospace-mcp" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
     <!-- Animated Background -->
     <div class="particles" id="particles"></div>
 
@@ -637,7 +799,7 @@
     <header class="header">
         <div class="hero-content">
             <h1>🚀 Aerospace MCP</h1>
-            <p>Comprehensive flight planning, orbital mechanics, and spacecraft trajectory optimization platform with FastMCP integration and 30+ specialized aerospace tools.</p>
+            <p>Comprehensive flight planning, orbital mechanics, and spacecraft trajectory optimization platform with FastMCP integration and 44+ specialized aerospace tools.</p>
 
             <div class="hero-buttons">
                 <a href="https://github.com/cheesejaguar/aerospace-mcp" class="btn btn-primary" target="_blank">
@@ -653,7 +815,7 @@
 
             <div class="stats">
                 <div class="stat">
-                    <span class="stat-number">30+</span>
+                    <span class="stat-number">44+</span>
                     <div class="stat-label">Aerospace Tools</div>
                 </div>
                 <div class="stat">
@@ -753,6 +915,19 @@
                     <li>Coordinate transformations</li>
                 </ul>
             </div>
+
+            <div class="feature-card">
+                <span class="feature-icon">🎯</span>
+                <h3>GNC & Flight Performance</h3>
+                <p>Guidance, navigation, and control analysis tools alongside practical flight performance calculations.</p>
+                <ul class="feature-list">
+                    <li>Kalman filter state estimation</li>
+                    <li>LQR optimal controller design</li>
+                    <li>Density altitude & airspeed conversion</li>
+                    <li>Takeoff/landing performance</li>
+                    <li>Weight & balance calculations</li>
+                </ul>
+            </div>
         </div>
     </section>
 
@@ -789,7 +964,7 @@ curl -X <span class="keyword">POST</span> <span class="string">"http://localhost
 
             <div id="mcp-client" class="code-content">
                 <h3>MCP Integration (Anthropic API with Deferred Loading)</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Enable deferred tool loading for efficient context usage with 34+ tools:</p>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Enable deferred tool loading for efficient context usage with 44+ tools:</p>
                 <div class="code-block">
                     <button class="copy-btn" onclick="copyCode(this)">Copy</button>
                     <code><span class="comment">// Anthropic API with deferred tool loading</span>
@@ -887,7 +1062,7 @@ flight_plan = response.<span class="function">json</span>()</code>
                     </div>
 
                     <div class="terminal-response">
-                        <div class="terminal-response-content" class="terminal-output">Found 3 airport(s):
+                        <div class="terminal-response-content terminal-output">Found 3 airport(s):
 
 • <span class="highlight">NRT</span> (RJAA) - Narita International Airport
   City: <span class="value">Tokyo, JP</span>
@@ -920,7 +1095,7 @@ flight_plan = response.<span class="function">json</span>()</code>
                     </div>
 
                     <div class="terminal-response">
-                        <div class="terminal-response-content" class="terminal-output">Found 1 airport(s):
+                        <div class="terminal-response-content terminal-output">Found 1 airport(s):
 
 • <span class="highlight">SFO</span> (KSFO) - San Francisco International Airport
   City: <span class="value">San Francisco, US</span>
@@ -928,7 +1103,7 @@ flight_plan = response.<span class="function">json</span>()</code>
   Timezone: <span class="value">America/Los_Angeles</span></div>
                     </div>
 
-                    <div class="terminal-line" class="terminal-line-spaced">
+                    <div class="terminal-line terminal-line-spaced">
                         <span class="terminal-prompt">❯ </span>
                         <span class="terminal-cursor"></span>
                     </div>
@@ -960,7 +1135,7 @@ flight_plan = response.<span class="function">json</span>()</code>
                     </div>
 
                     <div class="terminal-response">
-                        <div class="terminal-response-content" class="terminal-output"><span class="highlight">3DOF Rocket Trajectory Analysis</span>
+                        <div class="terminal-response-content terminal-output"><span class="highlight">3DOF Rocket Trajectory Analysis</span>
 ==================================================
 Rocket: <span class="value">2.0m</span> long, <span class="value">0.12m</span> dia
 Mass: <span class="value">15.0 kg</span> dry + <span class="value">8.0 kg</span> prop
@@ -1001,7 +1176,7 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
                     </div>
 
                     <div class="terminal-response">
-                        <div class="terminal-response-content" class="terminal-output">{
+                        <div class="terminal-response-content terminal-output">{
   <span class="json-key">"optimal_angle_deg"</span>: <span class="json-number">87.3</span>,
   <span class="json-key">"objective"</span>: <span class="json-string">"altitude"</span>,
   <span class="json-key">"max_altitude_m"</span>: <span class="json-number">13102.4</span>,
@@ -1012,7 +1187,7 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
 }</div>
                     </div>
 
-                    <div class="terminal-line" class="terminal-line-spaced">
+                    <div class="terminal-line terminal-line-spaced">
                         <span class="terminal-prompt">❯ </span>
                         <span class="terminal-cursor"></span>
                     </div>
@@ -1044,7 +1219,7 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
                     </div>
 
                     <div class="terminal-response">
-                        <div class="terminal-response-content" class="terminal-output">{
+                        <div class="terminal-response-content terminal-output">{
   <span class="json-key">"delta_v1_ms"</span>: <span class="json-number">2397.51</span>,
   <span class="json-key">"delta_v2_ms"</span>: <span class="json-number">1456.50</span>,
   <span class="json-key">"total_delta_v_ms"</span>: <span class="json-number">3854.01</span>,
@@ -1054,7 +1229,7 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
 }</div>
                     </div>
 
-                    <div class="terminal-line" class="terminal-explanation">
+                    <div class="terminal-line terminal-explanation">
                         The transfer requires <span class="value">3,854 m/s</span> total Δv: first burn of <span class="value">2,398 m/s</span> at perigee raises apogee to GEO, then <span class="value">1,457 m/s</span> at apogee circularizes the orbit. Transfer time is about <span class="value">5.3 hours</span>.
                     </div>
 
@@ -1073,7 +1248,7 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
                     </div>
 
                     <div class="terminal-response">
-                        <div class="terminal-response-content" class="terminal-output">{
+                        <div class="terminal-response-content terminal-output">{
   <span class="json-key">"delta_v1_ms"</span>: <span class="json-number">3082.09</span>,
   <span class="json-key">"delta_v2_ms"</span>: <span class="json-number">828.74</span>,
   <span class="json-key">"total_delta_v_ms"</span>: <span class="json-number">3910.82</span>,
@@ -1083,11 +1258,11 @@ Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
 }</div>
                     </div>
 
-                    <div class="terminal-line" class="terminal-explanation">
+                    <div class="terminal-line terminal-explanation">
                         A Hohmann transfer to lunar distance requires <span class="value">3,082 m/s</span> at perigee, with a <span class="value">~5 day</span> coast. Note: real lunar missions use 3-body trajectories (~3 days) and require separate LOI burns relative to the Moon.
                     </div>
 
-                    <div class="terminal-line" class="terminal-line-spaced">
+                    <div class="terminal-line terminal-line-spaced">
                         <span class="terminal-prompt">❯ </span>
                         <span class="terminal-cursor"></span>
                     </div>
@@ -1173,23 +1348,35 @@ curl <span class="string">"http://localhost:8080/health"</span></code>
         <p style="margin-top: 1rem; font-weight: bold;">For real flight planning, always use certified aviation software and consult official sources.</p>
     </div>
 
+    <!-- Scroll to top button -->
+    <button class="scroll-top-btn" id="scrollTopBtn" aria-label="Scroll to top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">&#8679;</button>
+
     <!-- Footer -->
     <footer class="footer">
         <div class="footer-content">
-            <h3>🌟 Aerospace MCP Project</h3>
-            <p>Open-source aerospace research platform powered by FastMCP</p>
-
-            <div class="footer-links">
-                <a href="https://github.com/cheesejaguar/aerospace-mcp" target="_blank">GitHub Repository</a>
-                <a href="https://github.com/cheesejaguar/aerospace-mcp/blob/main/README.md" target="_blank">Documentation</a>
-                <a href="https://github.com/cheesejaguar/aerospace-mcp/issues" target="_blank">Issues</a>
-                <a href="https://github.com/cheesejaguar/aerospace-mcp/blob/main/LICENSE" target="_blank">MIT License</a>
-                <a href="https://fastmcp.com" target="_blank">FastMCP</a>
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <h3>Aerospace MCP</h3>
+                    <p>Open-source aerospace research platform powered by FastMCP. 44+ tools for flight planning, orbital mechanics, and spacecraft operations.</p>
+                </div>
+                <div class="footer-col">
+                    <h4>Project</h4>
+                    <a href="https://github.com/cheesejaguar/aerospace-mcp" target="_blank">GitHub Repository</a>
+                    <a href="https://github.com/cheesejaguar/aerospace-mcp/blob/main/README.md" target="_blank">Documentation</a>
+                    <a href="https://github.com/cheesejaguar/aerospace-mcp/issues" target="_blank">Issues</a>
+                    <a href="https://github.com/cheesejaguar/aerospace-mcp/blob/main/LICENSE" target="_blank">MIT License</a>
+                </div>
+                <div class="footer-col">
+                    <h4>Resources</h4>
+                    <a href="https://fastmcp.com" target="_blank">FastMCP</a>
+                    <a href="https://modelcontextprotocol.io" target="_blank">MCP Protocol</a>
+                    <a href="https://github.com/TUDelft-CNS-ATM/openap" target="_blank">OpenAP</a>
+                    <a href="https://aeroastro.org" target="_blank">AeroAstro.org</a>
+                </div>
             </div>
-
-            <p style="margin-top: 2rem; color: var(--text-secondary);">
-                Made with ❤️ for the aerospace community • © 2025 Cheesejaguar
-            </p>
+            <div class="footer-bottom">
+                <p>Made with care for the aerospace community &middot; &copy; 2025-2026 Cheesejaguar</p>
+            </div>
         </div>
     </footer>
 
@@ -1278,6 +1465,22 @@ curl <span class="string">"http://localhost:8080/health"</span></code>
                 button.textContent = 'Failed';
             }
         }
+
+        // Sticky navbar and scroll-to-top button on scroll
+        window.addEventListener('scroll', function() {
+            const navbar = document.getElementById('navbar');
+            const scrollTopBtn = document.getElementById('scrollTopBtn');
+            if (window.scrollY > 50) {
+                navbar.classList.add('scrolled');
+            } else {
+                navbar.classList.remove('scrolled');
+            }
+            if (window.scrollY > 500) {
+                scrollTopBtn.classList.add('visible');
+            } else {
+                scrollTopBtn.classList.remove('visible');
+            }
+        });
 
         // Smooth scrolling for anchor links
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
