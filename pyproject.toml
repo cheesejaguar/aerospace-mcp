@@ -96,6 +96,7 @@ all = [
 [project.scripts]
 aerospace-mcp-http = "app.main:run"
 aerospace-mcp = "aerospace_mcp.fastmcp_server:run"
+aerospace-mcp-cli = "aerospace_mcp.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/username/aerospace-mcp"
@@ -112,6 +113,7 @@ include = [
     "/aerospace_mcp",
     "/tests",
     "/docs",
+    "/skills",
     "*.md",
     "*.toml",
     "LICENSE",
