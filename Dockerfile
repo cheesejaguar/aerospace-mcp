@@ -1,6 +1,6 @@
 # Multi-stage build for aerospace-mcp
 # Stage 1: Build dependencies with UV
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 
 # Install system dependencies for building
 RUN apt-get update && apt-get install -y \
@@ -29,7 +29,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN uv pip install --no-cache-dir -e .
 
 # Stage 2: Runtime image with minimal footprint
-FROM python:3.11-slim AS runtime
+FROM python:3.12-slim AS runtime
 
 # Install minimal runtime dependencies
 RUN apt-get update && apt-get install -y \

@@ -241,11 +241,7 @@ def estimates_openap(
 
     # How much cruise distance remains after climb+descent?
     d_remaining = max(0.0, route_dist_km - (d_climb + d_des))
-    # Guard for super-short hops
-    cruise_time_s = (
-        0.0 if gs_cru <= 1e-6 else (d_remaining * KM_PER_NM) / (gs_cru / 3600.0 / 1.852)
-    )  # but simpler to compute by kts:
-    # Convert properly: kts = nm/hour → km/s = (kts * NM_PER_KM) / 3600
+    # kts = nm/hour → km/s = (kts * NM_PER_KM) / 3600
     cruise_time_s = (
         0.0 if gs_cru <= 1e-6 else (d_remaining / ((gs_cru * NM_PER_KM) / 3600.0))
     )

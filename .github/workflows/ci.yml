@@ -59,7 +59,7 @@ jobs:
     strategy:
       fail-fast: true  # Changed to fail-fast for speed
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
         # Parallelize test groups for speed
         test-group: ["unit", "contract", "protocol", "transport", "integration"]
 
