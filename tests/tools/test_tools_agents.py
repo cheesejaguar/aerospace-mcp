@@ -17,7 +17,7 @@ def test_agents_errors(monkeypatch):
     )
     assert "disabled" in select_aerospace_tool("plan a flight").lower()
 
-    # Enabled but missing key
+    # Enabled but missing key — litellm raises AuthenticationError
     monkeypatch.setenv("LLM_TOOLS_ENABLED", "true")
     import importlib
 
@@ -25,8 +25,8 @@ def test_agents_errors(monkeypatch):
 
     importlib.reload(agents2)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    assert "not set" in agents2.format_data_for_tool("search_airports", "plan").lower()
-    assert "not set" in agents2.select_aerospace_tool("plan").lower()
+    assert "error" in agents2.format_data_for_tool("search_airports", "plan").lower()
+    assert "error" in agents2.select_aerospace_tool("plan").lower()
 
 
 def test_agents_success(monkeypatch):

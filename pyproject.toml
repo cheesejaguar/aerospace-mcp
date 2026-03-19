@@ -20,32 +20,33 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering",
 ]
 
 dependencies = [
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.24.0",
-    "openap>=1.3.0",
-    "airportsdata>=20231201",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "openap>=1.5.0",
+    "airportsdata>=20240101",
     "geographiclib>=2.0",
-    "pydantic>=2.0.0",
+    "pydantic>=2.10.0",
     "fastmcp>=2.11.3",
-    "uvloop>=0.19.0; sys_platform != 'win32'",
-    "litellm>=1.76.1",
+    "uvloop>=0.21.0; sys_platform != 'win32'",
+    "litellm>=1.80.0",
     "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.0",
-    "httpx>=0.25.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-cov>=4.1.0",
-    "mypy>=1.6.0",
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+    "black>=24.0.0",
+    "ruff>=0.9.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "mypy>=1.14.0",
     "types-requests>=2.31.0",
 ]
 atmosphere = [
@@ -122,14 +123,14 @@ include = [
 # UV configuration
 [tool.uv]
 dev-dependencies = [
-    "pytest>=7.4.0",
-    "httpx>=0.25.0",
-    "black>=23.0.0",
-    "ruff>=0.1.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-cov>=4.1.0",
+    "pytest>=8.0.0",
+    "httpx>=0.27.0",
+    "black>=24.0.0",
+    "ruff>=0.9.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
     "pytest-xdist>=3.0.0",
-    "mypy>=1.6.0",
+    "mypy>=1.14.0",
     "types-requests>=2.31.0",
     "pandas>=2.3.2",
     "pre-commit>=4.5.1",

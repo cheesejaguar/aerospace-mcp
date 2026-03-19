@@ -13,16 +13,19 @@ logger = logging.getLogger(__name__)
 # Check if LLM tools are enabled via environment variable
 LLM_TOOLS_ENABLED = os.environ.get("LLM_TOOLS_ENABLED", "false").lower() == "true"
 
-# Configure LiteLLM for OpenAI GPT-5-Medium
+# Configure LiteLLM
 litellm.set_verbose = False
+
+# Default model for agent tools - configurable via LLM_MODEL env var.
+# LiteLLM supports many providers: OpenAI, Anthropic, etc.
+# See https://docs.litellm.ai/docs/providers for supported model strings.
+LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 
 # Log status of LLM tools
 if not LLM_TOOLS_ENABLED:
     logger.info("LLM tools disabled via LLM_TOOLS_ENABLED environment variable.")
-elif "OPENAI_API_KEY" not in os.environ:
-    logger.warning(
-        "LLM_TOOLS_ENABLED=true but OPENAI_API_KEY not set. Agent tools will not function without it."
-    )
+else:
+    logger.info(f"LLM tools enabled with model: {LLM_MODEL}")
 
 
 class ToolReference(BaseModel):
@@ -173,8 +176,8 @@ def format_data_for_tool(
     """
     Help format data in the correct format for a specific aerospace-mcp tool.
 
-    Uses GPT-5-Medium to analyze the user's requirements and raw data, then provides
-    the correctly formatted parameters for the specified tool.
+    Uses an LLM (configurable via LLM_MODEL env var) to analyze the user's requirements
+    and raw data, then provides the correctly formatted parameters for the specified tool.
 
     Args:
         tool_name: Name of the aerospace-mcp tool to format data for
@@ -199,10 +202,7 @@ def format_data_for_tool(
         available_tools = [t.name for t in AEROSPACE_TOOLS]
         return f"Error: Tool '{tool_name}' not found. Available tools: {', '.join(available_tools)}"
 
-    if "OPENAI_API_KEY" not in os.environ:
-        return "Error: OPENAI_API_KEY environment variable not set. Cannot use agent tools."
-
-    # Build the prompt for GPT-5-Medium
+    # Build the prompt for the LLM
     system_prompt = f"""You are a data formatting assistant for aerospace-mcp tools. Your job is to help format data correctly for the '{tool_name}' tool.
 
 Tool Information:
@@ -220,9 +220,8 @@ Please provide ONLY a valid JSON object with the correctly formatted parameters 
 If the user's requirements are unclear or insufficient data is provided, return a JSON object with an "error" field explaining what additional information is needed."""
 
     try:
-        # Call GPT-5-Medium via LiteLLM
         response = litellm.completion(
-            model="gpt-5-medium",
+            model=LLM_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -251,8 +250,8 @@ def select_aerospace_tool(user_task: str, user_context: str = "") -> str:
     """
     Help select the most appropriate aerospace-mcp tool for a given task.
 
-    Uses GPT-5-Medium to analyze the user's task and recommend the best tool(s)
-    along with guidance on how to use them.
+    Uses an LLM (configurable via LLM_MODEL env var) to analyze the user's task
+    and recommend the best tool(s) along with guidance on how to use them.
 
     Args:
         user_task: Description of what the user wants to accomplish
@@ -265,10 +264,7 @@ def select_aerospace_tool(user_task: str, user_context: str = "") -> str:
     if not LLM_TOOLS_ENABLED:
         return "Error: LLM agent tools are disabled. Set LLM_TOOLS_ENABLED=true to enable them."
 
-    if "OPENAI_API_KEY" not in os.environ:
-        return "Error: OPENAI_API_KEY environment variable not set. Cannot use agent tools."
-
-    # Build comprehensive tool catalog for the AI
+    # Build comprehensive tool catalog for the LLM
     tools_catalog = []
     for tool in AEROSPACE_TOOLS:
         tools_catalog.append(
@@ -305,9 +301,8 @@ Respond in a clear, structured format with:
 If the user's task cannot be accomplished with the available tools, clearly explain what's missing and suggest alternatives."""
 
     try:
-        # Call GPT-5-Medium via LiteLLM
         response = litellm.completion(
-            model="gpt-5-medium",
+            model=LLM_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
