@@ -19,7 +19,7 @@ litellm.set_verbose = False
 # Default model for agent tools - configurable via LLM_MODEL env var.
 # LiteLLM supports many providers: OpenAI, Anthropic, etc.
 # See https://docs.litellm.ai/docs/providers for supported model strings.
-LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
+LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-5.4-mini")
 
 # Log status of LLM tools
 if not LLM_TOOLS_ENABLED:
