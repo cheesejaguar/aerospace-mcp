@@ -1,12 +1,18 @@
 """Aircraft performance tools for the Aerospace MCP server.
 
 Provides tools for aircraft performance calculations including:
-- Weight and balance
-- Takeoff and landing performance
-- Stall speeds
-- Fuel reserves
-- Airspeed conversions
-- Density altitude
+- Density altitude computation from pressure altitude and temperature.
+- Airspeed conversions between IAS, CAS, EAS, TAS, and Mach number.
+- Stall speed calculation for clean, takeoff, and landing configurations.
+- Weight and balance (CG position and limit checks).
+- Takeoff and landing field length estimation.
+- Fuel reserve requirements per FAR/JAR/ICAO regulations.
+
+All atmospheric calculations use the International Standard Atmosphere (ISA)
+model with the barometric formula for pressure variation with altitude.
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
 import json
@@ -16,34 +22,62 @@ from typing import Literal
 
 logger = logging.getLogger(__name__)
 
-# Constants
-G0 = 9.80665  # m/s² - standard gravity
-R_AIR = 287.05  # J/(kg·K) - specific gas constant for dry air
-GAMMA = 1.4  # ratio of specific heats for air
-P0 = 101325.0  # Pa - sea level standard pressure
-T0 = 288.15  # K - sea level standard temperature
-RHO0 = 1.225  # kg/m³ - sea level standard density
-A0 = 340.29  # m/s - sea level speed of sound
-LAPSE_RATE = 0.0065  # K/m - temperature lapse rate in troposphere
+# ---------------------------------------------------------------------------
+# ISA (International Standard Atmosphere) Constants
+# ---------------------------------------------------------------------------
+# Reference: ICAO Doc 7488/3, "Manual of the ICAO Standard Atmosphere"
+# These define sea-level conditions and troposphere properties for the ISA model.
+
+G0 = 9.80665  # m/s^2 -- Standard acceleration due to gravity (exact by definition)
+R_AIR = 287.05  # J/(kg*K) -- Specific gas constant for dry air (R_universal / M_air)
+GAMMA = 1.4  # dimensionless -- Ratio of specific heats (Cp/Cv) for diatomic air
+P0 = 101325.0  # Pa -- ISA sea-level standard pressure (1 atm = 101325 Pa)
+T0 = 288.15  # K -- ISA sea-level standard temperature (15 deg C)
+RHO0 = 1.225  # kg/m^3 -- ISA sea-level standard air density (P0 / (R_AIR * T0))
+A0 = 340.29  # m/s -- ISA sea-level speed of sound (sqrt(GAMMA * R_AIR * T0))
+LAPSE_RATE = 0.0065  # K/m -- Temperature lapse rate in the troposphere (0-11 km)
 
 
 def _get_isa_conditions(altitude_m: float) -> dict:
-    """Get ISA atmospheric conditions at altitude."""
+    """Get ISA atmospheric conditions at a given geopotential altitude.
+
+    Uses the barometric formula to compute pressure, temperature, density,
+    and speed of sound. The troposphere (0-11 km) has a linear temperature
+    lapse; the tropopause/lower stratosphere (11-20 km) is isothermal.
+
+    Args:
+        altitude_m: Geopotential altitude in meters. Negative values are
+            clamped to 0.
+
+    Returns:
+        Dict with pressure_pa, temperature_k, temperature_c, density_kg_m3,
+        speed_of_sound_ms, and dimensionless ratios (pressure, density,
+        temperature) relative to sea-level ISA values.
+    """
     if altitude_m < 0:
         altitude_m = 0
 
     if altitude_m <= 11000:
-        # Troposphere
+        # Troposphere (0 to 11 km): linear temperature decrease.
+        # T = T0 - L * h  where L = LAPSE_RATE = 0.0065 K/m
         T = T0 - LAPSE_RATE * altitude_m
+        # Barometric formula for troposphere (with lapse rate):
+        # P = P0 * (T / T0) ^ (g0 / (R * L))
+        # Exponent g0/(R*L) = 9.80665 / (287.05 * 0.0065) = 5.2559
         P = P0 * (T / T0) ** (G0 / (R_AIR * LAPSE_RATE))
     else:
-        # Tropopause (simplified - isothermal at 216.65 K)
-        T_trop = T0 - LAPSE_RATE * 11000
+        # Tropopause / lower stratosphere (11 km+): isothermal at 216.65 K.
+        # First compute conditions at the tropopause boundary (11 km).
+        T_trop = T0 - LAPSE_RATE * 11000  # 216.65 K
         P_trop = P0 * (T_trop / T0) ** (G0 / (R_AIR * LAPSE_RATE))
         T = T_trop
+        # Barometric formula for isothermal layer:
+        # P = P_trop * exp(-g0 * (h - h_trop) / (R * T_trop))
         P = P_trop * math.exp(-G0 * (altitude_m - 11000) / (R_AIR * T_trop))
 
+    # Ideal gas law: rho = P / (R * T)
     rho = P / (R_AIR * T)
+    # Speed of sound in an ideal gas: a = sqrt(gamma * R * T)
     a = math.sqrt(GAMMA * R_AIR * T)
 
     return {
@@ -75,7 +109,12 @@ def density_altitude_calculator(
         dewpoint_c: Optional dewpoint for humidity correction
 
     Returns:
-        Formatted string with density altitude calculation results
+        Formatted string with density altitude calculation results including
+        air density, density ratio (sigma), pressure ratio (delta), and ISA
+        deviation.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         # Convert to SI
@@ -91,12 +130,16 @@ def density_altitude_calculator(
         # Temperature deviation from ISA
         delta_isa = temp_k - isa_temp_k
 
-        # Calculate actual pressure from pressure altitude
+        # Calculate actual pressure from pressure altitude using the ISA
+        # barometric formula. Pressure altitude is defined as the altitude in
+        # the ISA that corresponds to the observed station pressure.
         if pressure_alt_m <= 11000:
+            # Troposphere barometric formula: P = P0 * (1 - L*h/T0)^(g/(R*L))
             p = P0 * (1 - LAPSE_RATE * pressure_alt_m / T0) ** (
                 G0 / (R_AIR * LAPSE_RATE)
             )
         else:
+            # Isothermal layer above tropopause
             p_trop = P0 * (1 - LAPSE_RATE * 11000 / T0) ** (G0 / (R_AIR * LAPSE_RATE))
             p = p_trop * math.exp(-G0 * (pressure_alt_m - 11000) / (R_AIR * 216.65))
 
@@ -111,9 +154,11 @@ def density_altitude_calculator(
             # Higher humidity (smaller spread) increases density altitude
             humidity_correction_ft = max(0, (30 - spread) * 3)  # Rough approximation
 
-        # Find density altitude by solving for altitude where ISA density equals actual density
-        # For troposphere: rho = rho0 * (T/T0)^(g0/(R*L) - 1)
-        # Simplified approximation: each 1°C above ISA ≈ 120 ft increase
+        # Find density altitude by solving for the altitude in the ISA where
+        # the standard density equals the actual density computed above.
+        # Simplified approximation: each 1 deg C above ISA increases density
+        # altitude by approximately 118.8 ft (derived from the ISA lapse rate
+        # and the barometric formula linearization).
         density_alt_ft = (
             pressure_altitude_ft + (delta_isa * 118.8) + humidity_correction_ft
         )
@@ -186,7 +231,11 @@ def true_airspeed_converter(
         position_error_kts: Position error correction in knots (IAS to CAS)
 
     Returns:
-        Formatted string with all airspeed conversions
+        Formatted string with all equivalent airspeeds (IAS, CAS, EAS, TAS, Mach),
+        dynamic pressure, and atmospheric conditions.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         # Convert altitude to meters
@@ -350,7 +399,11 @@ def stall_speed_calculator(
         load_factor: Load factor (default 1.0 for level flight)
 
     Returns:
-        Formatted string with stall speed calculations
+        Formatted string with stall speed calculations for each configuration,
+        plus reference speeds (VREF, V2_min) and altitude correction.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         # Get atmospheric conditions
@@ -361,9 +414,10 @@ def stall_speed_calculator(
         # Weight in Newtons
         weight_n = weight_kg * G0
 
-        # Calculate stall speed for a given CL_max
+        # Stall speed from the lift equation at maximum CL:
+        # L = W = 0.5 * rho * V^2 * S * CL_max  =>  V_s = sqrt(2*W*n / (rho*S*CL_max))
         def calc_vs(cl_max: float) -> float:
-            """Calculate stall speed in m/s."""
+            """Calculate stall speed in m/s from the lift equation."""
             if cl_max <= 0 or rho <= 0 or wing_area_m2 <= 0:
                 return 0
             return math.sqrt(
@@ -397,9 +451,9 @@ def stall_speed_calculator(
         # Stall warning speeds (typically 5-10% above stall)
         vs_warning_kts = vs0_kts * 1.05
 
-        # Reference speeds
-        vref = vs0_kts * 1.3  # Approach reference speed (1.3 VS0)
-        v2_min = vs_to_kts * 1.13  # Minimum takeoff safety speed
+        # Reference speeds per FAR 25 certification requirements:
+        vref = vs0_kts * 1.3  # VREF: Approach reference speed = 1.3 * VS0
+        v2_min = vs_to_kts * 1.13  # V2 min: Takeoff safety speed = 1.13 * VS(TO config)
 
         result = {
             "input": {
@@ -497,7 +551,10 @@ def weight_and_balance(
         lemac_m: Leading edge of MAC position (optional, for %MAC calculation)
 
     Returns:
-        Formatted string with weight and balance calculation
+        Formatted string with weight and balance calculation results.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         # Calculate moments
@@ -544,10 +601,12 @@ def weight_and_balance(
         total_weight = sum(item["weight_kg"] for item in items)
         total_moment = sum(item["moment_kg_m"] for item in items)
 
-        # Calculate CG
+        # CG position: x_cg = total_moment / total_weight (moment arm from datum)
         cg_m = total_moment / total_weight if total_weight > 0 else 0
 
-        # Calculate %MAC if parameters provided
+        # Compute CG as percentage of Mean Aerodynamic Chord (MAC) if provided.
+        # %MAC = (CG_pos - LEMAC) / MAC * 100
+        # Typical transport aircraft operate between 15-35% MAC.
         cg_pct_mac = None
         if mac_m is not None and lemac_m is not None and mac_m > 0:
             cg_pct_mac = ((cg_m - lemac_m) / mac_m) * 100
@@ -675,7 +734,11 @@ def takeoff_performance(
         aspect_ratio: Wing aspect ratio
 
     Returns:
-        Formatted string with takeoff performance calculations
+        Formatted string with takeoff performance calculations including V-speeds,
+        ground roll, air distance to 35 ft, and factored distances.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         # Get atmospheric conditions
@@ -715,13 +778,15 @@ def takeoff_performance(
         # VLOF (liftoff speed) - typically 1.1 VS
         vlof_kts = vs_kts * 1.1
 
-        # Ground roll calculation (simplified)
+        # Ground roll calculation using energy-balance method (simplified).
+        # Rolling friction coefficient depends on runway condition.
         mu = {"dry": 0.02, "wet": 0.05, "contaminated": 0.10}[runway_condition]
 
-        # Average velocity during ground roll
-        v_avg = vlof_kts * 0.5144 * 0.7  # 70% of liftoff speed
+        # Average velocity during ground roll (approx 70% of VLOF for force averaging)
+        v_avg = vlof_kts * 0.5144 * 0.7
 
-        # Drag coefficient at liftoff
+        # Drag coefficient during ground roll using the drag polar:
+        # CD = CD0 + CL^2 / (pi * AR * e)  (parabolic drag polar)
         cl_ground = 0.5 * cl_max_takeoff  # Partial lift during ground roll
         cd = cd0 + cl_ground**2 / (math.pi * aspect_ratio * oswald_e)
 
@@ -746,7 +811,8 @@ def takeoff_performance(
         v_ground = vlof_ms - wind_ms  # Ground speed at liftoff
 
         if F_net > 0:
-            # Using: s = v²/(2a) and a = F/m
+            # Kinematic equation: s = v^2 / (2*a), where a = F_net / m
+            # This assumes approximately constant net force (average conditions).
             a_avg = F_net / weight_kg
             ground_roll_m = v_ground**2 / (2 * a_avg)
         else:
@@ -874,7 +940,11 @@ def landing_performance(
         approach_angle_deg: Approach angle in degrees
 
     Returns:
-        Formatted string with landing performance calculations
+        Formatted string with landing performance calculations including V-speeds,
+        air distance from 50 ft, ground roll, and factored distances.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         # Get atmospheric conditions
@@ -913,11 +983,12 @@ def landing_performance(
         approach_rad = math.radians(approach_angle_deg)
         air_distance_m = 50 * 0.3048 / math.tan(approach_rad)
 
-        # Ground roll calculation
-        # Deceleration from braking
+        # Ground roll calculation after touchdown.
+        # Braking friction coefficient (mu) varies significantly with runway condition.
         mu_braking = {"dry": 0.4, "wet": 0.2, "contaminated": 0.1}[runway_condition]
 
-        # Average deceleration (simplified)
+        # Average deceleration: a = mu*g - g*sin(slope)
+        # Positive slope (uphill) aids deceleration; negative (downhill) opposes it.
         g = G0
         decel = mu_braking * g - g * math.sin(math.atan(runway_slope_pct / 100))
 
@@ -933,7 +1004,8 @@ def landing_performance(
         # Total landing distance
         total_distance_m = air_distance_m + ground_roll_m
 
-        # Apply safety factors
+        # Apply regulatory safety factors for landing distance.
+        # Wet runway factor 1.43 (per CS 25.125); contaminated factor 1.92 approximate.
         condition_factors = {"dry": 1.0, "wet": 1.43, "contaminated": 1.92}
         factored_distance_m = total_distance_m * condition_factors[runway_condition]
 
@@ -1028,7 +1100,11 @@ def fuel_reserve_calculator(
         holding_altitude_ft: Expected holding altitude for reserve calculations
 
     Returns:
-        Formatted string with fuel reserve breakdown
+        Formatted string with fuel reserve breakdown per the selected regulation,
+        including contingency, alternate, and final reserve components.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         reserves = {}

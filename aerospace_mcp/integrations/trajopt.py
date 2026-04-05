@@ -1,8 +1,31 @@
-"""
-Trajectory optimization tools for aerospace MCP.
+"""Trajectory optimization tools for aerospace MCP.
 
-Provides basic pitch optimization and trajectory analysis for rocket ascent.
-Uses lightweight numerical methods with optional advanced optimization libraries.
+Provides rocket ascent trajectory optimization using lightweight numerical
+methods:
+    - **Golden section search**: 1-D optimization for single-parameter
+      problems (e.g., launch angle).
+    - **Gradient descent**: multi-dimensional optimization for thrust
+      profile design (numerical central-difference gradient).
+    - **Trajectory comparison**: side-by-side evaluation of multiple rocket
+      configurations.
+    - **Sensitivity analysis**: parameter sweeps with finite-difference
+      sensitivity coefficients.
+
+The optimization problem is formulated as::
+
+    minimize  J(x)
+    subject to  x_lower <= x <= x_upper
+
+where *J* is the objective (e.g., negative max altitude for maximization)
+and *x* is the design vector (launch angle, thrust multipliers, etc.).
+
+References:
+    - Betts, J.T., "Practical Methods for Optimal Control and Estimation
+      Using Nonlinear Programming" (2nd ed., 2010)
+    - Press et al., "Numerical Recipes" (3rd ed., 2007), Chapter 10
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
 import math
@@ -12,10 +35,21 @@ from typing import Any
 
 from .rockets import RocketGeometry, analyze_rocket_performance, rocket_3dof_trajectory
 
+# ===========================================================================
+# Data Classes
+# ===========================================================================
+
 
 @dataclass
 class OptimizationParameters:
-    """Parameters for trajectory optimization."""
+    """General optimization algorithm parameters.
+
+    Attributes:
+        max_iterations: Maximum number of iterations.
+        tolerance: Convergence tolerance.
+        step_size: Step size for parameter updates.
+        parameter_bounds: Dictionary mapping parameter names to (lower, upper).
+    """
 
     max_iterations: int = 100
     tolerance: float = 1e-3
@@ -25,7 +59,16 @@ class OptimizationParameters:
 
 @dataclass
 class TrajectoryOptimizationResult:
-    """Result from trajectory optimization."""
+    """Result from a trajectory optimization run.
+
+    Attributes:
+        optimal_parameters: Best parameter values found.
+        optimal_objective: Objective function value at the optimum.
+        iterations: Number of iterations executed.
+        converged: Whether the optimizer converged within tolerance.
+        trajectory_points: Trajectory at the optimal parameters.
+        performance: Performance summary at the optimal parameters.
+    """
 
     optimal_parameters: dict[str, float]
     optimal_objective: float
@@ -35,6 +78,11 @@ class TrajectoryOptimizationResult:
     performance: Any  # RocketPerformance
 
 
+# ===========================================================================
+# 1-D Optimization: Golden Section Search
+# ===========================================================================
+
+
 def simple_golden_section_search(
     objective_func: Callable[[float], float],
     lower_bound: float,
@@ -42,17 +90,33 @@ def simple_golden_section_search(
     tolerance: float = 1e-3,
     max_iterations: int = 100,
 ) -> tuple[float, float]:
-    """
-    Golden section search for 1D optimization.
+    """Golden section search for unimodal 1-D minimization.
+
+    Iteratively narrows a bracketing interval by evaluating the objective
+    at two interior points spaced by the golden ratio::
+
+        phi = (1 + sqrt(5)) / 2  ~  1.618
+        resphi = 2 - phi          ~  0.382
+
+    Each iteration reduces the interval by a factor of phi, requiring
+    only one new function evaluation.  Convergence rate is linear with
+    ratio 1/phi ~ 0.618.
+
+    Args:
+        objective_func: Scalar objective function to minimize.
+        lower_bound: Lower bound of the search interval.
+        upper_bound: Upper bound of the search interval.
+        tolerance: Convergence tolerance on interval width.
+        max_iterations: Maximum number of iterations.
 
     Returns:
-        Tuple of (optimal_x, optimal_value)
+        Tuple of ``(optimal_x, optimal_value)``.
     """
-    # Golden ratio
-    phi = (1 + math.sqrt(5)) / 2
-    resphi = 2 - phi
+    # Golden ratio constants
+    phi = (1 + math.sqrt(5)) / 2  # ~1.618
+    resphi = 2 - phi  # ~0.382 = 1/phi^2
 
-    # Initial points
+    # Place two interior probe points
     x1 = lower_bound + resphi * (upper_bound - lower_bound)
     x2 = upper_bound - resphi * (upper_bound - lower_bound)
     f1 = objective_func(x1)
@@ -62,24 +126,31 @@ def simple_golden_section_search(
         if abs(upper_bound - lower_bound) < tolerance:
             break
 
-        if f1 < f2:  # f1 is better (assuming minimization)
+        if f1 < f2:
+            # f1 is better -- narrow from the right
             upper_bound = x2
             x2 = x1
             f2 = f1
             x1 = lower_bound + resphi * (upper_bound - lower_bound)
             f1 = objective_func(x1)
-        else:  # f2 is better
+        else:
+            # f2 is better -- narrow from the left
             lower_bound = x1
             x1 = x2
             f1 = f2
             x2 = upper_bound - resphi * (upper_bound - lower_bound)
             f2 = objective_func(x2)
 
-    # Return best point
+    # Return the better of the two remaining probe points
     if f1 < f2:
         return x1, f1
     else:
         return x2, f2
+
+
+# ===========================================================================
+# Multi-Dimensional Optimization: Gradient Descent
+# ===========================================================================
 
 
 def simple_gradient_descent(
@@ -90,47 +161,66 @@ def simple_gradient_descent(
     tolerance: float = 1e-3,
     max_iterations: int = 100,
 ) -> tuple[list[float], float, int, bool]:
-    """
-    Simple gradient descent optimization for multi-dimensional problems.
+    """Projected gradient descent with numerical central-difference gradient.
+
+    The gradient is estimated via central finite differences::
+
+        dJ/dx_i ~ (J(x + h*e_i) - J(x - h*e_i)) / (2*h)
+
+    where h = 1e-6.  Parameters are projected back onto the box
+    constraints after each update step::
+
+        x_{k+1} = clip(x_k - alpha * grad, x_lower, x_upper)
+
+    Convergence is declared when both the maximum parameter change and
+    the objective change are below ``tolerance``.
+
+    Args:
+        objective_func: Scalar objective function to minimize.
+        initial_params: Initial parameter vector.
+        param_bounds: List of ``(lower, upper)`` bound tuples per dimension.
+        learning_rate: Step size multiplier (alpha).
+        tolerance: Convergence tolerance.
+        max_iterations: Maximum number of gradient steps.
 
     Returns:
-        Tuple of (optimal_params, optimal_value, iterations, converged)
+        Tuple of ``(optimal_params, optimal_value, iterations, converged)``.
     """
     current_params = initial_params.copy()
     current_value = objective_func(current_params)
 
     for iteration in range(max_iterations):
-        # Numerical gradient estimation
+        # Numerical gradient estimation via central differences
         gradient = []
-        h = 1e-6  # Small step for numerical differentiation
+        h = 1e-6  # Finite-difference step size
 
         for i, param in enumerate(current_params):
-            # Forward difference
+            # Forward perturbation (clamped to bounds)
             params_plus = current_params.copy()
             params_plus[i] = min(param_bounds[i][1], param + h)
             value_plus = objective_func(params_plus)
 
-            # Backward difference
+            # Backward perturbation (clamped to bounds)
             params_minus = current_params.copy()
             params_minus[i] = max(param_bounds[i][0], param - h)
             value_minus = objective_func(params_minus)
 
-            # Central difference
+            # Central-difference gradient: dJ/dx_i ~ (J+ - J-) / (2h)
             grad = (value_plus - value_minus) / (2 * h)
             gradient.append(grad)
 
-        # Update parameters
+        # Gradient descent update with box-constraint projection
         new_params = []
         max_change = 0.0
 
         for i, (param, grad) in enumerate(zip(current_params, gradient, strict=False)):
             new_param = param - learning_rate * grad
-            # Apply bounds
+            # Project onto box constraints [lower, upper]
             new_param = max(param_bounds[i][0], min(param_bounds[i][1], new_param))
             new_params.append(new_param)
             max_change = max(max_change, abs(new_param - param))
 
-        # Check convergence
+        # Convergence check: both parameter and objective changes small
         new_value = objective_func(new_params)
 
         if max_change < tolerance and abs(new_value - current_value) < tolerance:
@@ -140,6 +230,11 @@ def simple_gradient_descent(
         current_value = new_value
 
     return current_params, current_value, max_iterations, False
+
+
+# ===========================================================================
+# Rocket Trajectory Optimization Functions
+# ===========================================================================
 
 
 def optimize_launch_angle(
@@ -350,6 +445,11 @@ def optimize_thrust_profile(
         trajectory_points=final_trajectory,
         performance=final_performance,
     )
+
+
+# ===========================================================================
+# Trajectory Comparison and Sensitivity Analysis
+# ===========================================================================
 
 
 def compare_trajectories(

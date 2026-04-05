@@ -1,4 +1,14 @@
-"""Aerodynamics analysis tools for the Aerospace MCP server."""
+"""Aerodynamics analysis tools for the Aerospace MCP server.
+
+Provides tools for subsonic aerodynamic analysis including:
+- Vortex Lattice Method (VLM) wing analysis for lift, drag, and moment prediction.
+- Airfoil polar generation (CL, CD, CM vs. angle of attack).
+- Longitudinal stability derivative calculation.
+- Airfoil database lookup.
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
+"""
 
 import json
 import logging
@@ -28,13 +38,27 @@ def wing_vlm_analysis(
         analysis_options: Optional analysis settings (currently unused)
 
     Returns:
-        Formatted string with aerodynamic analysis results
+        Formatted string with aerodynamic analysis results including CL, CD,
+        CM, and L/D ratio at each angle of attack.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+        ImportError is caught when aerodynamics packages are not installed.
+
+    Note:
+        The Vortex Lattice Method (VLM) discretizes the wing planform into
+        panels, each modeled with a horseshoe vortex. Each horseshoe vortex
+        consists of a bound vortex along the panel quarter-chord line and two
+        trailing (semi-infinite) vortices extending downstream. The induced
+        velocity at each panel's 3/4-chord control point is computed via the
+        Biot-Savart law, and the no-penetration boundary condition is enforced
+        to solve for the vortex strengths (circulation distribution).
     """
     try:
         from ..integrations.aero import WingGeometry
         from ..integrations.aero import wing_vlm_analysis as _wing_analysis
 
-        # Build WingGeometry from config
+        # Build WingGeometry from config dict, applying defaults for optional fields
         geometry = WingGeometry(
             span_m=wing_config.get("span_m", 10.0),
             chord_root_m=wing_config.get(
@@ -126,7 +150,10 @@ def airfoil_polar_analysis(
         alpha_range_deg: Optional angle of attack range, defaults to [-10, 20] deg
 
     Returns:
-        Formatted string with airfoil polar data
+        Formatted string with airfoil polar data (CL, CD, CM, L/D vs. alpha).
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.aero import airfoil_polar_analysis as _airfoil_analysis
@@ -199,13 +226,22 @@ def calculate_stability_derivatives(wing_config: dict, flight_conditions: dict) 
             - mach: Mach number (optional, default 0.2)
 
     Returns:
-        JSON string with stability derivatives
+        JSON string with stability derivatives:
+        - CL_alpha: Lift curve slope (dCL/dalpha) [1/rad] -- rate of lift
+          change with angle of attack. Positive for conventional aircraft.
+        - CM_alpha: Pitching moment slope (dCM/dalpha) [1/rad] -- must be
+          negative for static longitudinal stability (nose-down restoring moment).
+        - CL_alpha_dot: Unsteady lift derivative due to rate of alpha change.
+        - CM_alpha_dot: Unsteady pitching moment derivative (pitch damping).
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.aero import WingGeometry
         from ..integrations.aero import calculate_stability_derivatives as _stability
 
-        # Build WingGeometry from config
+        # Build WingGeometry from config dict, applying defaults for optional fields
         geometry = WingGeometry(
             span_m=wing_config.get("span_m", 10.0),
             chord_root_m=wing_config.get(
@@ -251,7 +287,10 @@ def get_airfoil_database() -> str:
     """Get available airfoil database with aerodynamic coefficients.
 
     Returns:
-        JSON string with airfoil database
+        JSON string with airfoil database containing aerodynamic coefficients.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.aero import AIRFOIL_DATABASE

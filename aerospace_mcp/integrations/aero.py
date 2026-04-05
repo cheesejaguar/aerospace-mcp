@@ -1,11 +1,26 @@
-"""
-Aircraft Aerodynamics Tools
+"""Aircraft Aerodynamics Tools.
 
-Provides aircraft aerodynamics analysis including VLM wing analysis,
-airfoil polars, and basic aerodynamic calculations. Falls back to
-simplified methods when optional dependencies are unavailable.
+Provides aircraft aerodynamics analysis including:
+    - Vortex Lattice Method (VLM) wing analysis (via AeroSandbox or fallback
+      lifting-line theory approximation)
+    - Airfoil polar generation (thin-airfoil theory / database lookup)
+    - Longitudinal stability derivative estimation
+    - Wing planform geometric property calculations (area, AR, MAC, taper)
 
-Uses NumPy for vectorized calculations with CuPy compatibility for GPU acceleration.
+The VLM fallback uses Prandtl lifting-line corrections and a simple stall
+model.  Airfoil analysis uses a built-in database of linearized coefficients
+with Reynolds and Mach corrections.
+
+Uses NumPy for vectorized calculations with CuPy compatibility for GPU
+acceleration via the ``_array_backend`` module.
+
+References:
+    - Katz, J. & Plotkin, A., "Low-Speed Aerodynamics" (2nd ed., 2001)
+    - Anderson, J.D., "Fundamentals of Aerodynamics" (6th ed., 2017)
+    - Phillips, W.F., "Mechanics of Flight" (2nd ed., 2010)
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
 from pydantic import BaseModel, Field
@@ -13,10 +28,16 @@ from pydantic import BaseModel, Field
 from . import update_availability
 from ._array_backend import np, to_numpy
 
+# ===========================================================================
 # Constants
-PI = np.pi
+# ===========================================================================
 
-# Optional library imports
+PI = np.pi  # Archimedes' constant (3.14159...)
+
+# ===========================================================================
+# Optional Library Imports
+# ===========================================================================
+
 AEROSANDBOX_AVAILABLE = False
 MACHUPX_AVAILABLE = False
 
@@ -36,7 +57,17 @@ except ImportError:
     except ImportError:
         update_availability("aero", True, {})  # Still available with manual methods
 
-# Airfoil database - simplified coefficients for common airfoils
+# ===========================================================================
+# Airfoil Coefficient Database
+# ===========================================================================
+
+# Simplified linearized coefficients for common airfoils.
+# cl_alpha: lift-curve slope (per radian), ~2*pi from thin-airfoil theory.
+# cl0: lift coefficient at zero angle of attack (camber contribution).
+# cd0: minimum (zero-lift) drag coefficient.
+# cl_max: maximum lift coefficient before stall.
+# alpha_stall_deg: stall angle of attack (degrees).
+# cm0: pitching moment coefficient at zero lift.
 AIRFOIL_DATABASE = {
     "NACA0012": {
         "cl_alpha": 6.28,  # per radian
@@ -81,9 +112,13 @@ AIRFOIL_DATABASE = {
 }
 
 
-# Data models
+# ===========================================================================
+# Data Models
+# ===========================================================================
+
+
 class AirfoilPoint(BaseModel):
-    """Single airfoil polar point."""
+    """Single point on an airfoil polar curve (CL, CD, CM vs. alpha)."""
 
     alpha_deg: float = Field(..., description="Angle of attack in degrees")
     cl: float = Field(..., description="Lift coefficient")
@@ -131,48 +166,80 @@ class StabilityDerivatives(BaseModel):
     CM_alpha_dot: float | None = Field(None, description="CM due to alpha rate")
 
 
+# ===========================================================================
+# Wing Analysis -- Lifting Line Theory Fallback
+# ===========================================================================
+
+
 def _simple_wing_analysis(
     geometry: WingGeometry, alpha_deg_list: list[float], mach: float = 0.2
 ) -> list[WingAnalysisPoint]:
+    """Simple wing analysis using Prandtl lifting-line theory approximations.
+
+    The 3-D lift-curve slope is corrected from the 2-D section value
+    using the Prandtl relation::
+
+        CL_alpha_3D = CL_alpha_2D / (1 + CL_alpha_2D / (pi * AR * e))
+
+    A Prandtl-Glauert compressibility correction is applied::
+
+        CL_alpha_corrected = CL_alpha_3D / sqrt(1 - M^2)
+
+    Induced drag follows the Oswald efficiency model::
+
+        CDi = CL^2 / (pi * AR * e)
+
+    A simple post-stall model reduces CL and increases CD beyond the
+    stall angle.
+
+    Args:
+        geometry: Wing planform geometry.
+        alpha_deg_list: Angles of attack to evaluate (degrees).
+        mach: Free-stream Mach number.
+
+    Returns:
+        List of wing analysis results at each angle of attack.
     """
-    Simple wing analysis using lifting line theory approximations.
-    Uses vectorized NumPy calculations for efficiency.
-    """
-    # Convert to NumPy array
+    # Convert to NumPy array for vectorized operations
     alphas_deg = np.asarray(alpha_deg_list, dtype=np.float64)
     alphas_rad = np.radians(alphas_deg)
 
-    # Wing parameters
-    S = geometry.span_m * (geometry.chord_root_m + geometry.chord_tip_m) / 2  # Area
-    AR = geometry.span_m**2 / S  # Aspect ratio
+    # Wing planform area (trapezoidal): S = b * (c_root + c_tip) / 2
+    S = geometry.span_m * (geometry.chord_root_m + geometry.chord_tip_m) / 2
+    # Aspect ratio: AR = b^2 / S
+    AR = geometry.span_m**2 / S
 
-    # Get airfoil properties
+    # Look up 2-D airfoil properties from the database
     airfoil_data = AIRFOIL_DATABASE.get(
         geometry.airfoil_root, AIRFOIL_DATABASE["NACA2412"]
     )
 
-    # Prandtl lifting line corrections
-    e = 0.85  # Oswald efficiency
-    CL_alpha_2d = airfoil_data["cl_alpha"]
+    # Oswald span efficiency factor (accounts for non-elliptic loading)
+    e = 0.85
+
+    # Prandtl lifting-line correction: 2-D -> 3-D lift-curve slope
+    # CL_alpha_3D = CL_alpha_2D / (1 + CL_alpha_2D / (pi * AR * e))
+    CL_alpha_2d = airfoil_data["cl_alpha"]  # ~2*pi per radian
     CL_alpha_3d = CL_alpha_2d / (1 + CL_alpha_2d / (PI * AR * e))
 
-    # Mach number corrections
-    beta = np.sqrt(max(0.01, 1 - mach**2))
+    # Prandtl-Glauert compressibility correction: divide by sqrt(1 - M^2)
+    beta = np.sqrt(max(0.01, 1 - mach**2))  # Compressibility factor
     CL_alpha_3d = CL_alpha_3d / beta
 
-    # Vectorized lift coefficient calculation
-    cl0 = airfoil_data.get("cl0", 0.0)
+    # Lift coefficient: CL = CL0 + CL_alpha * alpha (vectorized)
+    cl0 = airfoil_data.get("cl0", 0.0)  # Zero-alpha lift (due to camber)
     CL = cl0 + CL_alpha_3d * alphas_rad
 
-    # Vectorized drag coefficient
-    CD0 = airfoil_data["cd0"] * 1.1  # Wing CD0 slightly higher than airfoil
-    CDi = CL**2 / (PI * AR * e)  # Induced drag
+    # Drag coefficient: CD = CD0 + CDi
+    CD0 = airfoil_data["cd0"] * 1.1  # Wing CD0 ~10% higher than 2-D section
+    # Induced drag: CDi = CL^2 / (pi * AR * e)  (Oswald model)
+    CDi = CL**2 / (PI * AR * e)
     CD = CD0 + CDi
 
-    # Pitching moment
+    # Pitching moment (simplified linear model)
     CM = airfoil_data["cm0"] + 0.02 * CL
 
-    # Apply stall model (vectorized)
+    # Post-stall model: reduce CL and increase CD beyond alpha_stall
     alpha_stall = airfoil_data["alpha_stall_deg"]
     stalled = np.abs(alphas_deg) > alpha_stall
     stall_factor = np.where(
@@ -187,7 +254,7 @@ def _simple_wing_analysis(
     )
     CD = CD * drag_multiplier
 
-    # L/D ratio
+    # Lift-to-drag ratio
     L_D = np.where(CD > 0.001, CL / CD, 0.0)
 
     # Convert to output format
@@ -211,6 +278,11 @@ def _simple_wing_analysis(
         )
 
     return results
+
+
+# ===========================================================================
+# VLM Wing Analysis (Primary Entry Point)
+# ===========================================================================
 
 
 def wing_vlm_analysis(
@@ -251,7 +323,25 @@ def _aerosandbox_wing_analysis(
     mach: float,
     reynolds: float | None,
 ) -> list[WingAnalysisPoint]:
-    """AeroSandbox-based VLM analysis."""
+    """VLM wing analysis using AeroSandbox.
+
+    Constructs a half-wing with root and tip cross-sections, then solves
+    the VLM with chordwise and spanwise panel counts.  The VLM computes
+    inviscid induced drag; viscous drag is not included.
+
+    The Biot-Savart law is applied to each horseshoe vortex to compute
+    induced velocities at control points, assembling the Aerodynamic
+    Influence Coefficient (AIC) matrix.
+
+    Args:
+        geometry: Wing planform geometry.
+        alpha_deg_list: Angles of attack (degrees).
+        mach: Free-stream Mach number.
+        reynolds: Reynolds number (optional, for viscous corrections).
+
+    Returns:
+        Wing analysis results at each angle of attack.
+    """
     import math  # AeroSandbox uses Python math, not numpy
 
     # Create wing geometry
@@ -319,6 +409,11 @@ def _aerosandbox_wing_analysis(
     return results
 
 
+# ===========================================================================
+# Airfoil Polar Analysis
+# ===========================================================================
+
+
 def airfoil_polar_analysis(
     airfoil_name: str,
     alpha_deg_list: list[float],
@@ -355,7 +450,25 @@ def airfoil_polar_analysis(
 def _database_airfoil_polar(
     airfoil_name: str, alpha_deg_list: list[float], reynolds: float, mach: float
 ) -> list[AirfoilPoint]:
-    """Generate airfoil polar from database coefficients using vectorized NumPy."""
+    """Generate an airfoil polar from linearized database coefficients.
+
+    Applies thin-airfoil-theory approximations with empirical Reynolds
+    and Mach corrections.  A simple stall model reduces CL beyond the
+    database-specified stall angle.
+
+    Lift: CL = (CL0 + CL_alpha * alpha) / beta * Re_factor
+    Drag: CD = CD0 * (10^6 / Re)^0.2 + 0.01 * CL^2
+    where beta = sqrt(1 - M^2) is the Prandtl-Glauert factor.
+
+    Args:
+        airfoil_name: Name key into the airfoil database.
+        alpha_deg_list: Angles of attack (degrees).
+        reynolds: Reynolds number.
+        mach: Mach number.
+
+    Returns:
+        Airfoil polar points.
+    """
     # Get airfoil data from database
     airfoil_data = AIRFOIL_DATABASE.get(airfoil_name, AIRFOIL_DATABASE["NACA2412"])
 
@@ -425,7 +538,20 @@ def _database_airfoil_polar(
 def _aerosandbox_airfoil_polar(
     airfoil_name: str, alpha_deg_list: list[float], reynolds: float, mach: float
 ) -> list[AirfoilPoint]:
-    """Generate airfoil polar using AeroSandbox XFoil integration."""
+    """Generate airfoil polar using AeroSandbox's NeuralFoil surrogate model.
+
+    NeuralFoil provides rapid airfoil performance predictions trained on
+    XFoil data.  Falls back to the database method per-point on failure.
+
+    Args:
+        airfoil_name: NACA or named airfoil designation.
+        alpha_deg_list: Angles of attack (degrees).
+        reynolds: Reynolds number.
+        mach: Mach number.
+
+    Returns:
+        Airfoil polar points.
+    """
     try:
         # Create airfoil
         airfoil = asb.Airfoil(airfoil_name)
@@ -473,6 +599,11 @@ def _aerosandbox_airfoil_polar(
         return _database_airfoil_polar(airfoil_name, alpha_deg_list, reynolds, mach)
 
 
+# ===========================================================================
+# Stability Derivatives
+# ===========================================================================
+
+
 def calculate_stability_derivatives(
     geometry: WingGeometry, alpha_deg: float = 2.0, mach: float = 0.2
 ) -> StabilityDerivatives:
@@ -498,13 +629,15 @@ def calculate_stability_derivatives(
         geometry.airfoil_root, AIRFOIL_DATABASE["NACA2412"]
     )
 
-    # 3D lift curve slope using NumPy
-    e = 0.85  # Oswald efficiency
-    beta = float(np.sqrt(max(0.01, 1 - mach**2)))
+    # 3-D lift-curve slope with Prandtl lifting-line and Prandtl-Glauert
+    # CL_alpha = CL_alpha_2D / (1 + CL_alpha_2D/(pi*AR*e)) / beta
+    e = 0.85  # Oswald span efficiency
+    beta = float(np.sqrt(max(0.01, 1 - mach**2)))  # Compressibility factor
     CL_alpha_2d = airfoil_data["cl_alpha"]
     CL_alpha = CL_alpha_2d / (1 + CL_alpha_2d / (PI * AR * e)) / beta
 
-    # Pitching moment slope (simplified)
+    # Pitching moment slope (simplified): CM_alpha ~ -0.1 * CL_alpha
+    # Negative indicates static longitudinal stability.
     CM_alpha = -0.1 * CL_alpha
 
     return StabilityDerivatives(
@@ -515,33 +648,50 @@ def calculate_stability_derivatives(
     )
 
 
+# ===========================================================================
+# Utility Functions
+# ===========================================================================
+
+
 def get_airfoil_database() -> dict[str, dict[str, float]]:
-    """Get available airfoil database."""
+    """Return a copy of the built-in airfoil coefficient database.
+
+    Returns:
+        Dictionary mapping airfoil names to linearized coefficients.
+    """
     return AIRFOIL_DATABASE.copy()
 
 
 def estimate_wing_area(geometry: WingGeometry) -> dict[str, float]:
-    """
-    Calculate wing geometric properties.
+    """Calculate wing planform geometric properties.
 
-    Uses NumPy for efficient calculations.
+    Computes area (trapezoidal), aspect ratio, taper ratio, mean
+    aerodynamic chord (MAC), and MAC sweep angle.
+
+    Mean aerodynamic chord formula (trapezoidal wing)::
+
+        MAC = (2/3) * c_root * (1 + lambda + lambda^2) / (1 + lambda)
+
+    where lambda = c_tip / c_root is the taper ratio.
 
     Args:
-        geometry: Wing planform geometry
+        geometry: Wing planform geometry definition.
 
     Returns:
-        Dictionary with wing area, aspect ratio, etc.
+        Dictionary with ``wing_area_m2``, ``aspect_ratio``,
+        ``taper_ratio``, ``mean_aerodynamic_chord_m``,
+        ``sweep_MAC_deg``, and ``span_m``.
     """
-    # Wing area (trapezoidal approximation)
+    # Trapezoidal wing area: S = b * (c_root + c_tip) / 2
     S = geometry.span_m * (geometry.chord_root_m + geometry.chord_tip_m) / 2
 
-    # Aspect ratio
+    # Aspect ratio: AR = b^2 / S
     AR = geometry.span_m**2 / S
 
-    # Taper ratio
+    # Taper ratio: lambda = c_tip / c_root
     taper_ratio = geometry.chord_tip_m / geometry.chord_root_m
 
-    # Mean aerodynamic chord
+    # Mean aerodynamic chord (trapezoidal wing formula)
     MAC = (
         (2 / 3)
         * geometry.chord_root_m
@@ -549,7 +699,7 @@ def estimate_wing_area(geometry: WingGeometry) -> dict[str, float]:
         / (1 + taper_ratio)
     )
 
-    # Sweep of mean aerodynamic chord (approximate)
+    # Sweep of mean aerodynamic chord (approximate for trapezoidal wing)
     sweep_MAC_deg = geometry.sweep_deg - float(
         np.degrees(np.arctan(4 / AR * (0.25) * (1 - taper_ratio) / (1 + taper_ratio)))
     )

@@ -1,4 +1,12 @@
-"""Core flight planning tools for the Aerospace MCP server."""
+"""Core flight planning tools for the Aerospace MCP server.
+
+Provides the fundamental flight planning capabilities including airport search,
+route generation via great-circle calculations, distance computation, and
+aircraft performance estimation using the OpenAP library.
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
+"""
 
 import json
 import logging
@@ -33,6 +41,9 @@ def search_airports(
 
     Returns:
         Formatted string with airport information
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     query = query.strip()
     if not query:
@@ -40,7 +51,9 @@ def search_airports(
 
     results = []
 
-    # Auto-detect query type if needed
+    # Auto-detect query type: if the query is exactly 3 alphabetic characters,
+    # it matches the IATA code format (e.g., "SFO", "NRT"); otherwise treat as
+    # a city name search.
     if query_type == "auto":
         query_type = "iata" if len(query) == 3 and query.isalpha() else "city"
 
@@ -91,7 +104,12 @@ def plan_flight(
         route_options: Optional route options
 
     Returns:
-        JSON string with flight plan details
+        JSON string with flight plan details including departure/arrival airports,
+        route waypoints, distances, and optional performance estimates.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+        Internally catches AirportResolutionError and OpenAPError.
     """
     try:
         # Build request object
@@ -165,8 +183,8 @@ def plan_flight(
         initial_bearing = g["azi1"]
         final_bearing = g["azi2"]
 
-        # Convert to nautical miles
-        NM_PER_KM = 0.539956803
+        # Convert to nautical miles (1 km = 0.539957 NM, per ICAO definition)
+        NM_PER_KM = 0.539956803  # nautical miles per kilometer
         distance_nm = distance_km * NM_PER_KM
 
         # Build response
@@ -243,7 +261,10 @@ def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> st
         lon2: Longitude of second point in degrees
 
     Returns:
-        JSON string with distance information
+        JSON string with distance in km and NM, plus initial/final bearings.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from geographiclib.geodesic import Geodesic
@@ -291,7 +312,11 @@ def get_aircraft_performance(
         cruise_altitude_ft: Cruise altitude in feet
 
     Returns:
-        JSON string with performance estimates or error message
+        JSON string with performance estimates or error message.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+        Internally catches OpenAPError for unsupported aircraft types.
     """
     if not OPENAP_AVAILABLE:
         return "OpenAP library is not available. Install with: pip install openap"

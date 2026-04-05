@@ -1,4 +1,14 @@
-"""Rocket trajectory and performance analysis tools for the Aerospace MCP server."""
+"""Rocket trajectory and performance analysis tools for the Aerospace MCP server.
+
+Provides tools for rocket trajectory simulation (3DOF with atmospheric drag),
+preliminary sizing estimation using the Tsiolkovsky rocket equation, and
+launch angle optimization. The 3DOF model integrates equations of motion
+using a 4th-order Runge-Kutta (RK4) method with altitude-dependent atmospheric
+density for drag modeling.
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
+"""
 
 import json
 import logging
@@ -20,7 +30,24 @@ def rocket_3dof_trajectory(
         simulation_options: Optional simulation settings
 
     Returns:
-        Formatted string with trajectory analysis results
+        Formatted string with trajectory analysis results including max altitude,
+        max velocity, Mach number, apogee time, burnout time, max-Q, total
+        impulse, and specific impulse.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+        ImportError is caught when rocketry packages are not installed.
+
+    Note:
+        The 3DOF equations of motion integrate:
+            dv/dt = (T - D) / m - g * sin(gamma)     (along velocity)
+            dgamma/dt = -(g / v) * cos(gamma)         (flight path angle)
+            dx/dt = v * cos(gamma)                     (downrange)
+            dh/dt = v * sin(gamma)                     (altitude)
+        where T is thrust, D = 0.5 * rho(h) * v^2 * Cd * A_ref is aerodynamic
+        drag with altitude-dependent density, m is instantaneous mass (decreasing
+        during burn), and gamma is the flight path angle. Integration uses a
+        4th-order Runge-Kutta (RK4) scheme for numerical stability.
     """
     try:
         from ..integrations.rockets import (
@@ -124,7 +151,18 @@ def estimate_rocket_sizing(
         design_margin: Design margin factor
 
     Returns:
-        JSON string with sizing estimates
+        JSON string with sizing estimates including propellant mass, dry mass,
+        total mass, and structural dimensions.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+
+    Note:
+        Sizing uses the Tsiolkovsky rocket equation (ideal rocket equation):
+            delta_V = Isp * g0 * ln(m_initial / m_final)
+        Rearranged to solve for propellant mass:
+            m_prop = m_final * (exp(delta_V / (Isp * g0)) - 1)
+        where Isp is specific impulse and g0 = 9.80665 m/s^2.
     """
     try:
         from ..integrations.rockets import estimate_rocket_sizing as _sizing
@@ -157,7 +195,11 @@ def optimize_launch_angle(
         angle_bounds_deg: Launch angle bounds in degrees
 
     Returns:
-        JSON string with optimization results
+        JSON string with optimization results including optimal angle and
+        resulting performance metrics.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.rockets import (

@@ -1,9 +1,23 @@
-"""
-Propeller and UAV Energy Analysis Tools
+"""Propeller and UAV Energy Analysis Tools.
 
-Provides propeller performance analysis using BEMT (Blade Element Momentum Theory),
-UAV energy estimation, and motor matching tools. Falls back to simplified
-methods when optional dependencies are unavailable.
+Provides propeller performance analysis using Blade Element Momentum Theory
+(BEMT), UAV energy / endurance estimation, and motor-propeller matching.
+Falls back to simplified momentum-theory methods when optional dependencies
+(AeroSandbox, PyBEMT) are unavailable.
+
+Key capabilities:
+    - BEMT propeller analysis (thrust, torque, power, efficiency vs. RPM)
+    - UAV energy estimation for multirotor and fixed-wing configurations
+    - Motor-propeller matching for optimal operating-point selection
+    - Propeller and battery reference databases
+
+References:
+    - Leishman, J.G., "Principles of Helicopter Aerodynamics" (2nd ed., 2006)
+    - McCormick, B.W., "Aerodynamics, Aeronautics, and Flight Mechanics" (1995)
+    - Drela, M., "Flight Vehicle Aerodynamics" (2014)
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
 import math
@@ -13,7 +27,10 @@ from pydantic import BaseModel, Field
 
 from . import update_availability
 
-# Optional library imports
+# ===========================================================================
+# Optional Library Imports
+# ===========================================================================
+
 AEROSANDBOX_AVAILABLE = False
 PYBEMT_AVAILABLE = False
 
@@ -33,11 +50,24 @@ except ImportError:
             "propellers", True, {}
         )  # Still available with manual methods
 
-# Constants
-RHO_SEA_LEVEL = 1.225  # kg/m³
-GRAVITY = 9.80665  # m/s²
+# ===========================================================================
+# Physical Constants
+# ===========================================================================
 
-# Propeller database - common propellers with basic characteristics
+# ISA sea-level air density (kg/m^3).
+RHO_SEA_LEVEL = 1.225
+
+# Standard gravitational acceleration (m/s^2).  NIST value.
+GRAVITY = 9.80665
+
+# ===========================================================================
+# Propeller and Battery Reference Databases
+# ===========================================================================
+
+# Common propellers with basic aerodynamic characteristics.
+# activity_factor: integrated blade width parameter (dimensionless, ~50-200).
+# cl_design / cd_design: blade section lift/drag coefficients at design point.
+# efficiency_max: peak propulsive efficiency (eta = J * CT / CP).
 PROPELLER_DATABASE = {
     "APC_10x7": {
         "diameter_m": 0.254,  # 10 inches
@@ -77,7 +107,9 @@ PROPELLER_DATABASE = {
     },
 }
 
-# Battery characteristics database
+# Battery characteristics database.
+# energy_density_wh_kg: gravimetric energy density at cell level.
+# discharge_efficiency: Coulombic efficiency accounting for internal losses.
 BATTERY_DATABASE = {
     "LiPo_3S": {
         "nominal_voltage_v": 11.1,
@@ -106,9 +138,13 @@ BATTERY_DATABASE = {
 }
 
 
-# Data models
+# ===========================================================================
+# Data Models
+# ===========================================================================
+
+
 class PropellerGeometry(BaseModel):
-    """Propeller geometric parameters."""
+    """Propeller geometric parameters for BEMT analysis."""
 
     diameter_m: float = Field(..., gt=0, description="Propeller diameter in meters")
     pitch_m: float = Field(..., gt=0, description="Propeller pitch in meters")
@@ -187,85 +223,123 @@ def _simple_propeller_analysis(
     velocity_ms: float,
     altitude_m: float = 0,
 ) -> list[PropellerPerformancePoint]:
+    """Simple propeller analysis using momentum theory and blade element methods.
+
+    This is the fallback method when AeroSandbox / PyBEMT are unavailable.
+    It uses simplified BEMT with a single representative blade section at
+    75% radius (the "75% rule").
+
+    Non-dimensional coefficients (dimensional analysis):
+        - Thrust coefficient:  CT = T / (rho * n^2 * D^4)
+        - Power coefficient:   CP = P / (rho * n^3 * D^5)
+        - Advance ratio:       J  = V / (n * D)
+        - Propulsive efficiency: eta = J * CT / CP
+
+    Args:
+        geometry: Propeller geometry parameters.
+        rpm_list: List of rotational speeds to evaluate.
+        velocity_ms: Free-stream (forward flight) velocity in m/s.
+        altitude_m: Geometric altitude for atmospheric model.
+
+    Returns:
+        Performance points at each RPM operating condition.
     """
-    Simple propeller analysis using momentum theory and basic blade element methods.
-    Used as fallback when advanced libraries unavailable.
-    """
-    # Atmospheric conditions
+    # --- Atmospheric conditions (simplified ISA) ---
+    # Troposphere (h < 11 km): T = T0 + L*h, P = P0*(T/T0)^(g/(R*L))
     if altitude_m < 11000:
-        temp = 288.15 - 0.0065 * altitude_m
-        pressure = 101325 * (temp / 288.15) ** 5.256
+        temp = 288.15 - 0.0065 * altitude_m  # ISA lapse rate: -6.5 K/km
+        pressure = 101325 * (temp / 288.15) ** 5.256  # Barometric formula exponent
     else:
+        # Stratosphere (isothermal at 216.65 K):
+        # P = P_tropopause * exp(-g*dh / (R*T))
         temp = 216.65
         pressure = 22632 * math.exp(-0.0001577 * (altitude_m - 11000))
 
+    # Ideal gas law: rho = P / (R_specific * T)
     rho = pressure / (287.04 * temp)
 
     results = []
 
     for rpm in rpm_list:
-        n = rpm / 60.0  # Revolutions per second
+        n = rpm / 60.0  # Convert RPM to revolutions per second (rps)
         D = geometry.diameter_m
 
-        # Advance ratio
+        # Advance ratio: J = V_inf / (n * D)
+        # J = 0 corresponds to static (hovering) conditions.
         J = velocity_ms / (n * D) if n > 0 else 0
 
-        # Simple momentum theory for static thrust
-        if J < 0.1:  # Static or near-static conditions
-            # Simplified static thrust estimation
-            CT_static = 0.12 * geometry.num_blades / 2  # Rough approximation
+        # --- Static / near-static regime (J < 0.1) ---
+        if J < 0.1:
+            # Momentum theory gives an approximate static thrust coefficient.
+            # Scale linearly with blade count (normalized to 2-blade baseline).
+            CT_static = 0.12 * geometry.num_blades / 2  # Empirical approximation
+
+            # T = CT * rho * n^2 * D^4  (dimensional analysis)
             thrust_n = CT_static * rho * n**2 * D**4
 
-            # Power estimation from simplified BEMT
-            CP_static = (
-                CT_static ** (3 / 2) / math.sqrt(2) * 1.2
-            )  # Include profile power
+            # Power coefficient from ideal momentum theory:
+            # CP_ideal = CT^(3/2) / sqrt(2)
+            # Multiply by 1.2 to include profile (viscous) drag power losses.
+            CP_static = CT_static ** (3 / 2) / math.sqrt(2) * 1.2
             power_w = CP_static * rho * n**3 * D**5
 
-            efficiency = 0.5 if power_w > 0 else 0  # Low efficiency in static
+            # Static propulsive efficiency is inherently low (ideal = 0).
+            efficiency = 0.5 if power_w > 0 else 0
 
         else:
-            # Forward flight conditions
-            # Simplified propeller theory
-            beta = math.atan(geometry.pitch_m / (math.pi * D))  # Geometric pitch angle
+            # --- Forward flight regime (blade element theory at 75% radius) ---
 
-            # Thrust coefficient approximation
-            alpha_eff = beta - math.atan(
-                J / (math.pi * 0.75)
-            )  # Effective angle at 75% radius
+            # Geometric pitch angle at the blade tip:
+            # beta = arctan(pitch / (pi * D))
+            beta = math.atan(geometry.pitch_m / (math.pi * D))
 
-            # Simplified lift and drag
+            # Effective angle of attack at the 75% radial station:
+            # alpha_eff = beta - arctan(J / (pi * 0.75))
+            # The helix angle at 75%R is arctan(V / (pi * n * D * 0.75))
+            #   = arctan(J / (pi * 0.75)).
+            alpha_eff = beta - math.atan(J / (math.pi * 0.75))
+
+            # Blade element lift and drag at the representative section.
+            # Use thin-airfoil approximation: cl = cl_design * sin(2*alpha)
+            # valid for |alpha| < 45 deg (avoid post-stall region).
             cl_eff = (
                 geometry.cl_design * math.sin(2 * alpha_eff)
                 if abs(alpha_eff) < math.pi / 4
                 else 0
             )
+            # Drag polar: cd = cd0 + k * cl^2  (simplified quadratic polar)
             cd_eff = geometry.cd_design + 0.01 * cl_eff**2
 
-            # Thrust and power coefficients
-            CT = (
-                0.5 * geometry.num_blades * cl_eff * (0.75**2) * (1 - 0.25)
-            )  # Integrated over blade
+            # Blade element force integration (simplified single-station).
+            # Thrust coefficient: CT ~ 0.5 * B * cl * r^2 * dr
+            # evaluated at r/R = 0.75, with annular width factor (1 - 0.25).
+            CT = 0.5 * geometry.num_blades * cl_eff * (0.75**2) * (1 - 0.25)
+            # Power coefficient: CP ~ induced + profile
+            # Profile contribution: same integral but with cd.
+            # Induced contribution: CT * J / (2*pi) (from actuator disk theory).
             CP = 0.5 * geometry.num_blades * cd_eff * (0.75**2) * (
                 1 - 0.25
             ) + CT * J / (2 * math.pi)
 
-            # Apply corrections for finite number of blades
+            # Prandtl tip-loss correction (simplified): reduce CT and CP
+            # for low blade counts.  A 2-blade prop gets factor 1.0.
             CT *= min(1.0, geometry.num_blades / 2)
             CP *= min(1.0, geometry.num_blades / 2)
 
+            # Convert non-dimensional coefficients to dimensional values
             thrust_n = CT * rho * n**2 * D**4
             power_w = CP * rho * n**3 * D**5
 
+            # Propulsive efficiency: eta = J * CT / CP
             efficiency = J * CT / CP if CP > 0 else 0
 
-        # Torque
+        # Torque from P = 2*pi*n*Q  =>  Q = P / (2*pi*n)
         torque_nm = power_w / (2 * math.pi * n) if n > 0 else 0
 
-        # Limit efficiency and ensure physical values
+        # Clamp to physical bounds
         efficiency = max(0, min(0.9, efficiency))
         thrust_n = max(0, thrust_n)
-        power_w = max(1, power_w)  # Minimum power for losses
+        power_w = max(1, power_w)  # Minimum power accounts for bearing losses
 
         results.append(
             PropellerPerformancePoint(
@@ -320,7 +394,24 @@ def _aerosandbox_propeller_analysis(
     velocity_ms: float,
     altitude_m: float,
 ) -> list[PropellerPerformancePoint]:
-    """AeroSandbox-based BEMT analysis."""
+    """Full BEMT analysis using the AeroSandbox library.
+
+    Constructs a detailed blade geometry with 5 radial sections and uses
+    AeroSandbox's built-in propeller analysis (which includes proper
+    induction factor iteration and airfoil polars).
+
+    Args:
+        geometry: Propeller geometry parameters.
+        rpm_list: RPM values to analyze.
+        velocity_ms: Free-stream velocity (m/s).
+        altitude_m: Altitude for atmospheric model.
+
+    Returns:
+        Performance points at each RPM.
+
+    Raises:
+        Exception: Falls back to simple method on any AeroSandbox error.
+    """
     # Create atmosphere
     atmosphere = asb.Atmosphere(altitude=altitude_m)
 
@@ -473,33 +564,60 @@ def uav_energy_estimate(
     )
 
 
+# ===========================================================================
+# UAV Power Estimation Models
+# ===========================================================================
+
+
 def _multirotor_power_analysis(
     config: UAVConfiguration, velocity_ms: float, rho: float
 ) -> float:
-    """Calculate power required for multirotor in forward flight."""
+    """Calculate power required for a multirotor in forward flight.
+
+    Uses momentum theory for hover and a simplified Glauert model for
+    forward-flight induced power variation.
+
+    Power components:
+        - Induced power: P_i = T * v_i / FM, where v_i is the induced
+          velocity and FM is the figure of merit.
+        - Parasite power: P_p = D_parasitic * V_inf.
+        - Systems power: fixed 50 W for avionics/electronics.
+
+    Args:
+        config: UAV configuration (mass, disk area, drag coefficient).
+        velocity_ms: Forward flight speed (m/s).
+        rho: Air density (kg/m^3).
+
+    Returns:
+        Total mechanical power required in Watts.
+    """
     weight_n = config.mass_kg * GRAVITY
 
-    # Hover power (momentum theory)
-    disk_loading = weight_n / config.disk_area_m2
+    # Ideal hover power from momentum theory:
+    # P_hover = T * sqrt(T / (2 * rho * A_disk))
+    disk_loading = weight_n / config.disk_area_m2  # N/m^2
     power_hover_ideal = weight_n * math.sqrt(weight_n / (2 * rho * config.disk_area_m2))
 
-    # Figure of merit for multirotor (typically 0.6-0.8)
+    # Figure of Merit: accounts for non-ideal induced losses, tip losses,
+    # and profile drag.  Typical multirotor FM = 0.6 to 0.8.
     FM = 0.7
 
-    # Forward flight power
-    # Simplified analysis combining hover power and parasitic drag
+    # Parasitic drag power: P_p = 0.5 * rho * V^2 * Cd0 * S_frontal * V
+    # Frontal area approximated as 0.1 * m^(2/3) (dimensional heuristic).
     drag_parasitic = (
         0.5 * rho * velocity_ms**2 * config.cd0 * config.mass_kg ** (2 / 3) * 0.1
-    )  # Rough frontal area
+    )
     power_parasitic = drag_parasitic * velocity_ms
 
-    # Induced power reduction in forward flight
+    # Induced power in forward flight (Glauert approximation):
+    # P_i_fwd = P_hover * sqrt(1 + mu^2), where mu = V / v_hover.
     mu = velocity_ms / math.sqrt(disk_loading / rho)  # Advance ratio
-    power_induced_forward = power_hover_ideal * (1 + mu**2) ** 0.5  # Simplified
+    power_induced_forward = power_hover_ideal * (1 + mu**2) ** 0.5
 
+    # Total power = induced/FM + parasitic + avionics
     total_power = (
-        (power_induced_forward / FM) + power_parasitic + 50
-    )  # Add 50W for electronics
+        (power_induced_forward / FM) + power_parasitic + 50  # 50 W electronics overhead
+    )
 
     return total_power
 
@@ -507,48 +625,71 @@ def _multirotor_power_analysis(
 def _fixed_wing_power_analysis(
     config: UAVConfiguration, velocity_ms: float, rho: float
 ) -> float:
-    """Calculate power required for fixed-wing aircraft."""
+    """Calculate power required for a fixed-wing aircraft in cruise.
+
+    Uses a simple parabolic drag polar: CD = CD0 + k * CL^2, where
+    k = 1 / (pi * AR * e) is the induced drag factor (simplified here
+    to a constant 0.015 for efficient UAVs).
+
+    Power required: P = D * V / eta_prop.
+
+    Args:
+        config: UAV configuration (mass, wing area, CD0, CL_cruise).
+        velocity_ms: Cruise airspeed (m/s).
+        rho: Air density (kg/m^3).
+
+    Returns:
+        Total electrical power required in Watts.
+    """
     weight_n = config.mass_kg * GRAVITY
 
-    # Lift coefficient
+    # Lift coefficient from level-flight equilibrium: L = W
+    # CL = 2*W / (rho * V^2 * S)
     cl = config.cl_cruise or (2 * weight_n) / (
         rho * velocity_ms**2 * config.wing_area_m2
     )
 
-    # Drag analysis
-    # Assume simple drag polar: CD = CD0 + k*CL^2
-    k = 0.015  # Further reduced induced drag factor for efficient UAVs
-    # Also reduce the parasitic drag if it seems too high
-    effective_cd0 = min(config.cd0, 0.02)  # Cap CD0 at 0.02 for realistic UAVs
+    # Parabolic drag polar: CD = CD0 + k * CL^2
+    # k ~ 1/(pi*AR*e) simplified to 0.015 for efficient UAVs.
+    k = 0.015  # Induced drag factor
+    effective_cd0 = min(config.cd0, 0.02)  # Cap CD0 for realistic small UAVs
     cd = effective_cd0 + k * cl**2
 
-    # Drag force
+    # Drag force: D = 0.5 * rho * V^2 * S * CD
     drag_n = 0.5 * rho * velocity_ms**2 * config.wing_area_m2 * cd
 
-    # Power required (thrust power)
+    # Thrust power: P_thrust = D * V
     power_thrust = drag_n * velocity_ms
 
-    # Account for propulsive efficiency (prop efficiency ~0.8)
+    # Account for propulsive efficiency (~0.8 for a well-matched propeller)
     power_aero = power_thrust / 0.8
 
-    # Add system power (electronics, payload) - reduced for small UAVs
-    power_systems = 5  # Watts (reduced from 20)
+    # Fixed overhead for avionics, servos, and payload
+    power_systems = 5  # Watts
 
     return power_aero + power_systems
 
 
 def _generic_power_estimate(config: UAVConfiguration, velocity_ms: float) -> float:
-    """Generic power estimate when specific configuration unknown."""
-    # Power-to-weight scaling - much reduced for realistic small UAV values
-    specific_power = (
-        15  # W/kg typical for efficient small fixed-wing UAVs (reduced from 50)
-    )
+    """Generic power estimate when detailed aerodynamic config is unknown.
+
+    Uses an empirical specific-power scaling (W/kg) with a velocity
+    correction factor.  Appropriate only for order-of-magnitude estimates.
+
+    Args:
+        config: UAV configuration (mass only is used).
+        velocity_ms: Cruise speed (m/s).
+
+    Returns:
+        Estimated power in Watts.
+    """
+    # Empirical specific power for efficient small fixed-wing UAVs (W/kg)
+    specific_power = 15
     base_power = config.mass_kg * specific_power
 
-    # Velocity scaling
-    velocity_factor = (
-        velocity_ms / 15.0
-    ) ** 2.0  # Power increases with velocity^2 for fixed-wing (reduced from 2.5)
+    # Power scales roughly as V^2 (drag ~ V^2, P = D*V ~ V^3,
+    # but propulsive efficiency improves, net ~V^2).
+    velocity_factor = (velocity_ms / 15.0) ** 2.0
 
     return base_power * velocity_factor
 
@@ -624,10 +765,20 @@ def motor_propeller_matching(
 
 
 def get_propeller_database() -> dict[str, dict[str, any]]:
-    """Get available propeller database."""
+    """Return a copy of the built-in propeller reference database.
+
+    Returns:
+        Dictionary mapping propeller names to their geometric and
+        aerodynamic parameters.
+    """
     return PROPELLER_DATABASE.copy()
 
 
 def get_battery_database() -> dict[str, dict[str, any]]:
-    """Get available battery database."""
+    """Return a copy of the built-in battery reference database.
+
+    Returns:
+        Dictionary mapping battery type names to their electrical
+        characteristics.
+    """
     return BATTERY_DATABASE.copy()

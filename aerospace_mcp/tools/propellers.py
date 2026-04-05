@@ -1,4 +1,13 @@
-"""Propeller and UAV energy analysis tools for the Aerospace MCP server."""
+"""Propeller and UAV energy analysis tools for the Aerospace MCP server.
+
+Provides tools for propeller performance analysis using Blade Element Momentum
+Theory (BEMT) and UAV mission energy estimation. BEMT combines blade element
+theory (local 2D airfoil analysis along the blade span) with momentum theory
+(global flow through the rotor disk) to predict thrust, torque, and efficiency.
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
+"""
 
 import json
 import logging
@@ -19,7 +28,23 @@ def propeller_bemt_analysis(
         analysis_options: Optional analysis settings
 
     Returns:
-        Formatted string with propeller performance analysis
+        Formatted string with propeller performance analysis including thrust,
+        torque, power, efficiency, and advance ratio at each RPM.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+        ImportError is caught when propulsion packages are not installed.
+
+    Note:
+        BEMT iteratively solves for the inflow angle (phi) at each blade
+        element by balancing:
+        1. **Blade Element Theory**: Local lift and drag from 2D airfoil data
+           at the effective angle of attack (alpha = phi - pitch_angle).
+        2. **Momentum Theory**: Axial and tangential momentum changes through
+           an annular ring of the rotor disk.
+        Convergence is achieved when the induced velocity factors (a, a')
+        satisfy both theories simultaneously. The advance ratio J = V / (n*D)
+        characterizes the operating condition.
     """
     try:
         from ..integrations.propellers import (
@@ -29,7 +54,7 @@ def propeller_bemt_analysis(
             propeller_bemt_analysis as _propeller_analysis,
         )
 
-        # Create geometry object
+        # Create geometry object from the input dictionary
         geometry = PropellerGeometry(**propeller_geometry)
 
         rpm_list = operating_conditions.get("rpm_list", [2000, 2500, 3000])
@@ -95,7 +120,11 @@ def uav_energy_estimate(
         mission_profile: Optional mission profile parameters
 
     Returns:
-        Formatted string with energy analysis results
+        Formatted string with energy analysis results including flight time,
+        range, hover time, power required, and efficiency metrics.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.propellers import (
@@ -211,7 +240,10 @@ def get_propeller_database() -> str:
     """Get available propeller database with geometric and performance data.
 
     Returns:
-        JSON string with propeller database
+        JSON string with propeller database containing geometry and performance data.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.propellers import PROPELLER_DATABASE

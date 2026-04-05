@@ -1,4 +1,21 @@
-"""Orbital mechanics tools for the Aerospace MCP server."""
+"""Orbital mechanics tools for the Aerospace MCP server.
+
+Provides tools for classical orbital mechanics computations including:
+- Lambert's problem solver for transfer orbit determination.
+- Conversion between orbital elements and Cartesian state vectors.
+- Orbit propagation with J2 perturbation effects.
+- Ground track calculation for satellite visibility.
+- Hohmann transfer orbit delta-V computation.
+- Orbital rendezvous maneuver planning.
+
+Key equations used:
+- Vis-viva equation: v^2 = mu * (2/r - 1/a)
+- Kepler's equation: M = E - e*sin(E)  (relates mean and eccentric anomaly)
+- Hohmann delta-V: computed from vis-viva at departure and arrival radii
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
+"""
 
 import json
 import logging
@@ -7,18 +24,24 @@ from typing import Literal
 
 logger = logging.getLogger(__name__)
 
-# Constants
-MU_EARTH = 3.986004418e14  # m³/s² - Earth's gravitational parameter
-MU_SUN = 1.32712440018e20  # m³/s² - Sun's gravitational parameter
+# ---------------------------------------------------------------------------
+# Gravitational Parameters (mu = G * M)
+# ---------------------------------------------------------------------------
+# Standard gravitational parameter mu [m^3/s^2] for each celestial body.
+# These values determine orbital velocities via the vis-viva equation:
+#   v^2 = mu * (2/r - 1/a)
+# Source: IAU / JPL planetary ephemerides.
 
-# Gravitational parameters for different central bodies
+MU_EARTH = 3.986004418e14  # m^3/s^2 -- Earth's gravitational parameter (GM_E)
+MU_SUN = 1.32712440018e20  # m^3/s^2 -- Sun's gravitational parameter (GM_Sun)
+
 MU_BODIES = {
     "earth": MU_EARTH,
     "sun": MU_SUN,
-    "moon": 4.9048695e12,
-    "mars": 4.282837e13,
-    "venus": 3.24859e14,
-    "jupiter": 1.26686534e17,
+    "moon": 4.9048695e12,  # m^3/s^2 -- Moon
+    "mars": 4.282837e13,  # m^3/s^2 -- Mars
+    "venus": 3.24859e14,  # m^3/s^2 -- Venus
+    "jupiter": 1.26686534e17,  # m^3/s^2 -- Jupiter
 }
 
 
@@ -45,7 +68,11 @@ def lambert_problem_solver(
         central_body: Central body name for gravitational parameter
 
     Returns:
-        JSON string with transfer orbit velocities and orbital elements
+        JSON string with transfer orbit velocities, orbital elements,
+        transfer angle, and timing information.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as JSON strings.
     """
     try:
         mu = MU_BODIES.get(central_body.lower(), MU_EARTH)
@@ -124,8 +151,10 @@ def lambert_problem_solver(
         r1_mag = vec_mag(r1_m)
         r2_mag = vec_mag(r2_m)
 
-        # Calculate orbital elements of transfer orbit
-        # Specific angular momentum
+        # Calculate classical orbital elements of the transfer orbit from
+        # the initial position and velocity vectors.
+
+        # Specific angular momentum vector: h = r x v
         h = [
             r1_m[1] * v1[2] - r1_m[2] * v1[1],
             r1_m[2] * v1[0] - r1_m[0] * v1[2],
@@ -133,10 +162,10 @@ def lambert_problem_solver(
         ]
         h_mag = vec_mag(h)
 
-        # Semi-latus rectum
+        # Semi-latus rectum: p = h^2 / mu  (orbit shape parameter)
         p = h_mag**2 / mu
 
-        # Eccentricity vector
+        # Eccentricity vector: e = (v x h)/mu - r_hat  (points toward periapsis)
         v1_mag = vec_mag(v1)
         e_vec = [
             (v1_mag**2 / mu - 1 / r1_mag) * r1_m[i]
@@ -145,13 +174,15 @@ def lambert_problem_solver(
         ]
         e = vec_mag(e_vec)
 
-        # Semi-major axis
+        # Semi-major axis from semi-latus rectum: a = p / (1 - e^2)
+        # For parabolic orbits (e = 1), semi-major axis is infinite.
         if abs(e - 1.0) > 1e-6:
             a = p / (1 - e**2)
         else:
             a = float("inf")  # Parabolic
 
-        # Inclination
+        # Inclination: angle between orbit plane and equatorial plane
+        # i = acos(h_z / |h|)
         i_rad = math.acos(max(-1, min(1, h[2] / h_mag))) if h_mag > 0 else 0
         i_deg = math.degrees(i_rad)
 
@@ -169,7 +200,8 @@ def lambert_problem_solver(
         if cross[2] < 0:
             transfer_angle_deg = 360 - transfer_angle_deg
 
-        # Orbital period (if elliptical)
+        # Orbital period from Kepler's third law: T = 2*pi * sqrt(a^3 / mu)
+        # Only valid for elliptical orbits (e < 1, a > 0).
         if a > 0 and e < 1:
             period_s = 2 * math.pi * math.sqrt(a**3 / mu)
         else:
@@ -250,7 +282,11 @@ def elements_to_state_vector(orbital_elements: dict) -> str:
         orbital_elements: Dict with orbital elements (semi_major_axis_m, eccentricity, etc.)
 
     Returns:
-        JSON string with state vector components
+        JSON string with position [x,y,z] in meters and velocity [vx,vy,vz]
+        in m/s in the J2000 inertial frame.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.orbits import (
@@ -295,7 +331,10 @@ def state_vector_to_elements(state_vector: dict) -> str:
         state_vector: Dict with position_m and velocity_ms arrays
 
     Returns:
-        JSON string with orbital elements
+        JSON string with classical orbital elements (a, e, i, RAAN, omega, nu).
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.orbits import (
@@ -339,7 +378,10 @@ def propagate_orbit_j2(
         time_step_s: Integration time step in seconds
 
     Returns:
-        JSON string with propagated state
+        JSON string with propagated state vectors at each time step.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.orbits import propagate_orbit_j2 as _propagate
@@ -366,7 +408,10 @@ def calculate_ground_track(
         time_step_s: Time step for ground track points in seconds
 
     Returns:
-        JSON string with ground track coordinates
+        JSON string with ground track latitude/longitude coordinates.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.orbits import calculate_ground_track as _ground_track
@@ -390,7 +435,18 @@ def hohmann_transfer(r1_m: float, r2_m: float) -> str:
         r2_m: Final orbit radius in meters
 
     Returns:
-        JSON string with transfer orbit parameters
+        JSON string with transfer orbit parameters including delta-V for each
+        burn, transfer orbit semi-major axis, and time of flight.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+
+    Note:
+        The Hohmann transfer is the minimum-energy two-impulse transfer between
+        coplanar circular orbits. Using the vis-viva equation v^2 = mu*(2/r - 1/a):
+          a_transfer = (r1 + r2) / 2
+          delta_V1 = sqrt(mu/r1) * (sqrt(2*r2/(r1+r2)) - 1)   (departure burn)
+          delta_V2 = sqrt(mu/r2) * (1 - sqrt(2*r1/(r1+r2)))    (arrival burn)
     """
     try:
         from ..integrations.orbits import hohmann_transfer as _hohmann
@@ -417,7 +473,10 @@ def orbital_rendezvous_planning(
         rendezvous_options: Optional rendezvous planning parameters
 
     Returns:
-        JSON string with rendezvous plan
+        JSON string with rendezvous plan including maneuver sequence and delta-V.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.orbits import (

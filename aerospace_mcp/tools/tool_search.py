@@ -1,7 +1,15 @@
 """Tool search functionality for aerospace-mcp.
 
 Implements a tool search tool following Anthropic's guide for dynamic tool discovery.
-Supports both regex and text-based search patterns.
+Supports both regex and text-based search patterns for finding relevant tools from
+the 34+ available aerospace tools without loading all definitions upfront.
+
+The search returns ``tool_reference`` blocks compatible with Anthropic's deferred
+tool loading protocol, enabling clients to selectively load only the tools
+that match a user's query.
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
 import json
@@ -12,7 +20,20 @@ from typing import Literal
 
 @dataclass
 class ToolMetadata:
-    """Metadata for a searchable aerospace tool."""
+    """Metadata for a searchable aerospace tool.
+
+    Each entry in the tool registry is represented as a ToolMetadata instance,
+    capturing the tool's name, description, category, parameter schema, and
+    search keywords. The ``searchable_text()`` method concatenates all fields
+    into a single lowercase string used for both regex and text-based matching.
+
+    Attributes:
+        name: Unique tool function name (e.g., ``"plan_flight"``).
+        description: Human-readable description of the tool's purpose.
+        category: Tool category for grouping (e.g., ``"core"``, ``"orbits"``).
+        parameters: Mapping of parameter names to their descriptions.
+        keywords: Additional search terms for improved discoverability.
+    """
 
     name: str
     description: str
@@ -21,7 +42,7 @@ class ToolMetadata:
     keywords: list[str] = field(default_factory=list)
 
     def searchable_text(self) -> str:
-        """Return all searchable text concatenated."""
+        """Return all searchable text concatenated into a single lowercase string."""
         parts = [
             self.name,
             self.description,
@@ -33,9 +54,25 @@ class ToolMetadata:
         return " ".join(parts).lower()
 
 
-# Comprehensive registry of all aerospace-mcp tools
+# ---------------------------------------------------------------------------
+# Comprehensive Tool Registry
+# ---------------------------------------------------------------------------
+# All aerospace-mcp tools are registered below, organized by category.
+# Each entry provides metadata used for search/discovery. Categories:
+#   core         - Flight planning, airport search, distance, system status
+#   atmosphere   - ISA model, wind profiles
+#   frames       - Coordinate frame transformations (ECEF, ECI, geodetic)
+#   aerodynamics - VLM, airfoil polars, stability derivatives
+#   propellers   - BEMT analysis, UAV energy estimation
+#   rockets      - 3DOF trajectory, sizing, launch optimization
+#   orbits       - Lambert solver, Hohmann, propagation, ground track
+#   optimization - GA, PSO, Monte Carlo, porkchop plots, sensitivity
+#   agents       - LLM-assisted tool selection and data formatting
+#   gnc          - Kalman filter, LQR controller design
+#   performance  - Density altitude, airspeed, stall, W&B, takeoff/landing, fuel
+# ---------------------------------------------------------------------------
 TOOL_REGISTRY: list[ToolMetadata] = [
-    # Core Flight Planning Tools
+    # ===== Core Flight Planning Tools =====
     ToolMetadata(
         name="search_airports",
         description="Search for airports by IATA code or city name",
@@ -112,7 +149,7 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         parameters={},
         keywords=["status", "health", "capabilities", "system", "info"],
     ),
-    # Atmospheric Tools
+    # ===== Atmospheric Tools =====
     ToolMetadata(
         name="get_atmosphere_profile",
         description="Calculate atmospheric conditions at various altitudes using ISA model",
@@ -143,7 +180,7 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         },
         keywords=["wind", "profile", "altitude", "speed", "meteorology"],
     ),
-    # Coordinate Frame Tools
+    # ===== Coordinate Frame Tools =====
     ToolMetadata(
         name="transform_frames",
         description="Transform coordinates between reference frames (ECEF, ECI, ITRF, GCRS, GEODETIC)",
@@ -187,7 +224,7 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         },
         keywords=["ecef", "geodetic", "latitude", "longitude", "altitude", "convert"],
     ),
-    # Aerodynamics Tools
+    # ===== Aerodynamics Tools =====
     ToolMetadata(
         name="wing_vlm_analysis",
         description="Perform Vortex Lattice Method analysis on a wing",
@@ -261,7 +298,7 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         },
         keywords=["airfoil", "database", "lookup", "naca", "profile"],
     ),
-    # Propeller/UAV Tools
+    # ===== Propeller / UAV Tools =====
     ToolMetadata(
         name="propeller_bemt_analysis",
         description="Perform Blade Element Momentum Theory analysis on a propeller",
@@ -315,7 +352,7 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         },
         keywords=["propeller", "database", "lookup", "apc", "specs"],
     ),
-    # Rocket Tools
+    # ===== Rocket Tools =====
     ToolMetadata(
         name="rocket_3dof_trajectory",
         description="Simulate 3DOF rocket trajectory with atmospheric effects",
@@ -374,7 +411,7 @@ TOOL_REGISTRY: list[ToolMetadata] = [
             "trajectory",
         ],
     ),
-    # Orbital Mechanics Tools
+    # ===== Orbital Mechanics Tools =====
     ToolMetadata(
         name="elements_to_state_vector",
         description="Convert orbital elements to state vector (position and velocity)",
@@ -487,7 +524,7 @@ TOOL_REGISTRY: list[ToolMetadata] = [
             "motion",
         ],
     ),
-    # Optimization Tools
+    # ===== Optimization Tools =====
     ToolMetadata(
         name="optimize_thrust_profile",
         description="Optimize rocket thrust profile for efficiency",
@@ -593,7 +630,7 @@ TOOL_REGISTRY: list[ToolMetadata] = [
             "dispersion",
         ],
     ),
-    # Agent Tools
+    # ===== Agent Tools (LLM-powered) =====
     ToolMetadata(
         name="format_data_for_tool",
         description="Help format data in the correct format for a specific aerospace-mcp tool using LLM",
@@ -615,7 +652,7 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         },
         keywords=["select", "recommend", "tool", "llm", "assistant", "help"],
     ),
-    # GNC Tools
+    # ===== GNC (Guidance, Navigation, Control) Tools =====
     ToolMetadata(
         name="kalman_filter_state_estimation",
         description="Extended Kalman Filter for aircraft/spacecraft state estimation from noisy sensor measurements",
@@ -662,7 +699,7 @@ TOOL_REGISTRY: list[ToolMetadata] = [
             "design",
         ],
     ),
-    # Performance Tools
+    # ===== Performance Tools =====
     ToolMetadata(
         name="density_altitude_calculator",
         description="Calculate density altitude from pressure altitude and temperature for performance planning",
@@ -849,22 +886,38 @@ TOOL_REGISTRY: list[ToolMetadata] = [
     ),
 ]
 
-# Build category index for filtering
+# ---------------------------------------------------------------------------
+# Search Infrastructure
+# ---------------------------------------------------------------------------
+
+# Build a sorted set of unique category names for validation and display.
 CATEGORIES = sorted({tool.category for tool in TOOL_REGISTRY})
 
-# Maximum regex pattern length (matching Anthropic's limit)
+# Maximum regex pattern length to prevent ReDoS (Regular Expression Denial of
+# Service) attacks. Matches Anthropic's recommended limit for user-supplied patterns.
 MAX_PATTERN_LENGTH = 200
 
 
 def _score_text_match(query_terms: list[str], tool: ToolMetadata) -> float:
-    """Score a tool based on text query match.
+    """Score a tool based on text query match using weighted field matching.
+
+    The scoring heuristic assigns higher weights to matches in more specific
+    fields (name > description > keywords > category > parameters) to ensure
+    the most relevant tools appear first in search results.
+
+    Args:
+        query_terms: Lowercase search terms extracted from the user query.
+        tool: ToolMetadata instance to score against.
+
+    Returns:
+        Cumulative relevance score (higher = more relevant). Zero means no match.
 
     Scoring weights:
-    - Name match: 10 points per term
-    - Description match: 5 points per term
-    - Category match: 3 points per term
-    - Parameter match: 2 points per term
-    - Keyword match: 4 points per term
+    - Name match: 10 points per term (most specific identifier)
+    - Description match: 5 points per term (functional description)
+    - Category match: 3 points per term (broad grouping)
+    - Parameter match: 2 points per term (parameter names/descriptions)
+    - Keyword match: 4 points per term (curated search tags)
     """
     score = 0.0
     name_lower = tool.name.lower()
@@ -874,18 +927,20 @@ def _score_text_match(query_terms: list[str], tool: ToolMetadata) -> float:
     params_desc = " ".join(tool.parameters.values()).lower()
     keywords_text = " ".join(tool.keywords).lower()
 
+    # Accumulate score across all fields for each query term.
+    # Uses substring matching (not exact word matching) for flexibility.
     for term in query_terms:
         term = term.lower()
         if term in name_lower:
-            score += 10
+            score += 10  # Name match is highest value (most specific)
         if term in desc_lower:
-            score += 5
+            score += 5  # Description captures functional intent
         if term in category_lower:
-            score += 3
+            score += 3  # Category is a broad grouping signal
         if term in params_text or term in params_desc:
-            score += 2
+            score += 2  # Parameter names/descriptions are less specific
         if term in keywords_text:
-            score += 4
+            score += 4  # Curated keywords bridge vocabulary gaps
 
     return score
 
@@ -895,19 +950,26 @@ def search_tools_regex(
     max_results: int = 5,
     category: str | None = None,
 ) -> list[ToolMetadata]:
-    """Search tools using regex pattern.
+    """Search tools using regex pattern against all searchable text.
+
+    The regex is matched against the concatenation of each tool's name,
+    description, category, parameter info, and keywords (all lowercased).
 
     Args:
-        pattern: Regex pattern to search (max 200 chars)
-        max_results: Maximum number of results to return
-        category: Optional category filter
+        pattern: Regex pattern to search (max 200 chars).
+        max_results: Maximum number of results to return.
+        category: Optional category filter (case-insensitive).
 
     Returns:
-        List of matching ToolMetadata objects
+        List of matching ToolMetadata objects (up to max_results).
+
+    Raises:
+        ValueError: If pattern exceeds MAX_PATTERN_LENGTH or is invalid regex.
     """
     if len(pattern) > MAX_PATTERN_LENGTH:
         raise ValueError(f"Pattern exceeds maximum length of {MAX_PATTERN_LENGTH}")
 
+    # Compile the regex upfront; re.error is caught and re-raised as ValueError.
     try:
         regex = re.compile(pattern)
     except re.error as e:
@@ -932,17 +994,21 @@ def search_tools_text(
     max_results: int = 5,
     category: str | None = None,
 ) -> list[ToolMetadata]:
-    """Search tools using natural language query.
+    """Search tools using natural language query with weighted scoring.
+
+    Tokenizes the query into individual terms and scores each tool based on
+    how many terms match across its various metadata fields. Results are
+    returned sorted by descending relevance score.
 
     Args:
-        query: Natural language search query
-        max_results: Maximum number of results to return
-        category: Optional category filter
+        query: Natural language search query (e.g., "orbit transfer delta-v").
+        max_results: Maximum number of results to return.
+        category: Optional category filter (case-insensitive).
 
     Returns:
-        List of matching ToolMetadata objects, sorted by relevance
+        List of matching ToolMetadata objects, sorted by relevance score.
     """
-    # Tokenize query into terms
+    # Tokenize query into lowercase terms, filtering out empty strings.
     query_terms = [term.strip() for term in query.lower().split() if term.strip()]
 
     if not query_terms:
@@ -985,9 +1051,13 @@ def search_aerospace_tools(
                   propellers, rockets, orbits, optimization, agents)
 
     Returns:
-        JSON string with tool references matching the query
+        JSON string with tool references matching the query, including both
+        machine-readable ``tool_reference`` blocks and human-readable details.
+
+    Raises:
+        No exceptions are raised directly; errors are returned in JSON format.
     """
-    # Validate inputs
+    # Clamp max_results to [1, 10] to prevent excessive output.
     max_results = min(max(1, max_results), 10)
 
     if category and category.lower() not in [c.lower() for c in CATEGORIES]:
@@ -998,9 +1068,10 @@ def search_aerospace_tools(
             }
         )
 
-    # Auto-detect search type
+    # Auto-detect search type by checking for regex metacharacters.
+    # If the query contains characters like *, ?, [], etc., assume the user
+    # intends a regex search; otherwise default to natural language text search.
     if search_type == "auto":
-        # Use regex if query contains regex metacharacters
         regex_chars = r".*+?^${}[]|()\\"
         if any(c in query for c in regex_chars):
             search_type = "regex"
@@ -1055,7 +1126,8 @@ def list_tool_categories() -> str:
     """List all available tool categories with tool counts.
 
     Returns:
-        JSON string with category information
+        JSON string with an array of categories (name and tool_count) and
+        the total number of registered tools.
     """
     category_counts = {}
     for tool in TOOL_REGISTRY:
