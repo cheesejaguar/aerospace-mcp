@@ -1,4 +1,16 @@
-"""Trajectory optimization tools for the Aerospace MCP server."""
+"""Trajectory optimization tools for the Aerospace MCP server.
+
+Provides tools for trajectory and mission optimization using multiple methods:
+- Direct thrust profile optimization for rocket trajectories.
+- Sensitivity analysis (parameter variation studies).
+- Genetic Algorithm (GA): evolutionary optimization with crossover/mutation.
+- Particle Swarm Optimization (PSO): swarm-intelligence global search.
+- Porkchop plot generation for interplanetary transfer window analysis.
+- Monte Carlo uncertainty quantification via random sampling.
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
+"""
 
 import json
 import logging
@@ -26,7 +38,11 @@ def optimize_thrust_profile(
         objective: Optimization objective
 
     Returns:
-        JSON string with optimized thrust profile
+        JSON string with optimized thrust profile including segment-wise thrust
+        levels and resulting trajectory performance.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.trajopt import (
@@ -77,7 +93,11 @@ def trajectory_sensitivity_analysis(
         analysis_options: Optional analysis settings
 
     Returns:
-        JSON string with sensitivity analysis results
+        JSON string with sensitivity analysis results showing how each parameter
+        variation affects the trajectory outcome.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.trajopt import (
@@ -110,7 +130,21 @@ def genetic_algorithm_optimization(
         ga_parameters: Optional GA parameters (population_size, generations, etc.)
 
     Returns:
-        JSON string with optimization results
+        JSON string with optimization results including best solution found,
+        convergence history, and final objective value.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+
+    Note:
+        The GA operates on a population of candidate solutions through:
+        1. **Selection**: Tournament or roulette-wheel selection of parents.
+        2. **Crossover**: Combining parent chromosomes (e.g., single-point or
+           uniform crossover) to produce offspring that inherit traits from both.
+        3. **Mutation**: Random perturbation of offspring genes with probability
+           p_mutation to maintain diversity and avoid premature convergence.
+        Each generation evaluates fitness, selects the best, and breeds the
+        next generation until convergence or max generations reached.
     """
     try:
         from ..integrations.trajopt import (
@@ -138,7 +172,20 @@ def particle_swarm_optimization(
         pso_parameters: Optional PSO parameters (n_particles, iterations, etc.)
 
     Returns:
-        JSON string with optimization results
+        JSON string with optimization results including best position found
+        and convergence metrics.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+
+    Note:
+        PSO updates each particle's velocity and position at every iteration:
+            v_i(t+1) = w*v_i(t) + c1*r1*(p_best_i - x_i) + c2*r2*(g_best - x_i)
+            x_i(t+1) = x_i(t) + v_i(t+1)
+        where w is the inertia weight (balances exploration vs exploitation),
+        c1/c2 are cognitive/social acceleration coefficients, r1/r2 are random
+        numbers in [0,1], p_best_i is the particle's personal best, and g_best
+        is the global best found by any particle in the swarm.
     """
     try:
         from ..integrations.trajopt import particle_swarm_optimization as _pso_optimize
@@ -173,7 +220,11 @@ def porkchop_plot_analysis(
         analysis_options: Optional analysis settings
 
     Returns:
-        JSON string with porkchop plot data
+        JSON string with porkchop plot data (departure date vs arrival date
+        grid with delta-V contours for identifying optimal launch windows).
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.trajopt import porkchop_plot_analysis as _porkchop
@@ -212,7 +263,21 @@ def monte_carlo_uncertainty_analysis(
         analysis_options: Optional analysis settings
 
     Returns:
-        JSON string with uncertainty analysis results
+        JSON string with uncertainty analysis results including statistical
+        summaries (mean, std, percentiles) of trajectory metrics.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+
+    Note:
+        Monte Carlo analysis samples uncertain parameters from their specified
+        distributions (e.g., Gaussian, uniform) and runs n_samples trajectory
+        simulations. Statistical analysis of the results provides:
+        - Mean and standard deviation of key performance metrics.
+        - Confidence intervals (e.g., 95th percentile bounds).
+        - Dispersion ellipses for correlated output parameters.
+        Latin Hypercube Sampling (LHS) may be used for efficient coverage of
+        the parameter space with fewer samples than pure random sampling.
     """
     try:
         from ..integrations.trajopt import (

@@ -1,4 +1,13 @@
-"""Atmospheric modeling tools for the Aerospace MCP server."""
+"""Atmospheric modeling tools for the Aerospace MCP server.
+
+Provides tools for computing atmospheric properties (pressure, temperature,
+density, speed of sound) using the International Standard Atmosphere (ISA)
+model, as well as simplified wind profile models (logarithmic and power-law)
+for estimating wind speeds at various altitudes above ground level.
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
+"""
 
 import json
 import logging
@@ -17,7 +26,12 @@ def get_atmosphere_profile(
         model_type: Atmospheric model type ('ISA' for standard, 'enhanced' for extended)
 
     Returns:
-        Formatted string with atmospheric profile data
+        Formatted string with atmospheric profile data including pressure,
+        temperature, density, and speed of sound at each altitude.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+        ImportError is caught when the ``ambiance`` package is not installed.
     """
     try:
         from ..integrations.atmosphere import get_atmosphere_profile as _get_profile
@@ -67,14 +81,29 @@ def wind_model_simple(
         roughness_length_m: Surface roughness length in meters
 
     Returns:
-        Formatted string with wind profile data
+        Formatted string with wind profile data at each requested altitude.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+
+    Note:
+        The **logarithmic wind profile** (Ref: Stull, "Meteorology for Scientists
+        and Engineers", 2000) models wind speed as:
+            U(z) = (u* / kappa) * ln(z / z0)
+        where u* is friction velocity, kappa ~0.4 is the von Karman constant,
+        and z0 is the aerodynamic roughness length.
+
+        The **power-law wind profile** (empirical approximation) models wind as:
+            U(z) = U_ref * (z / z_ref) ^ alpha
+        where alpha (Hellmann exponent) depends on terrain roughness, typically
+        ~0.14 for open terrain and ~0.40 for urban areas.
     """
     try:
         from ..integrations.atmosphere import wind_model_simple as _wind_model
 
-        # Call integration function with correct argument mapping
-        # Note: integration function signature is:
-        # (altitudes_m, surface_wind_mps, surface_altitude_m, model, roughness_length_m, reference_height_m)
+        # Call integration function with correct argument mapping.
+        # The integration layer implements the logarithmic or power-law profile
+        # equations described above, using 10 m as the standard reference height.
         wind_profile = _wind_model(
             altitudes_m,
             surface_wind_speed_ms,
@@ -112,9 +141,11 @@ def wind_model_simple(
             {
                 "altitude_m": p.altitude_m,
                 "wind_speed_mps": p.wind_speed_mps,
-                "wind_direction_deg": p.wind_direction_deg
-                if p.wind_direction_deg is not None
-                else surface_wind_direction_deg,
+                "wind_direction_deg": (
+                    p.wind_direction_deg
+                    if p.wind_direction_deg is not None
+                    else surface_wind_direction_deg
+                ),
             }
             for p in wind_profile
         ]

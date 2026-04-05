@@ -1,4 +1,13 @@
-"""Coordinate frame transformation tools for the Aerospace MCP server."""
+"""Coordinate frame transformation tools for the Aerospace MCP server.
+
+Provides tools for converting coordinates between common aerospace reference
+frames including ECEF (Earth-Centered Earth-Fixed), ECI (Earth-Centered
+Inertial), ITRF, GCRS, and geodetic (latitude/longitude/altitude). Geodetic
+conversions use the WGS84 ellipsoid model parameters.
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
+"""
 
 import json
 import logging
@@ -22,7 +31,11 @@ def transform_frames(
         epoch_utc: Optional epoch for time-dependent transformations (ISO format)
 
     Returns:
-        JSON string with transformed coordinates
+        JSON string with transformed coordinates in the target frame.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+        ImportError is caught when required frame transformation packages are missing.
     """
     try:
         from ..integrations.frames import transform_frames as _transform
@@ -48,7 +61,23 @@ def geodetic_to_ecef(
         altitude_m: Altitude above WGS84 ellipsoid in meters
 
     Returns:
-        JSON string with ECEF coordinates
+        JSON string with ECEF X, Y, Z coordinates in meters.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+
+    Note:
+        The geodetic-to-ECEF conversion uses the WGS84 ellipsoid parameters:
+            a = 6378137.0 m          (semi-major axis, equatorial radius)
+            f = 1/298.257223563      (flattening)
+            e^2 = 2f - f^2           (first eccentricity squared)
+
+        The conversion equations are:
+            N = a / sqrt(1 - e^2 * sin^2(lat))   (radius of curvature in prime vertical)
+            X = (N + h) * cos(lat) * cos(lon)
+            Y = (N + h) * cos(lat) * sin(lon)
+            Z = (N * (1 - e^2) + h) * sin(lat)
+        where lat, lon are geodetic latitude/longitude and h is altitude above ellipsoid.
     """
     try:
         from ..integrations.frames import geodetic_to_ecef as _geodetic_to_ecef
@@ -89,7 +118,10 @@ def ecef_to_geodetic(x_m: float, y_m: float, z_m: float) -> str:
         z_m: Z coordinate in meters
 
     Returns:
-        JSON string with geodetic coordinates
+        JSON string with geodetic latitude (deg), longitude (deg), and altitude (m).
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         from ..integrations.frames import ecef_to_geodetic as _ecef_to_geodetic

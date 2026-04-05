@@ -1,8 +1,25 @@
-"""
-Guidance, Navigation, and Control (GNC) tools for aerospace MCP.
+"""Guidance, Navigation, and Control (GNC) tools for aerospace MCP.
 
-Provides advanced trajectory optimization, guidance algorithms, and spacecraft
-control system analysis for mission planning and operations.
+Provides trajectory optimization using metaheuristic algorithms (Genetic
+Algorithm, Particle Swarm Optimization), trajectory cost evaluation, and
+Monte Carlo uncertainty analysis for spacecraft mission planning.
+
+Key capabilities:
+    - Trajectory cost evaluation with constraint penalty formulation
+    - Genetic Algorithm (GA) optimizer with tournament selection, single-point
+      crossover, and elitism
+    - Particle Swarm Optimization (PSO) with inertia-weight velocity update
+    - Monte Carlo uncertainty analysis for dispersion characterization
+
+References:
+    - Goldberg, D.E., "Genetic Algorithms in Search, Optimization, and
+      Machine Learning" (1989)
+    - Kennedy, J. & Eberhart, R., "Particle Swarm Optimization" (1995)
+    - Battin, R.H., "An Introduction to the Mathematics and Methods of
+      Astrodynamics" (1999) -- for trajectory cost formulations
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or spacecraft operations.
 """
 
 import math
@@ -10,10 +27,23 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
+# ===========================================================================
+# Data Classes -- Trajectory and Optimization Configuration
+# ===========================================================================
+
 
 @dataclass
 class TrajectoryWaypoint:
-    """Trajectory waypoint with state and control."""
+    """Single waypoint along a spacecraft trajectory.
+
+    Attributes:
+        time_s: Time since epoch in seconds.
+        position_m: Position vector [x, y, z] in meters (inertial frame).
+        velocity_ms: Velocity vector [vx, vy, vz] in m/s.
+        acceleration_ms2: Acceleration vector [ax, ay, az] in m/s^2.
+        thrust_n: Thrust vector [Fx, Fy, Fz] in Newtons.
+        mass_kg: Spacecraft wet mass at this waypoint in kg.
+    """
 
     time_s: float
     position_m: list[float]  # [x, y, z] position
@@ -25,7 +55,18 @@ class TrajectoryWaypoint:
 
 @dataclass
 class OptimizationConstraints:
-    """Constraints for trajectory optimization."""
+    """Inequality constraints for trajectory optimization.
+
+    These define the feasible region of the optimization problem.
+    Violations are penalized quadratically in the cost function.
+
+    Attributes:
+        max_thrust_n: Maximum allowable thrust magnitude (N).
+        max_acceleration_ms2: Maximum allowable acceleration (m/s^2).
+        min_altitude_m: Minimum altitude above Earth surface (m).
+        max_delta_v_ms: Maximum total delta-V budget (m/s).
+        time_bounds_s: Tuple of (start_time, end_time) in seconds.
+    """
 
     max_thrust_n: float = 10000.0  # Maximum thrust magnitude
     max_acceleration_ms2: float = 50.0  # Maximum acceleration
@@ -36,7 +77,15 @@ class OptimizationConstraints:
 
 @dataclass
 class OptimizationObjective:
-    """Optimization objective function."""
+    """Objective function specification for trajectory optimization.
+
+    Attributes:
+        type: Objective type string. One of ``"minimize_fuel"``,
+            ``"minimize_time"``, ``"minimize_delta_v"``, or
+            ``"maximize_payload"``.
+        weights: Optional dictionary of objective weights for multi-objective.
+        target_state: Optional target state vector for rendezvous problems.
+    """
 
     type: str = "minimize_fuel"  # minimize_fuel, minimize_time, maximize_payload
     weights: dict[str, float] = None  # Objective weights
@@ -45,7 +94,19 @@ class OptimizationObjective:
 
 @dataclass
 class GeneticAlgorithmParams:
-    """Parameters for genetic algorithm optimization."""
+    """Configuration parameters for Genetic Algorithm (GA) optimization.
+
+    The GA uses tournament selection (size 3), single-point crossover,
+    and elitism to evolve a population of candidate trajectories.
+
+    Attributes:
+        population_size: Number of individuals per generation.
+        generations: Maximum number of generations.
+        mutation_rate: Probability of mutating each waypoint (0 to 1).
+        crossover_rate: Probability of performing crossover vs. cloning.
+        elite_size: Number of best individuals preserved unchanged.
+        convergence_tolerance: Improvement threshold for early stopping.
+    """
 
     population_size: int = 50
     generations: int = 100
@@ -57,7 +118,24 @@ class GeneticAlgorithmParams:
 
 @dataclass
 class ParticleSwarmParams:
-    """Parameters for particle swarm optimization."""
+    """Configuration parameters for Particle Swarm Optimization (PSO).
+
+    PSO velocity update equation::
+
+        v_i(t+1) = w * v_i(t)
+                  + c1 * r1 * (p_best_i - x_i(t))    # cognitive term
+                  + c2 * r2 * (g_best - x_i(t))       # social term
+
+    where r1, r2 are uniform random numbers in [0, 1].
+
+    Attributes:
+        num_particles: Number of particles in the swarm.
+        max_iterations: Maximum number of PSO iterations.
+        w: Inertia weight -- controls momentum of previous velocity.
+        c1: Cognitive acceleration coefficient -- attraction to personal best.
+        c2: Social acceleration coefficient -- attraction to global best.
+        convergence_tolerance: Tolerance for early-stopping based on score spread.
+    """
 
     num_particles: int = 30
     max_iterations: int = 100
@@ -69,7 +147,18 @@ class ParticleSwarmParams:
 
 @dataclass
 class OptimizationResult:
-    """Result from trajectory optimization."""
+    """Output from a trajectory optimization run.
+
+    Attributes:
+        optimal_trajectory: Best trajectory found.
+        optimal_cost: Cost function value of the best trajectory.
+        delta_v_total_ms: Total delta-V of the optimal trajectory (m/s).
+        fuel_mass_kg: Estimated fuel consumed (kg).
+        converged: Whether the optimizer converged.
+        iterations: Number of iterations/generations executed.
+        computation_time_s: Wall-clock computation time in seconds.
+        algorithm: Name of the optimization algorithm used.
+    """
 
     optimal_trajectory: list[TrajectoryWaypoint]
     optimal_cost: float
@@ -81,19 +170,53 @@ class OptimizationResult:
     algorithm: str
 
 
+# ===========================================================================
+# Vector and Numeric Utility Functions
+# ===========================================================================
+
+
 def vector_magnitude(vec: list[float]) -> float:
-    """Calculate vector magnitude."""
+    """Calculate the Euclidean (L2) norm of a vector.
+
+    Args:
+        vec: Input vector of arbitrary dimension.
+
+    Returns:
+        Scalar magnitude ||vec||.
+    """
     return math.sqrt(sum(x**2 for x in vec))
 
 
 def vector_distance(a: list[float], b: list[float]) -> float:
-    """Calculate Euclidean distance between two vectors."""
+    """Calculate the Euclidean distance between two vectors.
+
+    Args:
+        a: First vector.
+        b: Second vector (same length as *a*).
+
+    Returns:
+        Distance ||a - b||.
+    """
     return math.sqrt(sum((a[i] - b[i]) ** 2 for i in range(len(a))))
 
 
 def clamp(value: float, min_val: float, max_val: float) -> float:
-    """Clamp value to range [min_val, max_val]."""
+    """Clamp a scalar value to the range [min_val, max_val].
+
+    Args:
+        value: Input value.
+        min_val: Lower bound.
+        max_val: Upper bound.
+
+    Returns:
+        Clamped value.
+    """
     return max(min_val, min(max_val, value))
+
+
+# ===========================================================================
+# Trajectory Cost Evaluation
+# ===========================================================================
 
 
 def evaluate_trajectory_cost(
@@ -101,16 +224,32 @@ def evaluate_trajectory_cost(
     objective: OptimizationObjective,
     constraints: OptimizationConstraints,
 ) -> float:
-    """
-    Evaluate trajectory cost function.
+    """Evaluate the augmented cost function for a candidate trajectory.
+
+    The total cost is the sum of the objective function value and a
+    quadratic penalty for constraint violations::
+
+        J = J_objective + lambda * sum(max(0, g_i(x))^2)
+
+    where *g_i* are the inequality constraint functions and *lambda* is
+    a large penalty weight (1000).
+
+    Fuel consumption is approximated using the Tsiolkovsky rocket
+    equation linearized for small burns::
+
+        dm = F * dt / (Isp * g0)
+
+    where F is thrust magnitude, dt is the time step, Isp is the
+    assumed specific impulse (300 s), and g0 = 9.80665 m/s^2.
 
     Args:
-        trajectory: List of trajectory waypoints
-        objective: Optimization objective
-        constraints: Optimization constraints
+        trajectory: List of trajectory waypoints (at least 2 required).
+        objective: Optimization objective specification.
+        constraints: Feasibility constraints.
 
     Returns:
-        Cost value (lower is better)
+        Scalar cost value (lower is better). Returns ``inf`` for invalid
+        trajectories.
     """
     if not trajectory or len(trajectory) < 2:
         return float("inf")
@@ -118,16 +257,16 @@ def evaluate_trajectory_cost(
     cost = 0.0
     penalty = 0.0
 
-    # Calculate delta-V and fuel consumption
+    # Accumulate delta-V and fuel consumption along trajectory segments
     total_delta_v = 0.0
     total_fuel = 0.0
 
     for i in range(1, len(trajectory)):
         dt = trajectory[i].time_s - trajectory[i - 1].time_s
         if dt <= 0:
-            return float("inf")
+            return float("inf")  # Non-causal time ordering
 
-        # Thrust-based delta-V
+        # Thrust-based delta-V: dv = (F / m) * dt
         if trajectory[i].thrust_n:
             thrust_mag = vector_magnitude(trajectory[i].thrust_n)
             if trajectory[i].mass_kg > 0:
@@ -135,29 +274,30 @@ def evaluate_trajectory_cost(
                 dv = accel * dt
                 total_delta_v += dv
 
-                # Fuel consumption (Tsiolkovsky equation approximation)
+                # Fuel consumption from Tsiolkovsky approximation:
+                # dm = F * dt / (Isp * g0)
                 if thrust_mag > 0:
                     isp = 300.0  # Assumed specific impulse (s)
                     dm = thrust_mag * dt / (isp * 9.80665)
                     total_fuel += dm
 
-        # Constraint violations
+        # Quadratic penalty for thrust magnitude constraint violation
         if trajectory[i].thrust_n:
             thrust_mag = vector_magnitude(trajectory[i].thrust_n)
             if thrust_mag > constraints.max_thrust_n:
                 penalty += (thrust_mag - constraints.max_thrust_n) ** 2 * 1e-6
 
-        # Altitude constraint
+        # Quadratic penalty for minimum altitude constraint violation
         pos_mag = vector_magnitude(trajectory[i].position_m)
-        altitude = pos_mag - 6.378137e6  # Earth radius
+        altitude = pos_mag - 6.378137e6  # Subtract Earth equatorial radius (m)
         if altitude < constraints.min_altitude_m:
             penalty += (constraints.min_altitude_m - altitude) ** 2 * 1e-12
 
-    # Delta-V constraint
+    # Quadratic penalty for total delta-V budget exceedance
     if total_delta_v > constraints.max_delta_v_ms:
         penalty += (total_delta_v - constraints.max_delta_v_ms) ** 2 * 1e-6
 
-    # Objective function
+    # Compute objective function value based on selected type
     if objective.type == "minimize_fuel":
         cost = total_fuel
     elif objective.type == "minimize_time":
@@ -165,19 +305,43 @@ def evaluate_trajectory_cost(
     elif objective.type == "minimize_delta_v":
         cost = total_delta_v
     elif objective.type == "maximize_payload":
+        # Negate for minimization: maximize (final_mass - fuel_burned)
         final_mass = trajectory[-1].mass_kg
-        cost = -(final_mass - total_fuel)  # Negative for maximization
+        cost = -(final_mass - total_fuel)
     else:
-        cost = total_delta_v  # Default
+        cost = total_delta_v  # Default: minimize delta-V
 
-    # Add penalty for constraint violations
-    cost += penalty * 1000  # High penalty weight
+    # Augmented Lagrangian-style penalty: high weight to enforce feasibility
+    cost += penalty * 1000
 
     return cost
 
 
+# ===========================================================================
+# Genetic Algorithm (GA) Optimizer
+# ===========================================================================
+
+
 class GeneticAlgorithm:
-    """Genetic Algorithm for trajectory optimization."""
+    """Genetic Algorithm for trajectory optimization.
+
+    Implements a standard GA with:
+        - **Tournament selection** (size 3): pick 3 random individuals,
+          select the fittest.
+        - **Single-point crossover**: splice two parent trajectories at
+          a random waypoint index.
+        - **Mutation**: randomly perturb thrust vectors with probability
+          ``mutation_rate``.
+        - **Elitism**: preserve the top ``elite_size`` individuals
+          unchanged each generation.
+        - **Early stopping**: halt when no improvement is seen for 20
+          consecutive generations.
+
+    Attributes:
+        params: GA configuration parameters.
+        population: Current generation of candidate trajectories.
+        fitness_scores: Cost function values for each individual.
+    """
 
     def __init__(self, params: GeneticAlgorithmParams):
         self.params = params
@@ -187,7 +351,19 @@ class GeneticAlgorithm:
     def random_trajectory(
         self, n_waypoints: int, constraints: OptimizationConstraints
     ) -> list[TrajectoryWaypoint]:
-        """Generate random trajectory."""
+        """Generate a random feasible trajectory for population initialization.
+
+        Positions are sampled in spherical coordinates around low-Earth orbit,
+        velocities approximate circular orbital speed with perturbations, and
+        thrust vectors are random within the constraint bounds.
+
+        Args:
+            n_waypoints: Number of waypoints in the trajectory.
+            constraints: Optimization constraints for bound enforcement.
+
+        Returns:
+            Randomly generated trajectory.
+        """
         trajectory = []
 
         for i in range(n_waypoints):
@@ -214,7 +390,8 @@ class GeneticAlgorithm:
                 r * math.cos(phi),
             ]
 
-            # Random velocity (orbital-like)
+            # Random velocity near circular orbital speed: v_circ = sqrt(mu/r)
+            # Perturbed by +/- 20% to explore non-circular trajectories
             v_mag = math.sqrt(3.986004418e14 / r) * random.uniform(0.8, 1.2)
             v_theta = random.uniform(0, 2 * math.pi)
             vel = [
@@ -247,7 +424,18 @@ class GeneticAlgorithm:
     def crossover(
         self, parent1: list[TrajectoryWaypoint], parent2: list[TrajectoryWaypoint]
     ) -> list[TrajectoryWaypoint]:
-        """Crossover operation between two parent trajectories."""
+        """Single-point crossover between two parent trajectories.
+
+        A random crossover point is selected; the child inherits waypoints
+        0..point-1 from parent1 and point..end from parent2.
+
+        Args:
+            parent1: First parent trajectory.
+            parent2: Second parent trajectory.
+
+        Returns:
+            Child trajectory combining segments of both parents.
+        """
         if len(parent1) != len(parent2):
             return parent1  # Return first parent if lengths don't match
 
@@ -265,7 +453,19 @@ class GeneticAlgorithm:
     def mutate(
         self, trajectory: list[TrajectoryWaypoint], constraints: OptimizationConstraints
     ) -> list[TrajectoryWaypoint]:
-        """Mutate trajectory."""
+        """Apply random mutation to thrust vectors in a trajectory.
+
+        Each waypoint is mutated with probability ``self.params.mutation_rate``.
+        Mutation randomly scales the thrust magnitude by 0.8-1.2x and
+        randomizes the thrust direction.
+
+        Args:
+            trajectory: Input trajectory to mutate.
+            constraints: Used to clamp thrust within allowed bounds.
+
+        Returns:
+            Mutated copy of the trajectory.
+        """
         mutated = []
 
         for waypoint in trajectory:
@@ -301,7 +501,25 @@ class GeneticAlgorithm:
         objective: OptimizationObjective,
         constraints: OptimizationConstraints,
     ) -> OptimizationResult:
-        """Run genetic algorithm optimization."""
+        """Execute the full GA optimization loop.
+
+        Algorithm:
+            1. Initialize population with random trajectories (seed with
+               initial guess at index 0).
+            2. For each generation: evaluate fitness, apply elitism,
+               tournament selection, crossover, and mutation.
+            3. Stop on convergence (20 generations without improvement)
+               or max generations reached.
+
+        Args:
+            initial_trajectory: Initial guess trajectory (included in
+                the initial population).
+            objective: Optimization objective specification.
+            constraints: Feasibility constraints.
+
+        Returns:
+            Optimization result with best trajectory and metrics.
+        """
         import time
 
         start_time = time.time()
@@ -412,8 +630,37 @@ class GeneticAlgorithm:
         )
 
 
+# ===========================================================================
+# Particle Swarm Optimization (PSO)
+# ===========================================================================
+
+
 class ParticleSwarmOptimizer:
-    """Particle Swarm Optimization for trajectory optimization."""
+    """Particle Swarm Optimization for trajectory thrust profile design.
+
+    The decision variables are the thrust vector components at each
+    waypoint, flattened into a single particle vector of dimension
+    ``3 * n_waypoints``.
+
+    PSO velocity update (applied per-dimension)::
+
+        v_i(t+1) = w * v_i(t)
+                  + c1 * r1 * (pbest_i - x_i(t))   # cognitive (personal best)
+                  + c2 * r2 * (gbest   - x_i(t))   # social   (global best)
+
+    Position update::
+
+        x_i(t+1) = x_i(t) + v_i(t+1)
+
+    Attributes:
+        params: PSO configuration parameters.
+        particles: Current positions of all particles.
+        velocities: Current velocities of all particles.
+        personal_best: Best position each particle has visited.
+        personal_best_scores: Best cost for each particle.
+        global_best: Best position found by any particle.
+        global_best_score: Best cost found by any particle.
+    """
 
     def __init__(self, params: ParticleSwarmParams):
         self.params = params
@@ -430,7 +677,22 @@ class ParticleSwarmOptimizer:
         objective: OptimizationObjective,
         constraints: OptimizationConstraints,
     ) -> OptimizationResult:
-        """Run particle swarm optimization."""
+        """Execute the PSO optimization loop.
+
+        Each particle encodes a complete thrust profile as a flat vector
+        of thrust components [Fx0, Fy0, Fz0, Fx1, ...].  The initial
+        trajectory structure (times, positions, velocities, masses) is
+        preserved; only the thrust vectors are optimized.
+
+        Args:
+            initial_trajectory: Reference trajectory defining the
+                time/position/velocity/mass structure.
+            objective: Optimization objective specification.
+            constraints: Feasibility constraints.
+
+        Returns:
+            Optimization result with the best trajectory found.
+        """
         import time
 
         start_time = time.time()
@@ -508,28 +770,31 @@ class ParticleSwarmOptimizer:
                     best_cost = cost
                     best_trajectory = trajectory
 
-            # Update particle velocities and positions
+            # Update particle velocities and positions using the PSO equations
             for i in range(len(self.particles)):
                 for j in range(n_dimensions):
-                    # Velocity update
+                    # Random coefficients for stochastic exploration
                     r1, r2 = random.random(), random.random()
 
+                    # Cognitive term: attraction toward personal best position
                     cognitive = (
                         self.params.c1
                         * r1
                         * (self.personal_best[i][j] - self.particles[i][j])
                     )
+                    # Social term: attraction toward swarm-wide global best
                     social = (
                         self.params.c2
                         * r2
                         * (self.global_best[j] - self.particles[i][j])
                     )
 
+                    # Velocity update: v = w*v + cognitive + social
                     self.velocities[i][j] = (
                         self.params.w * self.velocities[i][j] + cognitive + social
                     )
 
-                    # Position update
+                    # Position update: x = x + v
                     self.particles[i][j] += self.velocities[i][j]
 
             # Check convergence
@@ -572,21 +837,34 @@ class ParticleSwarmOptimizer:
         )
 
 
+# ===========================================================================
+# Monte Carlo Uncertainty Analysis
+# ===========================================================================
+
+
 def monte_carlo_uncertainty_analysis(
     nominal_trajectory: list[TrajectoryWaypoint],
     uncertainty_params: dict[str, dict[str, float]],
     n_samples: int = 1000,
 ) -> dict[str, Any]:
-    """
-    Perform Monte Carlo uncertainty analysis on trajectory.
+    """Perform Monte Carlo uncertainty analysis on a trajectory.
+
+    Each sample perturbs the nominal trajectory by adding Gaussian noise
+    to position, velocity, and thrust vectors, then recomputes the
+    performance metrics.  Results include mean, standard deviation,
+    and 95% confidence intervals (mean +/- 1.96*sigma).
 
     Args:
-        nominal_trajectory: Nominal trajectory
-        uncertainty_params: Dictionary of parameter uncertainties
-        n_samples: Number of Monte Carlo samples
+        nominal_trajectory: Nominal (unperturbed) trajectory.
+        uncertainty_params: Dictionary mapping parameter names to
+            ``{"std": value}`` dictionaries specifying 1-sigma
+            uncertainties.  Supported keys: ``"position_m"``,
+            ``"velocity_ms"``, ``"thrust_n"``.
+        n_samples: Number of Monte Carlo samples to draw.
 
     Returns:
-        Uncertainty analysis results
+        Dictionary with delta-V, flight time, and position error
+        statistics, plus 95% confidence intervals.
     """
     results = {
         "delta_v_samples": [],

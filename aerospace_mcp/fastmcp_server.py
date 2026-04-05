@@ -1,7 +1,37 @@
 """FastMCP server implementation for Aerospace flight planning tools.
 
+This module provides the high-level MCP (Model Context Protocol) server using
+the FastMCP framework. Unlike the low-level ``server.py`` which manually defines
+JSON schemas and dispatches tool calls, this implementation leverages FastMCP's
+decorator-based tool registration to automatically generate schemas from Python
+function signatures and docstrings.
+
+Architecture:
+    1. Tool functions are defined in ``aerospace_mcp/tools/`` submodules, each
+       decorated with type hints and Google-style docstrings.
+    2. This module imports all tool functions and registers them with the FastMCP
+       server instance via ``mcp.tool(func)``.
+    3. FastMCP automatically generates MCP-compatible JSON schemas, handles
+       argument parsing, and routes incoming tool calls to the correct handler.
+
+Transport Modes:
+    - **stdio** (default): Standard input/output for production MCP clients.
+      Used when launched as ``aerospace-mcp`` from the command line.
+    - **SSE** (Server-Sent Events): HTTP-based transport for debugging and
+      browser-based MCP clients. Activated via ``aerospace-mcp sse [host] [port]``.
+
+Deferred Tool Loading:
+    The server supports Anthropic's deferred tool loading pattern. Discovery
+    tools (``search_aerospace_tools``, ``list_tool_categories``) are loaded
+    eagerly, while domain-specific tools can be deferred to save context window
+    space. See the TOOL REGISTRATION section below for configuration details.
+
 Loads environment from .env before importing tools so feature flags and
 API keys are available at import time.
+
+WARNING:
+    This module is for educational and research purposes only.
+    Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
 import logging
@@ -17,22 +47,33 @@ except Exception:
 
 from fastmcp import FastMCP
 
+# =============================================================================
+# TOOL IMPORTS — organized by aerospace domain
+# Each submodule in aerospace_mcp/tools/ defines one or more MCP tools as
+# plain Python functions. FastMCP inspects their signatures and docstrings
+# to auto-generate the MCP tool schemas.
+# =============================================================================
+# --- Aerodynamics: wing analysis, airfoil polars, stability derivatives ---
 from .tools.aerodynamics import (
     airfoil_polar_analysis,
     calculate_stability_derivatives,
     get_airfoil_database,
     wing_vlm_analysis,
 )
+
+# --- AI Agent Helpers: tool selection and data formatting for LLM agents ---
 from .tools.agents import (
     format_data_for_tool,
     select_aerospace_tool,
 )
+
+# --- Atmosphere: ISA model profiles and wind models ---
 from .tools.atmosphere import (
     get_atmosphere_profile,
     wind_model_simple,
 )
 
-# Import all tool modules
+# --- Core Flight Planning: airport search, route planning, distance, performance ---
 from .tools.core import (
     calculate_distance,
     get_aircraft_performance,
@@ -40,15 +81,21 @@ from .tools.core import (
     plan_flight,
     search_airports,
 )
+
+# --- Coordinate Frames: ECEF/ECI/geodetic transforms ---
 from .tools.frames import (
     ecef_to_geodetic,
     geodetic_to_ecef,
     transform_frames,
 )
+
+# --- GNC (Guidance, Navigation & Control): Kalman filtering, LQR control ---
 from .tools.gnc import (
     kalman_filter_state_estimation,
     lqr_controller_design,
 )
+
+# --- Optimization: thrust profiles, sensitivity, GA, PSO, Monte Carlo ---
 from .tools.optimization import (
     genetic_algorithm_optimization,
     monte_carlo_uncertainty_analysis,
@@ -57,6 +104,8 @@ from .tools.optimization import (
     porkchop_plot_analysis,
     trajectory_sensitivity_analysis,
 )
+
+# --- Orbital Mechanics: Kepler elements, propagation, transfers, Lambert ---
 from .tools.orbits import (
     calculate_ground_track,
     elements_to_state_vector,
@@ -66,6 +115,8 @@ from .tools.orbits import (
     propagate_orbit_j2,
     state_vector_to_elements,
 )
+
+# --- Performance: density altitude, W&B, takeoff/landing, fuel, airspeed ---
 from .tools.performance import (
     density_altitude_calculator,
     fuel_reserve_calculator,
@@ -75,16 +126,22 @@ from .tools.performance import (
     true_airspeed_converter,
     weight_and_balance,
 )
+
+# --- Propellers & UAVs: BEMT analysis, energy estimation ---
 from .tools.propellers import (
     get_propeller_database,
     propeller_bemt_analysis,
     uav_energy_estimate,
 )
+
+# --- Rockets: 3-DOF trajectories, sizing, launch optimization ---
 from .tools.rockets import (
     estimate_rocket_sizing,
     optimize_launch_angle,
     rocket_3dof_trajectory,
 )
+
+# --- Tool Discovery: search and categorize available aerospace tools ---
 from .tools.tool_search import (
     list_tool_categories,
     search_aerospace_tools,
@@ -192,14 +249,24 @@ mcp.tool(select_aerospace_tool)
 
 
 def run():
-    """Main entry point for the FastMCP server."""
-    # Check for SSE mode
+    """Start the FastMCP aerospace tools server.
+
+    Selects the transport mode based on command-line arguments:
+        - No args (default): stdio mode for production MCP clients.
+        - ``sse [host] [port]``: SSE (Server-Sent Events) mode for HTTP-based
+          MCP clients and browser debugging. Defaults to localhost:8001.
+
+    This function is the console_scripts entry point registered as
+    ``aerospace-mcp`` in pyproject.toml.
+    """
+    # Check for SSE mode — useful for debugging with browser-based MCP clients
     if len(sys.argv) > 1 and sys.argv[1] == "sse":
         host = sys.argv[2] if len(sys.argv) > 2 else "localhost"
         port = int(sys.argv[3]) if len(sys.argv) > 3 else 8001
         logger.info(f"Starting FastMCP server in SSE mode on {host}:{port}")
         mcp.run(transport="sse", host=host, port=port)
     else:
+        # stdio mode: MCP client communicates over stdin/stdout
         logger.info("Starting FastMCP server in stdio mode")
         mcp.run()
 

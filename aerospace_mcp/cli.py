@@ -1,10 +1,24 @@
 """CLI tool for invoking aerospace-mcp tools directly from the command line.
 
+Provides a terminal interface to all 44 aerospace engineering tools without
+requiring an MCP client. Supports four subcommands:
+
 Usage:
-    aerospace-mcp-cli list [--category CATEGORY]
-    aerospace-mcp-cli search QUERY [--category CATEGORY] [--max-results N]
-    aerospace-mcp-cli info TOOL_NAME
-    aerospace-mcp-cli run TOOL_NAME [--param value ...]
+    aerospace-mcp-cli list [--category CATEGORY]     # List available tools
+    aerospace-mcp-cli search QUERY [--category ...]   # Search tools by keyword/regex
+    aerospace-mcp-cli info TOOL_NAME                  # Show tool parameters and docs
+    aerospace-mcp-cli run TOOL_NAME [--param value]   # Execute a tool with arguments
+
+Architecture:
+    - Imports the same tool functions used by the FastMCP server
+    - Builds a TOOL_MAP registry mapping tool names to callables
+    - Introspects function signatures to auto-coerce CLI string arguments
+      to the correct Python types (int, float, bool, dict/JSON, list/JSON, Literal)
+    - Outputs results as pretty-printed JSON or plain text
+
+WARNING:
+    This module is for educational and research purposes only.
+    Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
 import argparse
@@ -212,17 +226,19 @@ def coerce_value(raw_value: str, annotation: Any) -> Any:
     Returns:
         The coerced value in the correct Python type.
     """
-    # Handle Union types (e.g., float | None, str | None)
+    # Handle Union types (e.g., float | None, str | None).
+    # For optional parameters, unwrap the Union and coerce to the non-None type.
     if _is_union(annotation):
         args = _get_union_args(annotation)
+        # Filter out NoneType to find the actual expected type
         non_none = [a for a in args if a is not type(None)]
         if non_none:
             return coerce_value(raw_value, non_none[0])
-        return raw_value
+        return raw_value  # All-None union (shouldn't happen in practice)
 
     origin = _get_annotation_origin(annotation)
 
-    # Literal types — validate against allowed values
+    # Literal types — validate the raw value against the set of allowed values
     if origin is Literal:
         allowed = annotation.__args__
         if raw_value in [str(a) for a in allowed]:
@@ -331,7 +347,12 @@ def _format_annotation(annotation: Any) -> str:
 
 
 def cmd_list(category: str | None = None) -> None:
-    """List all available tools, optionally filtered by category."""
+    """List all available tools, optionally filtered by category.
+
+    Args:
+        category: If provided, only show tools in this domain category
+            (e.g., "core", "orbits", "gnc"). Case-insensitive.
+    """
     tools = TOOL_REGISTRY
     if category:
         cat_lower = category.lower()
@@ -353,7 +374,14 @@ def cmd_list(category: str | None = None) -> None:
 
 
 def cmd_search(query: str, category: str | None = None, max_results: int = 5) -> None:
-    """Search for tools matching a query."""
+    """Search for tools matching a query string or regex pattern.
+
+    Args:
+        query: Text or regex pattern to match against tool names,
+            descriptions, and keywords.
+        category: Optional category filter to narrow results.
+        max_results: Maximum number of results to display.
+    """
     result = search_aerospace_tools(query, category=category, max_results=max_results)
     data = json.loads(result)
 
@@ -373,7 +401,17 @@ def cmd_search(query: str, category: str | None = None, max_results: int = 5) ->
 
 
 def cmd_info(tool_name: str) -> None:
-    """Show detailed information about a specific tool."""
+    """Show detailed information about a specific tool.
+
+    Displays the tool's category, description, parameter types with defaults,
+    keywords, and an example invocation command.
+
+    Args:
+        tool_name: The exact name of the tool (e.g., "plan_flight").
+
+    Raises:
+        SystemExit: If the tool name is not found in TOOL_MAP.
+    """
     if tool_name not in TOOL_MAP:
         print(f"Error: Unknown tool '{tool_name}'", file=sys.stderr)
         sys.exit(1)
@@ -423,7 +461,21 @@ def cmd_info(tool_name: str) -> None:
 
 
 def cmd_run(tool_name: str, raw_args: list[str]) -> None:
-    """Run a tool with the given arguments."""
+    """Run a tool with the given arguments and print the result.
+
+    Parses ``--key value`` pairs from the command line, coerces each value
+    to the type expected by the tool function's signature, validates that
+    all required parameters are present, then invokes the tool and
+    pretty-prints the output.
+
+    Args:
+        tool_name: The exact name of the tool to execute.
+        raw_args: Remaining CLI arguments as ``--param value`` pairs.
+
+    Raises:
+        SystemExit: If the tool is unknown, a parameter cannot be parsed,
+            required parameters are missing, or execution fails.
+    """
     if tool_name not in TOOL_MAP:
         print(f"Error: Unknown tool '{tool_name}'", file=sys.stderr)
         print("\nUse 'aerospace-mcp-cli list' to see available tools.")
@@ -474,7 +526,11 @@ def cmd_run(tool_name: str, raw_args: list[str]) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the CLI argument parser."""
+    """Build the CLI argument parser with subcommands for list/search/info/run.
+
+    Returns:
+        Configured ArgumentParser with four subcommands.
+    """
     parser = argparse.ArgumentParser(
         prog="aerospace-mcp-cli",
         description=(
@@ -527,7 +583,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    """CLI entry point."""
+    """CLI entry point — registered as ``aerospace-mcp-cli`` in pyproject.toml."""
     parser = build_parser()
     args = parser.parse_args()
 

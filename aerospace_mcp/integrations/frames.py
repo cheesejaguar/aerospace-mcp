@@ -1,10 +1,30 @@
-"""
-Coordinate Frame Transformations
+"""Coordinate Frame Transformations.
 
-Provides transformations between different coordinate reference frames
-commonly used in aerospace applications (ECI, ECEF, ITRF, etc.).
+Provides transformations between coordinate reference frames commonly used
+in aerospace applications:
+    - **ECEF** (Earth-Centered, Earth-Fixed) -- co-rotates with Earth
+    - **ECI / GCRS** (Earth-Centered Inertial / Geocentric Celestial
+      Reference System) -- non-rotating, aligned with vernal equinox
+    - **ITRF** (International Terrestrial Reference Frame) -- equivalent to
+      ECEF for this module
+    - **GEODETIC** (latitude, longitude, altitude above WGS-84 ellipsoid)
 
-Uses NumPy for vectorized calculations with CuPy compatibility for GPU acceleration.
+The ECEF <-> Geodetic conversion uses an iterative algorithm based on the
+WGS-84 ellipsoid parameters.  ECI <-> ECEF requires Earth rotation
+correction via GMST (Greenwich Mean Sidereal Time); this module provides
+a simplified (identity) approximation when astropy is not available.
+
+Uses NumPy for vectorized calculations with CuPy compatibility for GPU
+acceleration via the ``_array_backend`` module.
+
+References:
+    - NIMA TR8350.2, "Department of Defense World Geodetic System 1984"
+    - Vallado, D.A., "Fundamentals of Astrodynamics and Applications"
+      (4th ed., 2013), Chapter 3 -- Coordinate systems
+    - IAU SOFA Library documentation for precession/nutation
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or spacecraft operations.
 """
 
 from pydantic import BaseModel, Field
@@ -12,13 +32,33 @@ from pydantic import BaseModel, Field
 from . import update_availability
 from ._array_backend import np, to_numpy
 
-# Earth parameters (WGS84)
-EARTH_A = 6378137.0  # Semi-major axis (m)
-EARTH_F = 1.0 / 298.257223563  # Flattening
-EARTH_B = EARTH_A * (1.0 - EARTH_F)  # Semi-minor axis
-EARTH_E2 = 2.0 * EARTH_F - EARTH_F**2  # First eccentricity squared
+# ===========================================================================
+# WGS-84 Ellipsoid Parameters
+# ===========================================================================
 
-# Optional library imports
+# Semi-major axis of the WGS-84 reference ellipsoid.
+# Defines the equatorial radius of the Earth.
+# Units: meters.
+EARTH_A = 6378137.0
+
+# Flattening of the WGS-84 ellipsoid: f = (a - b) / a.
+# Quantifies how much the Earth is "squashed" at the poles.
+# Dimensionless.
+EARTH_F = 1.0 / 298.257223563
+
+# Semi-minor axis (polar radius): b = a * (1 - f).
+# Units: meters.
+EARTH_B = EARTH_A * (1.0 - EARTH_F)
+
+# First eccentricity squared: e^2 = 2f - f^2.
+# Appears in the radius-of-curvature formula: N = a / sqrt(1 - e^2 * sin^2(lat)).
+# Dimensionless.
+EARTH_E2 = 2.0 * EARTH_F - EARTH_F**2
+
+# ===========================================================================
+# Optional Library Imports
+# ===========================================================================
+
 ASTROPY_AVAILABLE = False
 SKYFIELD_AVAILABLE = False
 
@@ -52,9 +92,13 @@ except ImportError:
         update_availability("frames", True, {})
 
 
-# Data models
+# ===========================================================================
+# Data Models
+# ===========================================================================
+
+
 class CoordinatePoint(BaseModel):
-    """A point in 3D space with metadata."""
+    """A point in 3-D space with reference frame and epoch metadata."""
 
     x: float = Field(..., description="X coordinate (m)")
     y: float = Field(..., description="Y coordinate (m)")
@@ -71,28 +115,50 @@ class GeodeticPoint(BaseModel):
     altitude_m: float = Field(..., description="Height above ellipsoid (m)")
 
 
+# ===========================================================================
+# ECEF <-> Geodetic Conversion (Iterative Bowring Method)
+# ===========================================================================
+
+
 def _manual_ecef_to_geodetic(
     x: float, y: float, z: float
 ) -> tuple[float, float, float]:
+    """Convert ECEF Cartesian to geodetic coordinates (iterative method).
+
+    Algorithm (Bowring's iterative method):
+        1. Compute longitude directly: lon = atan2(y, x).
+        2. Compute distance from the Z-axis: p = sqrt(x^2 + y^2).
+        3. Iterate on latitude using:
+           - N = a / sqrt(1 - e^2 * sin^2(lat))   (radius of curvature)
+           - alt = p / cos(lat) - N
+           - lat = atan2(z, p * (1 - e^2 * N / (N + alt)))
+        4. Convergence typically in 2-3 iterations (tolerance 1e-12 rad).
+
+    Args:
+        x: ECEF X coordinate in meters.
+        y: ECEF Y coordinate in meters.
+        z: ECEF Z coordinate in meters.
+
+    Returns:
+        Tuple of ``(latitude_deg, longitude_deg, altitude_m)``.
     """
-    Convert ECEF to geodetic coordinates using iterative method.
-    Uses NumPy for efficient calculations.
-    Returns (lat_deg, lon_deg, alt_m).
-    """
-    # Longitude
+    # Longitude is computed directly (no iteration needed)
     lon_rad = float(np.arctan2(y, x))
 
-    # Distance from z-axis
+    # Distance from the Z-axis (projection onto equatorial plane)
     p = float(np.sqrt(x**2 + y**2))
 
-    # Initial guess for latitude
+    # Initial guess for geodetic latitude (spherical approximation)
     lat_rad = float(np.arctan2(z, p * (1.0 - EARTH_E2)))
 
-    # Iterative solution for latitude and altitude
-    for _ in range(10):  # Usually converges in 2-3 iterations
+    # Iterative refinement (Bowring's method -- converges in 2-3 steps)
+    for _ in range(10):
         sin_lat = np.sin(lat_rad)
+        # Radius of curvature in the prime vertical: N = a / sqrt(1 - e^2*sin^2(lat))
         N = EARTH_A / float(np.sqrt(1.0 - EARTH_E2 * sin_lat**2))
+        # Altitude above the ellipsoid: h = p / cos(lat) - N
         alt = p / float(np.cos(lat_rad)) - N
+        # Updated latitude incorporating the altitude correction
         lat_rad_new = float(np.arctan2(z, p * (1.0 - EARTH_E2 * N / (N + alt))))
 
         if abs(lat_rad_new - lat_rad) < 1e-12:
@@ -141,9 +207,24 @@ def _manual_ecef_to_geodetic_vectorized(
 def _manual_geodetic_to_ecef(
     lat_deg: float, lon_deg: float, alt_m: float
 ) -> tuple[float, float, float]:
-    """
-    Convert geodetic to ECEF coordinates using NumPy.
-    Returns (x, y, z) in meters.
+    """Convert geodetic coordinates to ECEF Cartesian.
+
+    Uses the WGS-84 ellipsoid formulas::
+
+        x = (N + h) * cos(lat) * cos(lon)
+        y = (N + h) * cos(lat) * sin(lon)
+        z = (N * (1 - e^2) + h) * sin(lat)
+
+    where N = a / sqrt(1 - e^2 * sin^2(lat)) is the radius of curvature
+    in the prime vertical.
+
+    Args:
+        lat_deg: Geodetic latitude in degrees.
+        lon_deg: Geodetic longitude in degrees.
+        alt_m: Height above the WGS-84 ellipsoid in meters.
+
+    Returns:
+        Tuple of ``(x, y, z)`` ECEF coordinates in meters.
     """
     lat_rad = np.radians(lat_deg)
     lon_rad = np.radians(lon_deg)
@@ -153,9 +234,11 @@ def _manual_geodetic_to_ecef(
     sin_lon = float(np.sin(lon_rad))
     cos_lon = float(np.cos(lon_rad))
 
-    # Radius of curvature in prime vertical
+    # Radius of curvature in the prime vertical
+    # N = a / sqrt(1 - e^2 * sin^2(lat))
     N = EARTH_A / float(np.sqrt(1.0 - EARTH_E2 * sin_lat**2))
 
+    # ECEF coordinates from geodetic
     x = (N + alt_m) * cos_lat * cos_lon
     y = (N + alt_m) * cos_lat * sin_lon
     z = (N * (1.0 - EARTH_E2) + alt_m) * sin_lat
@@ -192,10 +275,25 @@ def _manual_geodetic_to_ecef_vectorized(
     return x, y, z
 
 
+# ===========================================================================
+# Frame Transformation Functions
+# ===========================================================================
+
+
 def _simple_precession_matrix(epoch1: str, epoch2: str) -> list[list[float]]:
-    """
-    Simple precession matrix for ECI frame transformations.
-    Very approximate - for demonstration only.
+    """Compute a simple precession rotation matrix between two epochs.
+
+    This is a placeholder that returns the identity matrix.  A real
+    implementation would use IAU 2006/2000A precession theory to compute
+    the 3x3 rotation matrix accounting for equinox precession between
+    the two epochs.
+
+    Args:
+        epoch1: Source epoch in ISO-8601 format.
+        epoch2: Target epoch in ISO-8601 format.
+
+    Returns:
+        3x3 rotation matrix as nested lists (currently identity).
     """
     # Parse epochs (assume they're close to J2000)
     # This is a placeholder - real implementation would use proper precession theory

@@ -1,7 +1,34 @@
-"""MCP Server implementation for Aerospace flight planning tools.
+"""Low-level MCP (Model Context Protocol) server for aerospace engineering tools.
 
-Ensures .env is loaded very early so environment-driven options are
-available when importing submodules and defining tools.
+This module implements the MCP server using the ``mcp`` SDK directly (as
+opposed to the higher-level FastMCP wrapper used in ``fastmcp_server.py``).
+It is the authoritative list of tool schemas exposed over the wire and the
+central dispatcher that routes incoming ``call_tool`` requests to the
+appropriate handler function.
+
+Architecture overview:
+    1. **TOOLS registry** -- A flat list of ``mcp.types.Tool`` objects that
+       define every tool's name, description, and JSON Schema for its input.
+       The registry is organized by aerospace domain (flight planning,
+       atmosphere, coordinate frames, orbital mechanics, aerodynamics,
+       propulsion, rockets, GNC, optimization, and AI agents).
+    2. **Dispatcher** -- The ``handle_call_tool`` function (decorated with
+       ``@server.call_tool()``) maps an incoming tool name to one of the
+       ``_handle_*`` async functions that perform argument extraction,
+       validation, computation, and response formatting.
+    3. **Transports** -- The ``run()``, ``run_stdio()``, and ``run_sse()``
+       functions wire the server to either *stdio* (production, used by MCP
+       hosts like Claude Desktop) or *SSE* (Server-Sent Events, useful for
+       HTTP-based debugging).
+
+Environment loading:
+    ``.env`` is loaded at import time (before any other project imports) so
+    that environment-driven options such as API keys or feature flags are
+    available when submodules are initialized.
+
+WARNING:
+    This module is for educational and research purposes only.
+    Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
 import asyncio
@@ -10,16 +37,24 @@ import logging
 import math
 from dataclasses import asdict
 
-# Load environment from .env before other imports that read env
+# ---------------------------------------------------------------------------
+# Early environment bootstrap
+# ---------------------------------------------------------------------------
+# Load environment variables from a .env file *before* any project imports so
+# that feature flags and API keys are already in ``os.environ`` when
+# submodules are imported and top-level constants are evaluated.
 try:
     from dotenv import load_dotenv
 
     load_dotenv()
 except Exception:
-    pass
+    pass  # dotenv is optional; silently continue if not installed
 
-import mcp.server.sse
-import mcp.server.stdio
+# ---------------------------------------------------------------------------
+# MCP SDK imports
+# ---------------------------------------------------------------------------
+import mcp.server.sse  # SSE (Server-Sent Events) transport
+import mcp.server.stdio  # Standard I/O transport (used in production)
 from mcp.server import Server
 from mcp.types import (
     EmbeddedResource,
@@ -29,6 +64,9 @@ from mcp.types import (
 )
 from pydantic import ValidationError
 
+# ---------------------------------------------------------------------------
+# Project-internal imports (shared business logic layer)
+# ---------------------------------------------------------------------------
 from .core import (
     NM_PER_KM,
     OPENAP_AVAILABLE,
@@ -43,16 +81,34 @@ from .core import (
 )
 from .integrations.orbits import vector_magnitude
 
-# Configure logging
+# ---------------------------------------------------------------------------
+# Logging setup
+# ---------------------------------------------------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize MCP server
+# ---------------------------------------------------------------------------
+# MCP server instance
+# ---------------------------------------------------------------------------
+# The ``Server`` object holds the tool registry, manages request/response
+# lifecycle, and is connected to a transport (stdio or SSE) at runtime.
 server = Server("aerospace-mcp")
 
 
+# ---------------------------------------------------------------------------
 # Tool definitions
+# ---------------------------------------------------------------------------
+# Each ``Tool`` declares:
+#   * ``name``        -- unique identifier used by MCP clients to invoke the tool
+#   * ``description`` -- human-readable summary shown in tool-listing UIs
+#   * ``inputSchema`` -- JSON Schema describing expected arguments
+#
+# Tools are grouped by aerospace domain.  The ``handle_call_tool`` dispatcher
+# (below) maps each tool name to the corresponding ``_handle_*`` function.
+# ---------------------------------------------------------------------------
+
 TOOLS = [
+    # ========================== Flight Planning Tools ==========================
     Tool(
         name="search_airports",
         description="Search for airports by IATA code or city name",
@@ -227,6 +283,7 @@ TOOLS = [
         description="Get system status and capabilities",
         inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
     ),
+    # ========================== Atmosphere Tools ==========================
     Tool(
         name="get_atmosphere_profile",
         description="Get atmospheric properties (pressure, temperature, density) at specified altitudes using ISA model",
@@ -290,6 +347,7 @@ TOOLS = [
             "additionalProperties": False,
         },
     ),
+    # ========================== Coordinate Frame Tools ==========================
     Tool(
         name="transform_frames",
         description="Transform coordinates between reference frames (ECEF, ECI, ITRF, GCRS, GEODETIC)",
@@ -364,6 +422,7 @@ TOOLS = [
             "additionalProperties": False,
         },
     ),
+    # ========================== Aerodynamics Tools ==========================
     Tool(
         name="wing_vlm_analysis",
         description="Analyze wing aerodynamics using Vortex Lattice Method or simplified lifting line theory",
@@ -511,6 +570,7 @@ TOOLS = [
             "additionalProperties": False,
         },
     ),
+    # ========================== Propulsion Tools ==========================
     Tool(
         name="propeller_bemt_analysis",
         description="Analyze propeller performance using Blade Element Momentum Theory",
@@ -678,6 +738,7 @@ TOOLS = [
         description="Get available propeller database with geometric and performance data",
         inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
     ),
+    # ========================== Rocket Tools ==========================
     Tool(
         name="rocket_3dof_trajectory",
         description="Calculate 3DOF rocket trajectory using numerical integration",
@@ -783,6 +844,7 @@ TOOLS = [
             "additionalProperties": False,
         },
     ),
+    # ========================== Optimization Tools ==========================
     Tool(
         name="optimize_launch_angle",
         description="Optimize rocket launch angle for maximum altitude or range",
@@ -992,6 +1054,7 @@ TOOLS = [
             "additionalProperties": False,
         },
     ),
+    # ========================== Orbital Mechanics Tools ==========================
     Tool(
         name="elements_to_state_vector",
         description="Convert orbital elements to state vector in J2000 frame",
@@ -1316,6 +1379,7 @@ TOOLS = [
             "additionalProperties": False,
         },
     ),
+    # ========================== GNC (Guidance, Navigation & Control) Tools ==========================
     Tool(
         name="genetic_algorithm_optimization",
         description="Optimize spacecraft trajectory using genetic algorithm",
@@ -1582,6 +1646,8 @@ TOOLS = [
             "additionalProperties": False,
         },
     ),
+    # ========================== Performance Tools ==========================
+    # Interplanetary transfer analysis and Monte Carlo uncertainty tools.
     Tool(
         name="porkchop_plot_analysis",
         description="Generate porkchop plot for interplanetary transfer opportunities",
@@ -1722,9 +1788,23 @@ TOOLS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# MCP protocol handlers
+# ---------------------------------------------------------------------------
+
+
 @server.list_tools()
 async def handle_list_tools() -> list[Tool]:
-    """List all available tools."""
+    """Return the full catalogue of tools this server exposes.
+
+    This callback is invoked by the MCP runtime when a client sends a
+    ``tools/list`` request.  It returns the static ``TOOLS`` registry
+    defined above so that clients can discover available tools and their
+    input schemas.
+
+    Returns:
+        list[Tool]: Every ``Tool`` object registered in the ``TOOLS`` list.
+    """
     return TOOLS
 
 
@@ -1732,8 +1812,37 @@ async def handle_list_tools() -> list[Tool]:
 async def handle_call_tool(
     name: str, arguments: dict
 ) -> list[TextContent | ImageContent | EmbeddedResource]:
-    """Handle tool calls."""
+    """Dispatch an incoming ``tools/call`` request to the correct handler.
+
+    The MCP runtime invokes this callback whenever a client calls a tool.
+    It acts as a router: it matches the ``name`` string against known tool
+    names and delegates to the corresponding ``_handle_*`` async function.
+
+    Each handler is responsible for:
+        1. Extracting and validating arguments from the ``arguments`` dict.
+        2. Calling the appropriate business-logic function from ``core`` or
+           an integration module.
+        3. Formatting the result as a list of ``TextContent`` objects.
+
+    If the tool name is unrecognised, a ``ValueError`` is raised.  Any
+    unhandled exception is caught by the outer ``try/except``, logged, and
+    returned to the client as an error ``TextContent``.
+
+    Args:
+        name: The tool name sent by the MCP client (must match a ``Tool.name``
+            in the ``TOOLS`` registry).
+        arguments: A dictionary of input arguments conforming to the tool's
+            ``inputSchema``.
+
+    Returns:
+        list[TextContent | ImageContent | EmbeddedResource]: One or more
+        content blocks containing the tool's response.
+
+    Raises:
+        ValueError: If ``name`` does not match any registered tool.
+    """
     try:
+        # ---- Flight Planning Tools ----
         if name == "search_airports":
             return await _handle_search_airports(arguments)
         elif name == "plan_flight":
@@ -1744,22 +1853,30 @@ async def handle_call_tool(
             return await _handle_get_aircraft_performance(arguments)
         elif name == "get_system_status":
             return await _handle_get_system_status(arguments)
+
+        # ---- Atmosphere Tools ----
         elif name == "get_atmosphere_profile":
             return await _handle_get_atmosphere_profile(arguments)
         elif name == "wind_model_simple":
             return await _handle_wind_model_simple(arguments)
+
+        # ---- Coordinate Frame Tools ----
         elif name == "transform_frames":
             return await _handle_transform_frames(arguments)
         elif name == "geodetic_to_ecef":
             return await _handle_geodetic_to_ecef(arguments)
         elif name == "ecef_to_geodetic":
             return await _handle_ecef_to_geodetic(arguments)
+
+        # ---- Aerodynamics Tools ----
         elif name == "wing_vlm_analysis":
             return await _handle_wing_vlm_analysis(arguments)
         elif name == "airfoil_polar_analysis":
             return await _handle_airfoil_polar_analysis(arguments)
         elif name == "calculate_stability_derivatives":
             return await _handle_calculate_stability_derivatives(arguments)
+
+        # ---- Propulsion Tools ----
         elif name == "propeller_bemt_analysis":
             return await _handle_propeller_bemt_analysis(arguments)
         elif name == "uav_energy_estimate":
@@ -1768,16 +1885,22 @@ async def handle_call_tool(
             return await _handle_get_airfoil_database(arguments)
         elif name == "get_propeller_database":
             return await _handle_get_propeller_database(arguments)
+
+        # ---- Rocket Tools ----
         elif name == "rocket_3dof_trajectory":
             return await _handle_rocket_3dof_trajectory(arguments)
         elif name == "estimate_rocket_sizing":
             return await _handle_estimate_rocket_sizing(arguments)
+
+        # ---- Optimization Tools ----
         elif name == "optimize_launch_angle":
             return await _handle_optimize_launch_angle(arguments)
         elif name == "optimize_thrust_profile":
             return await _handle_optimize_thrust_profile(arguments)
         elif name == "trajectory_sensitivity_analysis":
             return await _handle_trajectory_sensitivity_analysis(arguments)
+
+        # ---- Orbital Mechanics Tools ----
         elif name == "elements_to_state_vector":
             return await _handle_elements_to_state_vector(arguments)
         elif name == "state_vector_to_elements":
@@ -1790,24 +1913,54 @@ async def handle_call_tool(
             return await _handle_hohmann_transfer(arguments)
         elif name == "orbital_rendezvous_planning":
             return await _handle_orbital_rendezvous_planning(arguments)
+
+        # ---- GNC (Guidance, Navigation & Control) Tools ----
         elif name == "genetic_algorithm_optimization":
             return await _handle_genetic_algorithm_optimization(arguments)
         elif name == "particle_swarm_optimization":
             return await _handle_particle_swarm_optimization(arguments)
+
+        # ---- Performance / Mission Analysis Tools ----
         elif name == "porkchop_plot_analysis":
             return await _handle_porkchop_plot_analysis(arguments)
         elif name == "monte_carlo_uncertainty_analysis":
             return await _handle_monte_carlo_uncertainty_analysis(arguments)
+
         else:
             raise ValueError(f"Unknown tool: {name}")
 
     except Exception as e:
+        # Log the full traceback for debugging, but return only the
+        # message string to the MCP client as a TextContent error.
         logger.error(f"Error in tool {name}: {str(e)}", exc_info=True)
         return [TextContent(type="text", text=f"Error: {str(e)}")]
 
 
+# ===========================================================================
+# Handler functions -- Flight Planning
+# ===========================================================================
+
+
 async def _handle_search_airports(arguments: dict) -> list[TextContent]:
-    """Handle airport search requests."""
+    """Search for airports by IATA code or city name.
+
+    Extracts ``query``, ``country``, and ``query_type`` from the MCP
+    request arguments.  When ``query_type`` is ``"auto"`` (default), the
+    handler heuristically decides whether the query is an IATA code
+    (3-letter alpha string) or a city name.
+
+    Args:
+        arguments: MCP request dict with keys ``query`` (required),
+            ``country`` (optional ISO code), and ``query_type``
+            (``"iata"`` | ``"city"`` | ``"auto"``).
+
+    Returns:
+        list[TextContent]: Formatted airport details or an error message.
+
+    Raises:
+        Exception: Caught internally and returned as an error TextContent.
+    """
+    # Extract and sanitise arguments from the MCP request dict
     query = arguments.get("query", "").strip()
     country = arguments.get("country")
     query_type = arguments.get("query_type", "auto")
@@ -1817,18 +1970,19 @@ async def _handle_search_airports(arguments: dict) -> list[TextContent]:
 
     results = []
 
-    # Auto-detect query type if needed
+    # Auto-detect query type: a 3-letter alphabetic string is assumed to be
+    # an IATA code; anything else is treated as a city name search.
     if query_type == "auto":
         query_type = "iata" if len(query) == 3 and query.isalpha() else "city"
 
     try:
         if query_type == "iata":
-            # Search by IATA code
+            # Exact IATA code lookup from the in-memory airport database
             airport = _airport_from_iata(query)
             if airport:
                 results = [airport]
         else:
-            # Search by city name
+            # Fuzzy city-name search with optional country filter
             results = _find_city_airports(query, country)
 
         if not results:
@@ -1854,15 +2008,35 @@ async def _handle_search_airports(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_plan_flight(arguments: dict) -> list[TextContent]:
-    """Handle flight planning requests."""
+    """Plan a complete flight route between two airports.
+
+    Resolves departure and arrival airports from city names (with optional
+    IATA preferences), computes the great-circle route polyline, and uses
+    OpenAP to generate climb/cruise/descent performance estimates.
+
+    Args:
+        arguments: MCP request dict with nested objects ``departure``,
+            ``arrival``, ``aircraft``, and optional ``route_options``.
+
+    Returns:
+        list[TextContent]: Flight plan summary including distance, segment
+        fuel/time estimates, and route polyline metadata.
+
+    Raises:
+        AirportResolutionError: If a city cannot be mapped to an airport.
+        OpenAPError: If aircraft performance data is unavailable.
+        ValidationError: If PlanRequest construction fails.
+    """
     try:
-        # Extract parameters
+        # Extract nested argument groups from the flat MCP arguments dict
         departure = arguments.get("departure", {})
         arrival = arguments.get("arrival", {})
         aircraft = arguments.get("aircraft", {})
         route_options = arguments.get("route_options", {})
 
-        # Build PlanRequest
+        # Build a PlanRequest Pydantic model from the flattened MCP arguments.
+        # Default values are applied here for optional fields (cruise_alt,
+        # mass_kg, step_km) so callers need not supply them.
         plan_request = PlanRequest(
             depart_city=departure.get("city", ""),
             arrive_city=arrival.get("city", ""),
@@ -1876,7 +2050,9 @@ async def _handle_plan_flight(arguments: dict) -> list[TextContent]:
             route_step_km=route_options.get("step_km", 25.0),
         )
 
-        # Validate same city check
+        # Guard against identical departure/arrival cities without explicit
+        # IATA disambiguation -- the resolver cannot pick two different
+        # airports in the same city without IATA hints.
         if (
             plan_request.depart_city.strip().lower()
             == plan_request.arrive_city.strip().lower()
@@ -1890,7 +2066,8 @@ async def _handle_plan_flight(arguments: dict) -> list[TextContent]:
                 )
             ]
 
-        # Resolve airports
+        # Resolve city names (and optional IATA preferences) to concrete
+        # airport records from the in-memory database.
         try:
             dep = _resolve_endpoint(
                 plan_request.depart_city,
@@ -1909,13 +2086,14 @@ async def _handle_plan_flight(arguments: dict) -> list[TextContent]:
                 TextContent(type="text", text=f"Airport resolution error: {str(e)}")
             ]
 
-        # Calculate route
+        # Compute the great-circle route polyline and total distance
         polyline, distance_km = great_circle_points(
             dep.lat, dep.lon, arr.lat, arr.lon, plan_request.route_step_km
         )
         distance_nm = distance_km * NM_PER_KM
 
-        # Get performance estimates
+        # Use OpenAP to generate climb/cruise/descent performance estimates.
+        # Returns a dict of segment-level time/fuel/distance breakdowns.
         try:
             estimates, engine_name = estimates_openap(
                 plan_request.ac_type,
@@ -1958,8 +2136,22 @@ async def _handle_plan_flight(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_calculate_distance(arguments: dict) -> list[TextContent]:
-    """Handle distance calculation requests."""
+    """Calculate the great-circle distance between two geographic points.
+
+    Extracts ``origin`` and ``destination`` coordinate objects and an
+    optional ``step_km`` for polyline sampling.  Uses the ``geographiclib``
+    geodesic inverse/direct solvers under the hood.
+
+    Args:
+        arguments: MCP request dict with ``origin`` (lat/lon), ``destination``
+            (lat/lon), and optional ``step_km`` (default 50).
+
+    Returns:
+        list[TextContent]: Distance in km and nautical miles, plus polyline
+        point count.
+    """
     try:
+        # Extract nested origin/destination coordinate objects
         origin = arguments.get("origin", {})
         destination = arguments.get("destination", {})
         step_km = arguments.get("step_km", 50.0)
@@ -1995,8 +2187,23 @@ async def _handle_calculate_distance(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_get_aircraft_performance(arguments: dict) -> list[TextContent]:
-    """Handle aircraft performance requests."""
+    """Retrieve OpenAP-based performance estimates for an aircraft type.
+
+    Requires ``aircraft_type`` (ICAO code) and ``distance_km``.  Optionally
+    accepts ``cruise_altitude`` (feet, default 35000) and ``mass_kg``.
+
+    Args:
+        arguments: MCP request dict with ``aircraft_type``, ``distance_km``,
+            and optional ``cruise_altitude`` / ``mass_kg``.
+
+    Returns:
+        list[TextContent]: Block time, block fuel, and per-segment breakdown.
+
+    Raises:
+        OpenAPError: If the aircraft type is not in the OpenAP database.
+    """
     try:
+        # Extract scalar arguments with sensible defaults
         aircraft_type = arguments.get("aircraft_type", "")
         distance_km = arguments.get("distance_km", 0)
         cruise_altitude = arguments.get("cruise_altitude", 35000)
@@ -2040,7 +2247,18 @@ async def _handle_get_aircraft_performance(arguments: dict) -> list[TextContent]
 
 
 async def _handle_get_system_status(arguments: dict) -> list[TextContent]:
-    """Handle system status requests."""
+    """Report server health, loaded data counts, and available tools.
+
+    Takes no meaningful arguments.  Returns the OpenAP availability flag,
+    the number of airports loaded into the in-memory IATA database, and a
+    listing of every registered tool with its description.
+
+    Args:
+        arguments: MCP request dict (no required keys).
+
+    Returns:
+        list[TextContent]: Multi-line status report.
+    """
     try:
         from .core import _AIRPORTS_IATA
 
@@ -2073,11 +2291,30 @@ async def _handle_get_system_status(arguments: dict) -> list[TextContent]:
         return [TextContent(type="text", text=f"Status error: {str(e)}")]
 
 
+# ===========================================================================
+# Handler functions -- Atmosphere
+# ===========================================================================
+
+
 async def _handle_get_atmosphere_profile(arguments: dict) -> list[TextContent]:
-    """Handle atmosphere profile requests."""
+    """Compute atmospheric properties at specified altitudes.
+
+    Uses the International Standard Atmosphere (ISA) or COESA model to
+    return pressure, temperature, density, and speed of sound at each
+    requested altitude.
+
+    Args:
+        arguments: MCP request dict with ``altitudes_m`` (list of floats,
+            required) and optional ``model_type`` (``"ISA"`` or ``"COESA"``).
+
+    Returns:
+        list[TextContent]: Tabulated atmosphere data plus a JSON payload
+        for programmatic consumption.
+    """
     try:
         from .integrations.atmosphere import get_atmosphere_profile
 
+        # Extract altitude list and model selection from arguments
         altitudes_m = arguments.get("altitudes_m", [])
         model_type = arguments.get("model_type", "ISA")
 
@@ -2110,10 +2347,24 @@ async def _handle_get_atmosphere_profile(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_wind_model_simple(arguments: dict) -> list[TextContent]:
-    """Handle simple wind model requests."""
+    """Calculate wind speeds at altitude using a logarithmic or power-law profile.
+
+    Extrapolates a given surface wind speed to higher altitudes.  The
+    logarithmic model uses surface roughness length; the power-law model
+    uses an empirical exponent.
+
+    Args:
+        arguments: MCP request dict with ``altitudes_m`` (list), ``surface_wind_mps``
+            (float), and optional ``surface_altitude_m``, ``model``, and
+            ``roughness_length_m``.
+
+    Returns:
+        list[TextContent]: Altitude-vs-wind table plus JSON data.
+    """
     try:
         from .integrations.atmosphere import wind_model_simple
 
+        # Extract wind model parameters from the MCP arguments
         altitudes_m = arguments.get("altitudes_m", [])
         surface_wind_mps = arguments.get("surface_wind_mps")
         surface_altitude_m = arguments.get("surface_altitude_m", 0.0)
@@ -2152,11 +2403,28 @@ async def _handle_wind_model_simple(arguments: dict) -> list[TextContent]:
         return [TextContent(type="text", text=f"Wind model error: {str(e)}")]
 
 
+# ===========================================================================
+# Handler functions -- Coordinate Frames
+# ===========================================================================
+
+
 async def _handle_transform_frames(arguments: dict) -> list[TextContent]:
-    """Handle coordinate frame transformation requests."""
+    """Transform a coordinate triple between reference frames.
+
+    Supports ECEF, ECI, ITRF, GCRS, and GEODETIC frames.  The GEODETIC
+    frame interprets the triple as (latitude_deg, longitude_deg, altitude_m).
+
+    Args:
+        arguments: MCP request dict with ``xyz`` (3-element list),
+            ``from_frame``, ``to_frame``, and optional ``epoch_iso``.
+
+    Returns:
+        list[TextContent]: Formatted input and output coordinates plus JSON.
+    """
     try:
         from .integrations.frames import transform_frames
 
+        # Extract coordinate vector and frame identifiers
         xyz = arguments.get("xyz", [])
         from_frame = arguments.get("from_frame")
         to_frame = arguments.get("to_frame")
@@ -2210,7 +2478,17 @@ async def _handle_transform_frames(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_geodetic_to_ecef(arguments: dict) -> list[TextContent]:
-    """Handle geodetic to ECEF conversion."""
+    """Convert geodetic (lat/lon/alt) coordinates to ECEF (X, Y, Z).
+
+    Uses the WGS-84 ellipsoid for the conversion.
+
+    Args:
+        arguments: MCP request dict with ``latitude_deg``, ``longitude_deg``,
+            and ``altitude_m`` (all required).
+
+    Returns:
+        list[TextContent]: ECEF X/Y/Z in metres plus JSON data.
+    """
     try:
         from .integrations.frames import geodetic_to_ecef
 
@@ -2253,7 +2531,18 @@ async def _handle_geodetic_to_ecef(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_ecef_to_geodetic(arguments: dict) -> list[TextContent]:
-    """Handle ECEF to geodetic conversion."""
+    """Convert ECEF (X, Y, Z) coordinates to geodetic (lat/lon/alt).
+
+    Inverts the WGS-84 ellipsoid transformation.
+
+    Args:
+        arguments: MCP request dict with ``x``, ``y``, ``z`` in metres
+            (all required).
+
+    Returns:
+        list[TextContent]: Latitude (deg), longitude (deg), altitude (m)
+        plus JSON data.
+    """
     try:
         from .integrations.frames import ecef_to_geodetic
 
@@ -2294,11 +2583,30 @@ async def _handle_ecef_to_geodetic(arguments: dict) -> list[TextContent]:
         return [TextContent(type="text", text=f"ECEF to geodetic error: {str(e)}")]
 
 
+# ===========================================================================
+# Handler functions -- Aerodynamics
+# ===========================================================================
+
+
 async def _handle_wing_vlm_analysis(arguments: dict) -> list[TextContent]:
-    """Handle wing VLM analysis requests."""
+    """Analyse wing aerodynamics using the Vortex Lattice Method.
+
+    Constructs a ``WingGeometry`` from the nested ``geometry`` object and
+    evaluates lift, drag, and moment coefficients at each angle of attack
+    in ``alpha_deg_list``.
+
+    Args:
+        arguments: MCP request dict with ``geometry`` (planform definition),
+            ``alpha_deg_list`` (list of AoA values), and optional ``mach``.
+
+    Returns:
+        list[TextContent]: Tabulated CL/CD/CM/L-D/efficiency per alpha,
+        plus JSON data for all result points.
+    """
     try:
         from .integrations.aero import WingGeometry, wing_vlm_analysis
 
+        # Extract nested geometry object and analysis parameters
         geometry_data = arguments.get("geometry", {})
         alpha_deg_list = arguments.get("alpha_deg_list", [])
         mach = arguments.get("mach", 0.2)
@@ -2345,7 +2653,18 @@ async def _handle_wing_vlm_analysis(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_airfoil_polar_analysis(arguments: dict) -> list[TextContent]:
-    """Handle airfoil polar analysis requests."""
+    """Generate an airfoil polar (CL, CD, CM vs. alpha).
+
+    Looks up the airfoil by name in the built-in database and computes
+    aerodynamic coefficients at each requested angle of attack.
+
+    Args:
+        arguments: MCP request dict with ``airfoil_name`` (e.g. ``"NACA2412"``),
+            ``alpha_deg_list`` (required), and optional ``reynolds`` / ``mach``.
+
+    Returns:
+        list[TextContent]: Tabulated polar data plus JSON.
+    """
     try:
         from .integrations.aero import airfoil_polar_analysis
 
@@ -2387,7 +2706,20 @@ async def _handle_airfoil_polar_analysis(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_calculate_stability_derivatives(arguments: dict) -> list[TextContent]:
-    """Handle stability derivatives calculation requests."""
+    """Compute longitudinal stability derivatives for a wing planform.
+
+    Calculates CL_alpha and CM_alpha at a reference angle of attack and
+    Mach number, and assesses whether the configuration is statically
+    stable (CM_alpha < 0).
+
+    Args:
+        arguments: MCP request dict with ``geometry`` (required), and
+            optional ``alpha_deg`` (default 2.0) and ``mach`` (default 0.2).
+
+    Returns:
+        list[TextContent]: Stability derivatives, wing properties, and a
+        qualitative stability assessment.
+    """
     try:
         from .integrations.aero import (
             WingGeometry,
@@ -2454,11 +2786,30 @@ async def _handle_calculate_stability_derivatives(arguments: dict) -> list[TextC
         return [TextContent(type="text", text=f"Stability derivatives error: {str(e)}")]
 
 
+# ===========================================================================
+# Handler functions -- Propulsion
+# ===========================================================================
+
+
 async def _handle_propeller_bemt_analysis(arguments: dict) -> list[TextContent]:
-    """Handle propeller BEMT analysis requests."""
+    """Analyse propeller performance using Blade Element Momentum Theory.
+
+    Evaluates thrust, power, torque, and efficiency at each requested RPM
+    for a given propeller geometry, forward velocity, and altitude.
+
+    Args:
+        arguments: MCP request dict with ``geometry`` (diameter, pitch,
+            blade count), ``rpm_list`` (required), and optional
+            ``velocity_ms`` / ``altitude_m``.
+
+    Returns:
+        list[TextContent]: Tabulated performance at each RPM, peak
+        efficiency summary, and JSON data.
+    """
     try:
         from .integrations.propellers import PropellerGeometry, propeller_bemt_analysis
 
+        # Extract propeller geometry and operating conditions
         geometry_data = arguments.get("geometry", {})
         rpm_list = arguments.get("rpm_list", [])
         velocity_ms = arguments.get("velocity_ms", 0.0)
@@ -2517,7 +2868,21 @@ async def _handle_propeller_bemt_analysis(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_uav_energy_estimate(arguments: dict) -> list[TextContent]:
-    """Handle UAV energy estimation requests."""
+    """Estimate UAV flight time and energy consumption for mission planning.
+
+    Supports both fixed-wing and multirotor configurations.  Computes
+    power required, usable battery energy, flight time, range, and hover
+    endurance, and provides qualitative recommendations.
+
+    Args:
+        arguments: MCP request dict with ``uav_config`` (mass, wing/disk
+            area, drag, motor specs), ``battery_config`` (capacity, voltage,
+            mass), and optional ``mission_profile`` (velocity, altitude).
+
+    Returns:
+        list[TextContent]: Detailed energy analysis with recommendations
+        and JSON data.
+    """
     try:
         from .integrations.propellers import (
             BatteryConfiguration,
@@ -2525,6 +2890,7 @@ async def _handle_uav_energy_estimate(arguments: dict) -> list[TextContent]:
             uav_energy_estimate,
         )
 
+        # Extract UAV, battery, and mission configuration dicts
         uav_data = arguments.get("uav_config", {})
         battery_data = arguments.get("battery_config", {})
         mission_data = arguments.get("mission_profile", {})
@@ -2626,7 +2992,17 @@ async def _handle_uav_energy_estimate(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_get_airfoil_database(arguments: dict) -> list[TextContent]:
-    """Handle airfoil database requests."""
+    """Return the built-in airfoil database with key aerodynamic coefficients.
+
+    Takes no meaningful arguments.  Lists every airfoil in the database
+    with CL_alpha, CD0, CL_max, and stall angle.
+
+    Args:
+        arguments: MCP request dict (no required keys).
+
+    Returns:
+        list[TextContent]: Formatted airfoil table and JSON payload.
+    """
     try:
         from .integrations.aero import get_airfoil_database
 
@@ -2668,7 +3044,17 @@ async def _handle_get_airfoil_database(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_get_propeller_database(arguments: dict) -> list[TextContent]:
-    """Handle propeller database requests."""
+    """Return the built-in propeller database with geometric and performance data.
+
+    Takes no meaningful arguments.  Lists every propeller entry with
+    diameter, pitch, blade count, and estimated peak efficiency.
+
+    Args:
+        arguments: MCP request dict (no required keys).
+
+    Returns:
+        list[TextContent]: Formatted propeller table and JSON payload.
+    """
     try:
         from .integrations.propellers import get_propeller_database
 
@@ -2710,8 +3096,27 @@ async def _handle_get_propeller_database(arguments: dict) -> list[TextContent]:
         return [TextContent(type="text", text=f"Propeller database error: {str(e)}")]
 
 
+# ===========================================================================
+# Handler functions -- Rockets
+# ===========================================================================
+
+
 async def _handle_rocket_3dof_trajectory(arguments: dict) -> list[TextContent]:
-    """Handle rocket trajectory calculation requests."""
+    """Simulate a 3-DOF rocket trajectory using numerical integration.
+
+    Constructs a ``RocketGeometry`` (mass, dimensions, drag, optional
+    thrust curve) and integrates the equations of motion to produce
+    altitude, velocity, and dynamic pressure over time.
+
+    Args:
+        arguments: MCP request dict with ``geometry`` (required), and
+            optional ``dt_s`` (time step), ``max_time_s``, ``launch_angle_deg``.
+
+    Returns:
+        list[TextContent]: Performance summary (max altitude, max velocity,
+        burnout conditions, specific impulse) and a sampled trajectory
+        in JSON.
+    """
     try:
         from .integrations.rockets import (
             RocketGeometry,
@@ -2719,6 +3124,7 @@ async def _handle_rocket_3dof_trajectory(arguments: dict) -> list[TextContent]:
             rocket_3dof_trajectory,
         )
 
+        # Extract geometry dict and simulation parameters with defaults
         geometry_data = arguments.get("geometry", {})
         dt_s = arguments.get("dt_s", 0.1)
         max_time_s = arguments.get("max_time_s", 300.0)
@@ -2783,7 +3189,21 @@ async def _handle_rocket_3dof_trajectory(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_estimate_rocket_sizing(arguments: dict) -> list[TextContent]:
-    """Handle rocket sizing estimation requests."""
+    """Estimate rocket sizing for a target altitude and payload mass.
+
+    Uses the Tsiolkovsky rocket equation and empirical structural
+    fractions to determine required propellant mass, total mass, thrust,
+    and physical dimensions.
+
+    Args:
+        arguments: MCP request dict with ``target_altitude_m`` and
+            ``payload_mass_kg`` (both required), and optional
+            ``propellant_type`` (``"solid"`` or ``"liquid"``).
+
+    Returns:
+        list[TextContent]: Sizing summary including mass breakdown,
+        delta-V budget, and geometry estimates, or infeasibility notes.
+    """
     try:
         from .integrations.rockets import estimate_rocket_sizing
 
@@ -2861,8 +3281,26 @@ async def _handle_estimate_rocket_sizing(arguments: dict) -> list[TextContent]:
         return [TextContent(type="text", text=f"Rocket sizing error: {str(e)}")]
 
 
+# ===========================================================================
+# Handler functions -- Optimization
+# ===========================================================================
+
+
 async def _handle_optimize_launch_angle(arguments: dict) -> list[TextContent]:
-    """Handle launch angle optimization requests."""
+    """Optimize the rocket launch angle for maximum altitude or range.
+
+    Performs a bounded scalar optimisation over launch angle using the
+    trajectory integrator as the objective function.
+
+    Args:
+        arguments: MCP request dict with ``geometry`` (required), optional
+            ``objective`` (``"max_altitude"`` or ``"max_range"``), and
+            optional ``angle_bounds`` ([min_deg, max_deg]).
+
+    Returns:
+        list[TextContent]: Optimal angle, achieved objective value,
+        convergence status, and performance at the optimal point.
+    """
     try:
         from .integrations.rockets import RocketGeometry
         from .integrations.trajopt import (
@@ -2923,7 +3361,21 @@ async def _handle_optimize_launch_angle(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_optimize_thrust_profile(arguments: dict) -> list[TextContent]:
-    """Handle thrust profile optimization requests."""
+    """Optimize a segmented thrust profile for improved rocket performance.
+
+    Divides the burn into ``n_segments`` and finds thrust multipliers for
+    each segment that maximise altitude, minimise max-Q, or minimise
+    gravity losses, subject to a total-impulse constraint.
+
+    Args:
+        arguments: MCP request dict with ``geometry``, ``burn_time_s``,
+            ``total_impulse_target`` (all required), and optional
+            ``n_segments`` and ``objective``.
+
+    Returns:
+        list[TextContent]: Per-segment multipliers, performance at the
+        optimum, and convergence details.
+    """
     try:
         from .integrations.rockets import RocketGeometry
         from .integrations.trajopt import optimize_thrust_profile
@@ -3010,7 +3462,21 @@ async def _handle_optimize_thrust_profile(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_trajectory_sensitivity_analysis(arguments: dict) -> list[TextContent]:
-    """Handle trajectory sensitivity analysis requests."""
+    """Perform sensitivity analysis on rocket trajectory parameters.
+
+    Varies specified parameters (e.g. dry mass, propellant mass, Cd) over
+    given ranges and records how the chosen objective metric responds.
+    Results are ranked by average absolute sensitivity.
+
+    Args:
+        arguments: MCP request dict with ``base_geometry`` and
+            ``parameter_variations`` (both required), and optional
+            ``objective``.
+
+    Returns:
+        list[TextContent]: Per-parameter sensitivity data, classification
+        (HIGH/MEDIUM/LOW), ranking, and full JSON results.
+    """
     try:
         from .integrations.rockets import RocketGeometry
         from .integrations.trajopt import trajectory_sensitivity_analysis
@@ -3118,8 +3584,25 @@ async def _handle_trajectory_sensitivity_analysis(arguments: dict) -> list[TextC
         ]
 
 
+# ===========================================================================
+# Handler functions -- Orbital Mechanics
+# ===========================================================================
+
+
 async def _handle_elements_to_state_vector(arguments: dict) -> list[TextContent]:
-    """Handle orbital elements to state vector conversion."""
+    """Convert classical orbital elements to a J2000 state vector.
+
+    Constructs an ``OrbitElements`` object from the nested ``elements``
+    dict and computes position and velocity vectors in the J2000 frame.
+
+    Args:
+        arguments: MCP request dict with ``elements`` containing
+            semi_major_axis_m, eccentricity, inclination_deg, raan_deg,
+            arg_periapsis_deg, true_anomaly_deg, and epoch_utc.
+
+    Returns:
+        list[TextContent]: Position/velocity vectors and JSON data.
+    """
     try:
         from .integrations.orbits import OrbitElements, elements_to_state_vector
 
@@ -3166,7 +3649,19 @@ async def _handle_elements_to_state_vector(arguments: dict) -> list[TextContent]
 
 
 async def _handle_state_vector_to_elements(arguments: dict) -> list[TextContent]:
-    """Handle state vector to orbital elements conversion."""
+    """Convert a position/velocity state vector to classical orbital elements.
+
+    Also computes derived orbital properties (period, apoapsis, periapsis,
+    specific energy).
+
+    Args:
+        arguments: MCP request dict with ``state`` containing
+            ``position_m``, ``velocity_ms``, ``epoch_utc``, and optional
+            ``frame``.
+
+    Returns:
+        list[TextContent]: Orbital elements, derived properties, and JSON.
+    """
     try:
         from .integrations.orbits import (
             StateVector,
@@ -3225,7 +3720,20 @@ async def _handle_state_vector_to_elements(arguments: dict) -> list[TextContent]
 
 
 async def _handle_propagate_orbit_j2(arguments: dict) -> list[TextContent]:
-    """Handle J2 orbit propagation."""
+    """Propagate an orbit forward in time including J2 perturbations.
+
+    Numerically integrates the equations of motion with Earth's J2
+    oblateness term over the specified time span and step size.
+
+    Args:
+        arguments: MCP request dict with ``initial_state`` (position,
+            velocity, epoch -- required), ``time_span_s`` (required), and
+            optional ``time_step_s`` (default 60).
+
+    Returns:
+        list[TextContent]: Summary of initial/final states, position/velocity
+        deltas, and a sampled state history in JSON.
+    """
     try:
         from .integrations.orbits import StateVector, propagate_orbit_j2
 
@@ -3284,7 +3792,19 @@ async def _handle_propagate_orbit_j2(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_calculate_ground_track(arguments: dict) -> list[TextContent]:
-    """Handle ground track calculation."""
+    """Compute the sub-satellite ground track from orbital state vectors.
+
+    Converts each ECI state to geodetic (lat/lon/alt) to produce a ground
+    trace suitable for map plotting.
+
+    Args:
+        arguments: MCP request dict with ``orbit_states`` (list of state
+            vector dicts, required) and optional ``time_step_s``.
+
+    Returns:
+        list[TextContent]: Lat/lon/alt ranges, sample points, and full
+        ground track in JSON.
+    """
     try:
         from .integrations.orbits import StateVector, calculate_ground_track
 
@@ -3350,7 +3870,19 @@ async def _handle_calculate_ground_track(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_hohmann_transfer(arguments: dict) -> list[TextContent]:
-    """Handle Hohmann transfer calculation."""
+    """Calculate Hohmann transfer parameters between two circular orbits.
+
+    Computes the two delta-V burns, transfer orbit semi-major axis, and
+    transfer time for a minimum-energy coplanar orbit raise or lower.
+
+    Args:
+        arguments: MCP request dict with ``r1_m`` and ``r2_m`` (both
+            required, in metres from Earth's centre).
+
+    Returns:
+        list[TextContent]: Delta-V breakdown, transfer orbit properties,
+        and mission summary with JSON.
+    """
     try:
         from .integrations.orbits import hohmann_transfer
 
@@ -3396,7 +3928,19 @@ async def _handle_hohmann_transfer(arguments: dict) -> list[TextContent]:
 
 
 async def _handle_orbital_rendezvous_planning(arguments: dict) -> list[TextContent]:
-    """Handle orbital rendezvous planning."""
+    """Plan orbital rendezvous manoeuvres between a chaser and target spacecraft.
+
+    Computes relative geometry (phase angle, altitude difference), timing
+    (orbital periods, phasing time), and estimated circularisation delta-V.
+
+    Args:
+        arguments: MCP request dict with ``chaser_elements`` and
+            ``target_elements`` (both required orbital element dicts).
+
+    Returns:
+        list[TextContent]: Rendezvous analysis, feasibility assessment,
+        and JSON data.
+    """
     try:
         from .integrations.orbits import OrbitElements, orbital_rendezvous_planning
 
@@ -3467,8 +4011,27 @@ async def _handle_orbital_rendezvous_planning(arguments: dict) -> list[TextConte
         return [TextContent(type="text", text=f"Rendezvous planning error: {str(e)}")]
 
 
+# ===========================================================================
+# Handler functions -- GNC (Guidance, Navigation & Control)
+# ===========================================================================
+
+
 async def _handle_genetic_algorithm_optimization(arguments: dict) -> list[TextContent]:
-    """Handle genetic algorithm trajectory optimization."""
+    """Optimize a spacecraft trajectory using a genetic algorithm.
+
+    Constructs trajectory waypoints and an optimisation objective, then
+    runs a GA with configurable population size, generations, mutation
+    rate, and crossover rate.
+
+    Args:
+        arguments: MCP request dict with ``initial_trajectory`` (list of
+            waypoint dicts) and ``objective`` (both required), plus optional
+            ``constraints`` and ``ga_params``.
+
+    Returns:
+        list[TextContent]: Convergence status, optimal cost, total delta-V,
+        fuel mass, and a JSON summary.
+    """
     try:
         from .integrations.gnc import (
             GeneticAlgorithm,
@@ -3478,6 +4041,7 @@ async def _handle_genetic_algorithm_optimization(arguments: dict) -> list[TextCo
             TrajectoryWaypoint,
         )
 
+        # Extract trajectory waypoints and optimisation configuration
         initial_trajectory_data = arguments.get("initial_trajectory", [])
         objective_data = arguments.get("objective", {})
         constraints_data = arguments.get("constraints", {})
@@ -3561,7 +4125,20 @@ async def _handle_genetic_algorithm_optimization(arguments: dict) -> list[TextCo
 
 
 async def _handle_particle_swarm_optimization(arguments: dict) -> list[TextContent]:
-    """Handle particle swarm optimization."""
+    """Optimize a spacecraft trajectory using particle swarm optimisation.
+
+    Similar interface to the GA handler but uses a PSO algorithm with
+    inertia weight (w), cognitive (c1), and social (c2) parameters.
+
+    Args:
+        arguments: MCP request dict with ``initial_trajectory`` and
+            ``objective`` (both required), plus optional ``constraints``
+            and ``pso_params``.
+
+    Returns:
+        list[TextContent]: Convergence status, optimal cost, delta-V,
+        fuel mass, and JSON summary.
+    """
     try:
         from .integrations.gnc import (
             OptimizationConstraints,
@@ -3571,6 +4148,7 @@ async def _handle_particle_swarm_optimization(arguments: dict) -> list[TextConte
             TrajectoryWaypoint,
         )
 
+        # Extract trajectory waypoints and PSO configuration
         initial_trajectory_data = arguments.get("initial_trajectory", [])
         objective_data = arguments.get("objective", {})
         constraints_data = arguments.get("constraints", {})
@@ -3649,11 +4227,31 @@ async def _handle_particle_swarm_optimization(arguments: dict) -> list[TextConte
         ]
 
 
+# ===========================================================================
+# Handler functions -- Performance / Mission Analysis
+# ===========================================================================
+
+
 async def _handle_porkchop_plot_analysis(arguments: dict) -> list[TextContent]:
-    """Handle porkchop plot analysis requests."""
+    """Generate a porkchop plot for interplanetary transfer windows.
+
+    Computes a grid of departure-arrival date combinations and evaluates
+    the C3 (characteristic energy) for each, identifying the optimal
+    (minimum C3) transfer opportunity.
+
+    Args:
+        arguments: MCP request dict with optional ``departure_body``,
+            ``arrival_body``, ``departure_dates``, ``arrival_dates``,
+            ``min_tof_days``, and ``max_tof_days``.
+
+    Returns:
+        list[TextContent]: Summary statistics, optimal transfer details,
+        sample transfer grid, and full JSON data.
+    """
     try:
         from .integrations.orbits import porkchop_plot_analysis
 
+        # Extract analysis parameters with Earth-Mars defaults
         departure_body = arguments.get("departure_body", "Earth")
         arrival_body = arguments.get("arrival_body", "Mars")
         departure_dates = arguments.get("departure_dates")
@@ -3756,13 +4354,29 @@ async def _handle_porkchop_plot_analysis(arguments: dict) -> list[TextContent]:
 async def _handle_monte_carlo_uncertainty_analysis(
     arguments: dict,
 ) -> list[TextContent]:
-    """Handle Monte Carlo uncertainty analysis."""
+    """Run Monte Carlo uncertainty analysis on a spacecraft trajectory.
+
+    Perturbs position, velocity, and thrust around a nominal trajectory
+    to quantify statistical spread of delta-V, flight time, and position
+    error.  Reports mean, standard deviation, min/max, and 95% confidence
+    intervals.
+
+    Args:
+        arguments: MCP request dict with ``nominal_trajectory`` (list of
+            waypoint dicts, required), optional ``uncertainty_params``
+            (per-variable std), and optional ``n_samples`` (default 1000).
+
+    Returns:
+        list[TextContent]: Statistical summary, qualitative assessment,
+        and full JSON analysis.
+    """
     try:
         from .integrations.gnc import (
             TrajectoryWaypoint,
             monte_carlo_uncertainty_analysis,
         )
 
+        # Extract nominal trajectory and uncertainty configuration
         nominal_trajectory_data = arguments.get("nominal_trajectory", [])
         uncertainty_params = arguments.get("uncertainty_params", {})
         n_samples = arguments.get("n_samples", 1000)
@@ -3856,11 +4470,26 @@ async def _handle_monte_carlo_uncertainty_analysis(
         ]
 
 
+# ===========================================================================
+# Transport setup and entry points
+# ===========================================================================
+
+
 def run_stdio():
-    """Run the MCP server with stdio transport."""
+    """Run the MCP server over standard I/O (stdin/stdout).
+
+    This is the production transport used by MCP hosts such as Claude
+    Desktop.  The host process spawns this server as a subprocess and
+    communicates via newline-delimited JSON-RPC messages on stdin/stdout.
+    """
 
     async def _main():
+        # ``stdio_server()`` is an async context manager that yields a
+        # (read_stream, write_stream) pair connected to stdin/stdout.
         async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
+            # ``server.run()`` enters the MCP request loop, reading
+            # requests from ``read_stream`` and writing responses to
+            # ``write_stream`` until the client disconnects.
             await server.run(
                 read_stream, write_stream, server.create_initialization_options()
             )
@@ -3869,12 +4498,25 @@ def run_stdio():
 
 
 def run_sse(host: str = "localhost", port: int = 8001):
-    """Run the MCP server with SSE transport."""
+    """Run the MCP server over HTTP with Server-Sent Events (SSE).
+
+    SSE transport is primarily used for debugging and development.  It
+    exposes an HTTP endpoint at ``/sse`` that MCP clients can connect to
+    from a browser or HTTP-based tool.
+
+    Args:
+        host: Network interface to bind to (default ``"localhost"``).
+        port: TCP port number (default ``8001``).
+    """
     import mcp.server.sse
 
+    # Create an SSE transport bound to the ``/sse`` HTTP path.
     sse_app = mcp.server.sse.SseServerTransport("/sse")
 
     async def _main():
+        # ``sse_app.run_server()`` starts an HTTP server and yields a
+        # context with read/write streams that bridge HTTP to the MCP
+        # protocol loop.
         async with sse_app.run_server() as server_context:
             await server.run(
                 server_context.read_stream,
@@ -3886,14 +4528,22 @@ def run_sse(host: str = "localhost", port: int = 8001):
 
 
 def run():
-    """Main entry point - defaults to stdio."""
+    """Main entry point -- select transport based on CLI arguments.
+
+    Usage:
+        ``aerospace-mcp``              -- starts stdio transport (default)
+        ``aerospace-mcp sse``          -- starts SSE transport on localhost:8001
+        ``aerospace-mcp sse host port`` -- starts SSE on custom host/port
+    """
     import sys
 
+    # Check if the user requested SSE transport via the first CLI argument.
     if len(sys.argv) > 1 and sys.argv[1] == "sse":
         host = sys.argv[2] if len(sys.argv) > 2 else "localhost"
         port = int(sys.argv[3]) if len(sys.argv) > 3 else 8001
         run_sse(host, port)
     else:
+        # Default to stdio transport for production MCP host integration.
         run_stdio()
 
 

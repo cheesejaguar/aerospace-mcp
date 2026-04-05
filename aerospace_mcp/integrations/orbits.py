@@ -1,8 +1,27 @@
-"""
-Orbital mechanics and spacecraft trajectory analysis tools for aerospace MCP.
+"""Orbital mechanics and spacecraft trajectory analysis tools for aerospace MCP.
 
-Provides orbital mechanics calculations with manual implementations and optional
-advanced library integration for poliastro/astropy/spiceypy when available.
+Provides orbital mechanics calculations including:
+    - Classical orbital element conversions (Keplerian elements <-> state vectors)
+    - Kepler equation solver (Newton-Raphson iteration for eccentric anomaly)
+    - Orbit propagation with J2 secular perturbations (RAAN and argument of
+      periapsis drift rates)
+    - Hohmann transfer orbit delta-V computation (vis-viva equation)
+    - Simplified Lambert problem solver for two-body trajectory design
+    - Ground track calculation with Earth rotation correction
+    - Orbital rendezvous planning (phasing orbits, circularization)
+    - Porkchop plot analysis for interplanetary transfer windows
+    - Ephemeris position lookup (simplified circular orbits or SPICE kernels)
+
+Falls back to manual implementations when optional libraries (poliastro,
+astropy, spiceypy) are unavailable.
+
+References:
+    - Bate, Mueller, White, "Fundamentals of Astrodynamics" (1971)
+    - Vallado, "Fundamentals of Astrodynamics and Applications" (4th ed., 2013)
+    - Curtis, "Orbital Mechanics for Engineering Students" (4th ed., 2020)
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or spacecraft operations.
 """
 
 import math
@@ -10,16 +29,60 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-# Constants
-MU_EARTH = 3.986004418e14  # m³/s² - Earth's gravitational parameter
-R_EARTH = 6378137.0  # m - Earth's equatorial radius (WGS84)
-J2_EARTH = 1.08262668e-3  # Earth's J2 perturbation coefficient
-OMEGA_EARTH = 7.2921159e-5  # rad/s - Earth's rotation rate
+# ===========================================================================
+# Physical Constants
+# ===========================================================================
+
+# Earth's standard gravitational parameter (mu = G * M_Earth).
+# Source: IERS Conventions (2010), Table 1.1.
+# Units: m^3 / s^2
+MU_EARTH = 3.986004418e14
+
+# Earth's equatorial radius per WGS-84 ellipsoid.
+# Source: NIMA Technical Report TR8350.2, "Department of Defense World
+# Geodetic System 1984" (3rd ed., 2000).
+# Units: meters
+R_EARTH = 6378137.0
+
+# Earth's second zonal harmonic (oblateness) coefficient.
+# Captures the dominant gravitational perturbation due to the equatorial
+# bulge.  Causes secular drift in RAAN and argument of periapsis.
+# Source: EGM-96 / JGM-3 gravity model.
+# Dimensionless.
+J2_EARTH = 1.08262668e-3
+
+# Earth's mean sidereal rotation rate.
+# Source: IERS Conventions.
+# Units: rad / s
+OMEGA_EARTH = 7.2921159e-5
+
+
+# ===========================================================================
+# Data Classes -- Orbital State Representations
+# ===========================================================================
 
 
 @dataclass
 class OrbitElements:
-    """Classical orbital elements."""
+    """Classical (Keplerian) orbital elements.
+
+    The six classical orbital elements uniquely define a two-body conic
+    orbit and the position of a body along that orbit at a given epoch.
+
+    Attributes:
+        semi_major_axis_m: Semi-major axis *a* (m). Defines orbit size.
+        eccentricity: Eccentricity *e* (dimensionless, 0 = circle, <1 = ellipse).
+        inclination_deg: Inclination *i* (degrees). Angle between the
+            orbital plane and the equatorial plane.
+        raan_deg: Right ascension of ascending node *Omega* (degrees).
+            Angle in the equatorial plane from the vernal equinox to the
+            ascending node.
+        arg_periapsis_deg: Argument of periapsis *omega* (degrees). Angle
+            in the orbital plane from the ascending node to periapsis.
+        true_anomaly_deg: True anomaly *nu* (degrees). Angle in the
+            orbital plane from periapsis to the current position.
+        epoch_utc: Reference epoch in ISO-8601 UTC format.
+    """
 
     semi_major_axis_m: float  # Semi-major axis (m)
     eccentricity: float  # Eccentricity (dimensionless)
@@ -32,7 +95,14 @@ class OrbitElements:
 
 @dataclass
 class StateVector:
-    """Position and velocity state vector."""
+    """Cartesian position and velocity state vector in an inertial frame.
+
+    Attributes:
+        position_m: Position vector [x, y, z] in meters.
+        velocity_ms: Velocity vector [vx, vy, vz] in m/s.
+        epoch_utc: Reference epoch in ISO-8601 UTC format.
+        frame: Reference frame identifier (default ``"J2000"``).
+    """
 
     position_m: list[float]  # Position vector [x, y, z] in meters
     velocity_ms: list[float]  # Velocity vector [vx, vy, vz] in m/s
@@ -42,7 +112,16 @@ class StateVector:
 
 @dataclass
 class OrbitProperties:
-    """Computed orbital properties."""
+    """Derived physical properties of a two-body orbit.
+
+    Attributes:
+        period_s: Orbital period T = 2*pi*sqrt(a^3/mu) in seconds.
+        apoapsis_m: Apoapsis altitude above Earth surface (m).
+        periapsis_m: Periapsis altitude above Earth surface (m).
+        energy_j_kg: Specific orbital energy epsilon = -mu/(2a) in J/kg.
+        angular_momentum_m2s: Specific angular momentum magnitude
+            h = sqrt(mu*a*(1-e^2)) in m^2/s.
+    """
 
     period_s: float  # Orbital period (seconds)
     apoapsis_m: float  # Apoapsis altitude above Earth surface (m)
@@ -53,7 +132,14 @@ class OrbitProperties:
 
 @dataclass
 class GroundTrack:
-    """Ground track point."""
+    """Sub-satellite ground track point (latitude, longitude, altitude).
+
+    Attributes:
+        latitude_deg: Geodetic latitude in degrees (-90 to +90).
+        longitude_deg: Geodetic longitude in degrees (-180 to +180).
+        altitude_m: Altitude above Earth surface in meters.
+        time_utc: UTC timestamp in ISO-8601 format.
+    """
 
     latitude_deg: float
     longitude_deg: float
@@ -63,35 +149,83 @@ class GroundTrack:
 
 @dataclass
 class Maneuver:
-    """Orbital maneuver definition."""
+    """Impulsive orbital maneuver definition.
+
+    Attributes:
+        delta_v_ms: Impulsive delta-V vector [dvx, dvy, dvz] in m/s.
+        time_utc: Maneuver execution epoch in ISO-8601 UTC.
+        description: Human-readable description of the maneuver.
+    """
 
     delta_v_ms: list[float]  # Delta-V vector [x, y, z] in m/s
     time_utc: str  # Maneuver execution time
     description: str = ""  # Optional description
 
 
+# ===========================================================================
+# Vector Utility Functions
+# ===========================================================================
+
+
 def deg_to_rad(deg: float) -> float:
-    """Convert degrees to radians."""
+    """Convert degrees to radians.
+
+    Args:
+        deg: Angle in degrees.
+
+    Returns:
+        Angle in radians.
+    """
     return deg * math.pi / 180.0
 
 
 def rad_to_deg(rad: float) -> float:
-    """Convert radians to degrees."""
+    """Convert radians to degrees.
+
+    Args:
+        rad: Angle in radians.
+
+    Returns:
+        Angle in degrees.
+    """
     return rad * 180.0 / math.pi
 
 
 def vector_magnitude(vec: list[float]) -> float:
-    """Calculate vector magnitude."""
+    """Calculate the Euclidean (L2) norm of a vector.
+
+    Args:
+        vec: Input vector of arbitrary dimension.
+
+    Returns:
+        Scalar magnitude ||vec||.
+    """
     return math.sqrt(sum(x**2 for x in vec))
 
 
 def vector_dot(a: list[float], b: list[float]) -> float:
-    """Calculate dot product of two vectors."""
+    """Calculate the dot (inner) product of two vectors.
+
+    Args:
+        a: First vector.
+        b: Second vector (same length as *a*).
+
+    Returns:
+        Scalar dot product a . b.
+    """
     return sum(a[i] * b[i] for i in range(len(a)))
 
 
 def vector_cross(a: list[float], b: list[float]) -> list[float]:
-    """Calculate cross product of two 3D vectors."""
+    """Calculate the cross product of two 3-D vectors.
+
+    Args:
+        a: First 3-D vector.
+        b: Second 3-D vector.
+
+    Returns:
+        Cross product vector a x b.
+    """
     return [
         a[1] * b[2] - a[2] * b[1],
         a[2] * b[0] - a[0] * b[2],
@@ -100,11 +234,23 @@ def vector_cross(a: list[float], b: list[float]) -> list[float]:
 
 
 def vector_normalize(vec: list[float]) -> list[float]:
-    """Normalize a vector."""
+    """Return the unit vector in the direction of *vec*.
+
+    Args:
+        vec: Input 3-D vector.
+
+    Returns:
+        Unit vector (or zero vector if magnitude is zero).
+    """
     mag = vector_magnitude(vec)
     if mag == 0:
         return [0.0, 0.0, 0.0]
     return [x / mag for x in vec]
+
+
+# ===========================================================================
+# Kepler Equation Solver
+# ===========================================================================
 
 
 def kepler_equation_solver(
@@ -113,28 +259,48 @@ def kepler_equation_solver(
     tolerance: float = 1e-8,
     max_iterations: int = 50,
 ) -> float:
-    """
-    Solve Kepler's equation for eccentric anomaly using Newton-Raphson method.
+    """Solve Kepler's equation for eccentric anomaly via Newton-Raphson.
+
+    Kepler's equation relates mean anomaly *M* and eccentric anomaly *E*
+    for an elliptical orbit::
+
+        M = E - e * sin(E)
+
+    This transcendental equation has no closed-form solution and must be
+    solved iteratively.  The Newton-Raphson update is::
+
+        E_{n+1} = E_n - f(E_n) / f'(E_n)
+
+    where:
+        f(E)  = E - e*sin(E) - M
+        f'(E) = 1 - e*cos(E)
+
+    Convergence is typically achieved in 3-6 iterations for e < 0.9.
 
     Args:
-        mean_anomaly_rad: Mean anomaly in radians
-        eccentricity: Orbital eccentricity
-        tolerance: Convergence tolerance
-        max_iterations: Maximum iterations
+        mean_anomaly_rad: Mean anomaly *M* in radians.
+        eccentricity: Orbital eccentricity *e* (0 <= e < 1 for ellipses).
+        tolerance: Convergence tolerance on |E_{n+1} - E_n|.
+        max_iterations: Maximum number of Newton-Raphson iterations.
 
     Returns:
-        Eccentric anomaly in radians
+        Eccentric anomaly *E* in radians.
     """
-    # Initial guess
+    # Initial guess: for low eccentricity M is a good starting point;
+    # for high eccentricity, pi avoids the nearly-flat region near E = 0.
     E = mean_anomaly_rad if eccentricity < 0.8 else math.pi
 
     for _ in range(max_iterations):
+        # f(E)  = E - e*sin(E) - M   (Kepler's equation residual)
         f = E - eccentricity * math.sin(E) - mean_anomaly_rad
+        # f'(E) = 1 - e*cos(E)       (derivative w.r.t. E)
         f_prime = 1 - eccentricity * math.cos(E)
 
+        # Guard against near-zero derivative (degenerate case)
         if abs(f_prime) < 1e-12:
             break
 
+        # Newton-Raphson update: E_{n+1} = E_n - f / f'
         E_new = E - f / f_prime
 
         if abs(E_new - E) < tolerance:
@@ -145,15 +311,26 @@ def kepler_equation_solver(
     return E
 
 
+# ===========================================================================
+# Orbital Element <-> State Vector Conversions
+# ===========================================================================
+
+
 def elements_to_state_vector(elements: OrbitElements) -> StateVector:
-    """
-    Convert orbital elements to state vector using manual calculations.
+    """Convert classical orbital elements to a Cartesian state vector.
+
+    Algorithm (Vallado, 4th ed., Algorithm 10):
+        1. Compute the orbital radius from the conic equation.
+        2. Express position and velocity in the perifocal (PQW) frame.
+        3. Rotate from PQW to the J2000 inertial frame using the
+           3-1-3 Euler angle rotation sequence (RAAN, inclination,
+           argument of periapsis).
 
     Args:
-        elements: Orbital elements
+        elements: Classical (Keplerian) orbital elements.
 
     Returns:
-        State vector in J2000 frame
+        State vector in the J2000 Earth-centered inertial frame.
     """
     # Convert angles to radians
     i = deg_to_rad(elements.inclination_deg)
@@ -165,27 +342,35 @@ def elements_to_state_vector(elements: OrbitElements) -> StateVector:
     a = elements.semi_major_axis_m
     e = elements.eccentricity
 
-    # Calculate distance and flight path angle
+    # Conic equation: r = p / (1 + e*cos(nu)), where p = a*(1 - e^2)
+    # is the semi-latus rectum.
     r = a * (1 - e**2) / (1 + e * math.cos(nu))
 
-    # Position in perifocal coordinates
+    # Position in perifocal (PQW) coordinates: x along periapsis, y
+    # perpendicular in the orbital plane, z = 0 (by definition).
     r_peri = [r * math.cos(nu), r * math.sin(nu), 0.0]
 
-    # Velocity in perifocal coordinates
+    # Semi-latus rectum p = a*(1 - e^2)
     p = a * (1 - e**2)
 
+    # Velocity in perifocal coordinates derived from the vis-viva
+    # relations in the PQW frame:
+    #   v_P = -sqrt(mu/p) * sin(nu)
+    #   v_Q =  sqrt(mu/p) * (e + cos(nu))
     v_peri = [
         -math.sqrt(MU_EARTH / p) * math.sin(nu),
         math.sqrt(MU_EARTH / p) * (e + math.cos(nu)),
         0.0,
     ]
 
-    # Rotation matrices
+    # Pre-compute trigonometric values for the rotation matrix
     cos_raan, sin_raan = math.cos(raan), math.sin(raan)
     cos_i, sin_i = math.cos(i), math.sin(i)
     cos_arg, sin_arg = math.cos(arg_pe), math.sin(arg_pe)
 
-    # Rotation matrix from perifocal to J2000
+    # Rotation matrix [R] = R3(-RAAN) * R1(-i) * R3(-omega)
+    # Transforms perifocal (PQW) -> J2000 inertial frame.
+    # See Vallado (2013), Eq. 4-44.
     R11 = cos_raan * cos_arg - sin_raan * sin_arg * cos_i
     R12 = -cos_raan * sin_arg - sin_raan * cos_arg * cos_i
     R13 = sin_raan * sin_i
@@ -198,13 +383,14 @@ def elements_to_state_vector(elements: OrbitElements) -> StateVector:
     R32 = cos_arg * sin_i
     R33 = cos_i
 
-    # Transform to J2000 frame
+    # Apply rotation: r_J2000 = [R] * r_PQW
     r_j2000 = [
         R11 * r_peri[0] + R12 * r_peri[1] + R13 * r_peri[2],
         R21 * r_peri[0] + R22 * r_peri[1] + R23 * r_peri[2],
         R31 * r_peri[0] + R32 * r_peri[1] + R33 * r_peri[2],
     ]
 
+    # Apply same rotation to velocity: v_J2000 = [R] * v_PQW
     v_j2000 = [
         R11 * v_peri[0] + R12 * v_peri[1] + R13 * v_peri[2],
         R21 * v_peri[0] + R22 * v_peri[1] + R23 * v_peri[2],
@@ -220,14 +406,22 @@ def elements_to_state_vector(elements: OrbitElements) -> StateVector:
 
 
 def state_vector_to_elements(state: StateVector) -> OrbitElements:
-    """
-    Convert state vector to orbital elements using manual calculations.
+    """Convert a Cartesian state vector to classical orbital elements.
+
+    Algorithm (Vallado, 4th ed., Algorithm 9):
+        1. Compute specific angular momentum h = r x v.
+        2. Compute specific orbital energy to get semi-major axis.
+        3. Compute eccentricity vector from the vector identity.
+        4. Determine inclination from h_z / |h|.
+        5. Compute node vector n = K x h to find RAAN.
+        6. Derive argument of periapsis and true anomaly using
+           dot-product formulas with quadrant checks.
 
     Args:
-        state: State vector in J2000 frame
+        state: State vector in J2000 inertial frame.
 
     Returns:
-        Classical orbital elements
+        Classical (Keplerian) orbital elements.
     """
     r_vec = state.position_m
     v_vec = state.velocity_ms
@@ -236,36 +430,40 @@ def state_vector_to_elements(state: StateVector) -> OrbitElements:
     r = vector_magnitude(r_vec)
     v = vector_magnitude(v_vec)
 
-    # Specific angular momentum
+    # Specific angular momentum: h = r x v
     h_vec = vector_cross(r_vec, v_vec)
     h = vector_magnitude(h_vec)
 
-    # Semi-major axis
+    # Specific orbital energy (vis-viva): epsilon = v^2/2 - mu/r
+    # Semi-major axis from energy: a = -mu / (2*epsilon)
     energy = v**2 / 2 - MU_EARTH / r
     a = -MU_EARTH / (2 * energy)
 
-    # Eccentricity vector
+    # Eccentricity vector: e_vec = (v x h)/mu - r_hat
+    # Points from the focus toward periapsis; |e_vec| = eccentricity.
     v_cross_h = vector_cross(v_vec, h_vec)
     e_vec = [v_cross_h[i] / MU_EARTH - r_vec[i] / r for i in range(3)]
     e = vector_magnitude(e_vec)
 
-    # Inclination
+    # Inclination: cos(i) = h_z / |h|  (angle between h and K-axis)
     i = math.acos(h_vec[2] / h)
 
-    # Node vector
+    # Node vector: n = K x h (points toward the ascending node)
     k_vec = [0, 0, 1]
     n_vec = vector_cross(k_vec, h_vec)
     n = vector_magnitude(n_vec)
 
-    # RAAN
+    # Right ascension of ascending node (RAAN): cos(Omega) = n_x / |n|
+    # Quadrant check: if n_y < 0 then Omega is in [pi, 2*pi].
     if n > 1e-10:
         raan = math.acos(n_vec[0] / n)
         if n_vec[1] < 0:
             raan = 2 * math.pi - raan
     else:
-        raan = 0.0
+        raan = 0.0  # Undefined for equatorial orbits; set to zero.
 
-    # Argument of periapsis
+    # Argument of periapsis: cos(omega) = (n . e) / (|n| * |e|)
+    # Quadrant check: if e_z < 0 then omega is in [pi, 2*pi].
     if n > 1e-10 and e > 1e-10:
         cos_arg_pe = vector_dot(n_vec, e_vec) / (n * e)
         cos_arg_pe = max(-1, min(1, cos_arg_pe))  # Clamp to [-1, 1]
@@ -273,17 +471,18 @@ def state_vector_to_elements(state: StateVector) -> OrbitElements:
         if e_vec[2] < 0:
             arg_pe = 2 * math.pi - arg_pe
     else:
-        arg_pe = 0.0
+        arg_pe = 0.0  # Undefined for circular or equatorial orbits.
 
-    # True anomaly
+    # True anomaly: cos(nu) = (e . r) / (|e| * |r|)
+    # Quadrant check: if r . v < 0 then spacecraft is past apoapsis.
     if e > 1e-10:
         cos_nu = vector_dot(e_vec, r_vec) / (e * r)
-        cos_nu = max(-1, min(1, cos_nu))  # Clamp to [-1, 1]
+        cos_nu = max(-1, min(1, cos_nu))  # Clamp for numerical safety
         nu = math.acos(cos_nu)
         if vector_dot(r_vec, v_vec) < 0:
             nu = 2 * math.pi - nu
     else:
-        # For circular orbits, use longitude of ascending node
+        # For circular orbits, true anomaly measured from ascending node.
         if n > 1e-10:
             cos_nu = vector_dot(n_vec, r_vec) / (n * r)
             cos_nu = max(-1, min(1, cos_nu))
@@ -291,6 +490,7 @@ def state_vector_to_elements(state: StateVector) -> OrbitElements:
             if r_vec[2] < 0:
                 nu = 2 * math.pi - nu
         else:
+            # Circular equatorial orbit: use true longitude.
             nu = math.atan2(r_vec[1], r_vec[0])
             if nu < 0:
                 nu += 2 * math.pi
@@ -306,30 +506,38 @@ def state_vector_to_elements(state: StateVector) -> OrbitElements:
     )
 
 
+# ===========================================================================
+# Orbit Property Calculations
+# ===========================================================================
+
+
 def calculate_orbit_properties(elements: OrbitElements) -> OrbitProperties:
-    """
-    Calculate orbital properties from elements.
+    """Calculate derived physical properties of an orbit.
+
+    Uses the vis-viva equation and Kepler's third law to compute
+    period, apsides, energy, and angular momentum.
 
     Args:
-        elements: Orbital elements
+        elements: Classical orbital elements.
 
     Returns:
-        Orbital properties
+        Computed orbital properties.
     """
     a = elements.semi_major_axis_m
     e = elements.eccentricity
 
-    # Orbital period
+    # Kepler's third law: T = 2*pi * sqrt(a^3 / mu)
     period = 2 * math.pi * math.sqrt(a**3 / MU_EARTH)
 
-    # Apoapsis and periapsis altitudes
+    # Apoapsis and periapsis *altitudes* (above Earth surface)
+    # r_ap = a*(1+e),  r_pe = a*(1-e)  are orbital radii.
     r_ap = a * (1 + e) - R_EARTH
     r_pe = a * (1 - e) - R_EARTH
 
-    # Specific orbital energy
+    # Specific orbital energy: epsilon = -mu / (2a)
     energy = -MU_EARTH / (2 * a)
 
-    # Specific angular momentum
+    # Specific angular momentum: h = sqrt(mu * a * (1 - e^2))
     h = math.sqrt(MU_EARTH * a * (1 - e**2))
 
     return OrbitProperties(
@@ -341,36 +549,63 @@ def calculate_orbit_properties(elements: OrbitElements) -> OrbitProperties:
     )
 
 
+# ===========================================================================
+# Orbit Propagation with J2 Perturbations
+# ===========================================================================
+
+
 def propagate_orbit_j2(
     initial_state: StateVector, time_span_s: float, time_step_s: float = 60.0
 ) -> list[StateVector]:
-    """
-    Propagate orbit with J2 perturbations using numerical integration.
+    """Propagate an orbit numerically with J2 oblateness perturbations.
+
+    Uses a 4th-order Runge-Kutta (RK4) integrator with the equations
+    of motion including the central body gravitational acceleration and
+    the J2 zonal harmonic perturbation.
+
+    The J2 perturbation acceleration in Cartesian coordinates is::
+
+        a_J2_x = (3/2) * J2 * mu * R_E^2 / r^5 * x * (1 - 5*(z/r)^2)
+        a_J2_y = (3/2) * J2 * mu * R_E^2 / r^5 * y * (1 - 5*(z/r)^2)
+        a_J2_z = (3/2) * J2 * mu * R_E^2 / r^5 * z * (3 - 5*(z/r)^2)
+
+    This produces secular drift rates in RAAN and argument of periapsis:
+        dOmega/dt = -(3/2) * n * J2 * (R_E/p)^2 * cos(i)
+        domega/dt = -(3/2) * n * J2 * (R_E/p)^2 * (5/2 * sin^2(i) - 2)
 
     Args:
-        initial_state: Initial state vector
-        time_span_s: Propagation time span (seconds)
-        time_step_s: Integration time step (seconds)
+        initial_state: Initial state vector in the J2000 frame.
+        time_span_s: Total propagation duration in seconds.
+        time_step_s: Fixed integration time step in seconds.
 
     Returns:
-        List of state vectors over time
+        List of state vectors sampled at each time step.
     """
 
     def acceleration_j2(r_vec: list[float]) -> list[float]:
-        """Calculate acceleration including J2 perturbations."""
+        """Calculate total acceleration (central body + J2).
+
+        Args:
+            r_vec: Position vector [x, y, z] in meters.
+
+        Returns:
+            Acceleration vector [ax, ay, az] in m/s^2.
+        """
         r = vector_magnitude(r_vec)
 
-        # Central body acceleration
+        # Two-body (Keplerian) central-force acceleration: a = -mu * r / |r|^3
         a_central = [-MU_EARTH * r_vec[i] / r**3 for i in range(3)]
 
-        # J2 perturbation
+        # J2 perturbation acceleration (see Vallado, Eq. 8-35).
+        # factor = (3/2) * J2 * mu * R_E^2 / r^5
         factor = 1.5 * J2_EARTH * MU_EARTH * R_EARTH**2 / r**5
+        # (z/r)^2 term determines latitude-dependent perturbation
         z2_r2 = (r_vec[2] / r) ** 2
 
         a_j2 = [
-            factor * r_vec[0] * (1 - 5 * z2_r2),
-            factor * r_vec[1] * (1 - 5 * z2_r2),
-            factor * r_vec[2] * (3 - 5 * z2_r2),
+            factor * r_vec[0] * (1 - 5 * z2_r2),  # x-component
+            factor * r_vec[1] * (1 - 5 * z2_r2),  # y-component
+            factor * r_vec[2] * (3 - 5 * z2_r2),  # z-component (note: 3, not 1)
         ]
 
         return [a_central[i] + a_j2[i] for i in range(3)]
@@ -386,12 +621,13 @@ def propagate_orbit_j2(
     except (ValueError, TypeError):
         epoch = datetime.now(UTC)
 
-    # Numerical integration (RK4)
+    # 4th-order Runge-Kutta (RK4) numerical integration.
+    # State: [r, v]; derivatives: dr/dt = v, dv/dt = a(r).
     t = 0.0
     while t < time_span_s:
         dt = min(time_step_s, time_span_s - t)
 
-        # RK4 integration
+        # RK4 stages -- k_r are velocity estimates, k_v are acceleration estimates
         k1_r = v
         k1_v = acceleration_j2(r)
 
@@ -410,7 +646,8 @@ def propagate_orbit_j2(
         k4_r = v4
         k4_v = acceleration_j2(r4)
 
-        # Update state
+        # RK4 weighted update:
+        # y_{n+1} = y_n + (dt/6) * (k1 + 2*k2 + 2*k3 + k4)
         r = [
             r[i] + dt / 6 * (k1_r[i] + 2 * k2_r[i] + 2 * k3_r[i] + k4_r[i])
             for i in range(3)
@@ -437,18 +674,27 @@ def propagate_orbit_j2(
     return states
 
 
+# ===========================================================================
+# Ground Track Computation
+# ===========================================================================
+
+
 def calculate_ground_track(
     orbit_states: list[StateVector], time_step_s: float = 60.0
 ) -> list[GroundTrack]:
-    """
-    Calculate ground track from orbit state vectors.
+    """Calculate the sub-satellite ground track from orbit state vectors.
+
+    Converts ECI position to geodetic latitude/longitude by accounting
+    for Earth's rotation.  Longitude is adjusted by subtracting
+    ``OMEGA_EARTH * elapsed_time`` to approximate the ECI-to-ECEF
+    transformation (ignoring precession/nutation for simplicity).
 
     Args:
-        orbit_states: List of state vectors
-        time_step_s: Time step between states (seconds)
+        orbit_states: List of state vectors in the J2000 frame.
+        time_step_s: Time step between consecutive states (seconds).
 
     Returns:
-        List of ground track points
+        List of ground track points with lat/lon/alt.
     """
     ground_track = []
 
@@ -487,33 +733,54 @@ def calculate_ground_track(
     return ground_track
 
 
+# ===========================================================================
+# Orbital Maneuver Calculations
+# ===========================================================================
+
+
 def hohmann_transfer(r1_m: float, r2_m: float) -> dict[str, float]:
-    """
-    Calculate Hohmann transfer orbit parameters.
+    """Calculate a Hohmann transfer between two circular orbits.
+
+    The Hohmann transfer is the minimum-energy two-impulse transfer
+    between coplanar circular orbits.  It uses an elliptical transfer
+    orbit that is tangent to both the initial and final circular orbits.
+
+    Delta-V derivation (vis-viva equation: v^2 = mu*(2/r - 1/a)):
+        1. Transfer orbit semi-major axis: a_t = (r1 + r2) / 2
+        2. At periapsis (r = r1):
+           v_t1 = sqrt(mu * (2/r1 - 1/a_t))
+           dv1 = v_t1 - v_circ1
+        3. At apoapsis (r = r2):
+           v_t2 = sqrt(mu * (2/r2 - 1/a_t))
+           dv2 = v_circ2 - v_t2
 
     Args:
-        r1_m: Initial circular orbit radius (m)
-        r2_m: Final circular orbit radius (m)
+        r1_m: Initial circular orbit radius (m) -- measured from Earth center.
+        r2_m: Final circular orbit radius (m) -- measured from Earth center.
 
     Returns:
-        Transfer parameters including delta-V requirements
+        Dictionary with delta-V values, transfer time, and transfer
+        semi-major axis.
     """
-    # Transfer orbit semi-major axis
+    # Transfer orbit semi-major axis (average of initial and final radii)
     a_transfer = (r1_m + r2_m) / 2
 
-    # Velocities
+    # Circular orbit velocities: v_circ = sqrt(mu / r)
     v1_circular = math.sqrt(MU_EARTH / r1_m)
     v2_circular = math.sqrt(MU_EARTH / r2_m)
 
+    # Transfer orbit velocities at periapsis and apoapsis (vis-viva equation)
+    # v = sqrt(mu * (2/r - 1/a))
     v1_transfer = math.sqrt(MU_EARTH * (2 / r1_m - 1 / a_transfer))
     v2_transfer = math.sqrt(MU_EARTH * (2 / r2_m - 1 / a_transfer))
 
-    # Delta-V requirements (signed values)
-    dv1 = v1_transfer - v1_circular  # Positive for prograde, negative for retrograde
-    dv2 = v2_circular - v2_transfer  # Positive for prograde, negative for retrograde
-    dv_total = abs(dv1) + abs(dv2)  # Total magnitude
+    # Delta-V at each impulse point (signed: positive = prograde burn)
+    dv1 = v1_transfer - v1_circular  # Burn at departure orbit
+    dv2 = v2_circular - v2_transfer  # Burn at arrival orbit
+    dv_total = abs(dv1) + abs(dv2)  # Total delta-V magnitude
 
-    # Transfer time
+    # Transfer time = half the period of the transfer ellipse
+    # T_transfer = pi * sqrt(a_t^3 / mu)
     transfer_time = math.pi * math.sqrt(a_transfer**3 / MU_EARTH)
 
     return {
@@ -526,34 +793,59 @@ def hohmann_transfer(r1_m: float, r2_m: float) -> dict[str, float]:
     }
 
 
+# ===========================================================================
+# Lambert Problem Solver (Simplified)
+# ===========================================================================
+
+
 def lambert_solver_simple(
     r1_vec: list[float], r2_vec: list[float], time_flight_s: float, mu: float = MU_EARTH
 ) -> dict[str, Any]:
-    """
-    Simple Lambert problem solver for two-body trajectory.
+    """Simplified Lambert problem solver for two-body trajectory design.
+
+    The Lambert problem finds the orbit that connects two position
+    vectors in a given time of flight.  This implementation uses a
+    simplified approach rather than a full universal-variable or Gauss
+    iterative method.
+
+    Algorithm outline:
+        1. Compute chord length c = |r2 - r1| and semi-perimeter
+           s = (r1 + r2 + c) / 2.
+        2. Check feasibility against minimum-energy transfer time
+           t_min = pi * sqrt(a_min^3 / mu), where a_min = s/2.
+        3. Estimate the transfer semi-major axis from Kepler's 3rd law.
+        4. Approximate departure/arrival velocities using tangential
+           (circular orbit) assumptions.
+
+    Note:
+        This is a first-order approximation.  A production Lambert solver
+        (e.g., Izzo's or Gooding's algorithm) should be used for mission
+        design.
 
     Args:
-        r1_vec: Initial position vector (m)
-        r2_vec: Final position vector (m)
-        time_flight_s: Time of flight (seconds)
-        mu: Gravitational parameter (m³/s²)
+        r1_vec: Initial (departure) position vector in meters.
+        r2_vec: Final (arrival) position vector in meters.
+        time_flight_s: Time of flight between the two positions (seconds).
+        mu: Gravitational parameter of the central body (m^3/s^2).
 
     Returns:
-        Dictionary with initial and final velocity vectors
+        Dictionary containing departure/arrival velocity vectors and
+        transfer geometry.  Includes a ``"feasible"`` flag.
     """
     r1 = vector_magnitude(r1_vec)
     r2 = vector_magnitude(r2_vec)
 
-    # Chord length
+    # Chord length between the two position vectors
     c = vector_magnitude([r2_vec[i] - r1_vec[i] for i in range(3)])
 
-    # Semi-perimeter
+    # Semi-perimeter of the triangle formed by the focus and two positions
     s = (r1 + r2 + c) / 2
 
-    # Minimum energy ellipse semi-major axis
+    # Minimum-energy transfer ellipse: a_min = s / 2
     a_min = s / 2
 
-    # Check if transfer time is feasible
+    # Minimum transfer time (parabolic / minimum-energy limit):
+    # t_min = pi * sqrt(a_min^3 / mu)
     t_min = math.pi * math.sqrt(a_min**3 / mu)
 
     if time_flight_s < t_min:
@@ -564,31 +856,29 @@ def lambert_solver_simple(
             "v2_ms": [0, 0, 0],
         }
 
-    # Simplified solution assuming elliptical transfer
-    # This is an approximation - full Lambert solver requires iterative methods
-
-    # Transfer angle (simplified)
+    # Transfer angle from dot product: cos(dnu) = (r1 . r2) / (|r1| |r2|)
     cos_dnu = vector_dot(r1_vec, r2_vec) / (r1 * r2)
-    cos_dnu = max(-1, min(1, cos_dnu))  # Clamp
+    cos_dnu = max(-1, min(1, cos_dnu))  # Clamp for numerical safety
     dnu = math.acos(cos_dnu)
 
-    # Approximate semi-major axis for given flight time
-    # Using Kepler's 3rd law and approximation
+    # Approximate semi-major axis from Kepler's 3rd law:
+    # n = 2*pi / T  =>  a = (mu / n^2)^(1/3)
     n_approx = 2 * math.pi / time_flight_s  # Approximate mean motion
     a_approx = (mu / n_approx**2) ** (1 / 3)
 
-    # Approximate velocities (simplified circular approximation)
+    # Approximate velocity magnitudes (circular orbit assumption: v = sqrt(mu/r))
     v1_mag = math.sqrt(mu / r1)
     v2_mag = math.sqrt(mu / r2)
 
-    # Direction vectors (perpendicular to radius for circular approximation)
+    # Unit vectors along each radius
     r1_unit = vector_normalize(r1_vec)
     r2_unit = vector_normalize(r2_vec)
 
-    # Simplified velocity directions (tangential)
+    # Orbital plane normal from h = r1 x r2
     h_vec = vector_cross(r1_vec, r2_vec)
     h_unit = vector_normalize(h_vec)
 
+    # Tangential velocity directions (perpendicular to radius in-plane)
     v1_dir = vector_normalize(vector_cross(h_unit, r1_unit))
     v2_dir = vector_normalize(vector_cross(h_unit, r2_unit))
 
@@ -606,18 +896,28 @@ def lambert_solver_simple(
     }
 
 
+# ===========================================================================
+# Orbital Rendezvous Planning
+# ===========================================================================
+
+
 def orbital_rendezvous_planning(
     chaser_elements: OrbitElements, target_elements: OrbitElements
 ) -> dict[str, Any]:
-    """
-    Plan orbital rendezvous maneuvers between two spacecraft.
+    """Plan orbital rendezvous maneuvers between two spacecraft.
+
+    Computes the relative geometry (phase angle, distance) between a
+    chaser and target spacecraft, estimates the synodic period for
+    phasing, and generates a simplified maneuver sequence including
+    circularization and altitude-matching burns.
 
     Args:
-        chaser_elements: Chaser spacecraft orbital elements
-        target_elements: Target spacecraft orbital elements
+        chaser_elements: Chaser spacecraft orbital elements.
+        target_elements: Target spacecraft orbital elements.
 
     Returns:
-        Rendezvous plan with phasing and approach maneuvers
+        Rendezvous plan dictionary with relative distance, phase angle,
+        phasing time, delta-V estimates, and maneuver list.
     """
     # Convert to state vectors for analysis
     chaser_state = elements_to_state_vector(chaser_elements)
@@ -730,7 +1030,11 @@ def orbital_rendezvous_planning(
     }
 
 
-# Update availability
+# ===========================================================================
+# Interplanetary Porkchop Plot Analysis
+# ===========================================================================
+
+
 def porkchop_plot_analysis(
     departure_body: str = "Earth",
     arrival_body: str = "Mars",
@@ -739,19 +1043,24 @@ def porkchop_plot_analysis(
     min_tof_days: int = 100,
     max_tof_days: int = 400,
 ) -> dict[str, Any]:
-    """
-    Generate porkchop plot analysis for interplanetary transfers.
+    """Generate porkchop plot data for interplanetary transfer windows.
+
+    A porkchop plot maps departure date vs. arrival date (or time of
+    flight) with contours of characteristic energy C3 or delta-V.
+    This implementation uses simplified circular planetary orbits;
+    production applications should use JPL SPICE ephemerides.
 
     Args:
-        departure_body: Departure celestial body (default: Earth)
-        arrival_body: Arrival celestial body (default: Mars)
-        departure_dates: List of departure dates (ISO format)
-        arrival_dates: List of arrival dates (ISO format)
-        min_tof_days: Minimum time of flight (days)
-        max_tof_days: Maximum time of flight (days)
+        departure_body: Name of the departure celestial body.
+        arrival_body: Name of the arrival celestial body.
+        departure_dates: List of departure epoch strings (ISO-8601).
+        arrival_dates: List of arrival epoch strings (ISO-8601).
+        min_tof_days: Minimum allowed time of flight in days.
+        max_tof_days: Maximum allowed time of flight in days.
 
     Returns:
-        Dictionary containing transfer analysis grid
+        Dictionary containing the transfer grid, optimal transfer,
+        and summary statistics.
     """
     # Default date ranges if not provided
     if departure_dates is None:
@@ -970,23 +1279,29 @@ def porkchop_plot_analysis(
     }
 
 
+# ===========================================================================
+# Ephemeris Position Lookup
+# ===========================================================================
+
+
 def get_ephemeris_position(
     body: str, epoch_utc: str, frame: str = "J2000"
 ) -> dict[str, Any]:
-    """
-    Get ephemeris position of celestial body (stub implementation).
+    """Get the heliocentric position and velocity of a celestial body.
+
+    This is a simplified implementation that models planetary orbits as
+    circles with constant angular velocity.  For production mission
+    design, use SPICE kernels via ``spiceypy``.
 
     Args:
-        body: Celestial body name (Earth, Mars, Venus, etc.)
-        epoch_utc: UTC epoch in ISO format
-        frame: Reference frame (default: J2000)
+        body: Celestial body name (``"Earth"``, ``"Mars"``, ``"Venus"``,
+            or ``"Jupiter"``).
+        epoch_utc: UTC epoch in ISO-8601 format.
+        frame: Reference frame identifier (default ``"J2000"``).
 
     Returns:
-        Position and velocity vectors, with accuracy notes
-
-    Note:
-        This is a simplified implementation using circular orbits.
-        For production use, install SPICE kernels and use spiceypy or similar.
+        Dictionary with position (m), velocity (m/s), accuracy level,
+        and SPICE recommendations.
     """
     # Import required for date parsing
     import datetime
@@ -1075,7 +1390,10 @@ def get_ephemeris_position(
     }
 
 
-# Optional SPICE integration (if available)
+# ===========================================================================
+# Optional SPICE Integration
+# ===========================================================================
+
 SPICE_AVAILABLE = False
 try:
     import spiceypy as spice

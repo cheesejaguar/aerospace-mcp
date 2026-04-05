@@ -1,4 +1,16 @@
-"""Agent tools for helping users interact with aerospace-mcp tools effectively."""
+"""Agent tools for helping users interact with aerospace-mcp tools effectively.
+
+Provides LLM-powered assistant tools that help users:
+- Select the most appropriate aerospace-mcp tool for a given task.
+- Format input data correctly for a specific tool's expected schema.
+
+These tools use GPT-5-Medium via LiteLLM and require:
+- LLM_TOOLS_ENABLED=true environment variable to be set.
+- OPENAI_API_KEY environment variable for API authentication.
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
+"""
 
 import json
 import logging
@@ -182,7 +194,12 @@ def format_data_for_tool(
         raw_data: Any raw data that needs to be formatted (optional)
 
     Returns:
-        Formatted JSON string with the correct parameters for the tool
+        Formatted JSON string with the correct parameters for the tool,
+        or a JSON error object if the tool is not found or LLM call fails.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings
+        or JSON error objects.
     """
     # Check if LLM tools are enabled
     if not LLM_TOOLS_ENABLED:
@@ -259,7 +276,11 @@ def select_aerospace_tool(user_task: str, user_context: str = "") -> str:
         user_context: Additional context about the user's situation (optional)
 
     Returns:
-        Recommendation with tool name(s) and usage guidance
+        Recommendation with tool name(s) and usage guidance, including
+        primary tool, secondary tools, workflow steps, and considerations.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     # Check if LLM tools are enabled
     if not LLM_TOOLS_ENABLED:

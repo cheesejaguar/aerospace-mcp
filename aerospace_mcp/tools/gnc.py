@@ -1,8 +1,23 @@
 """Guidance, Navigation, and Control (GNC) tools for the Aerospace MCP server.
 
 Provides tools for:
-- Kalman filter state estimation
-- LQR controller design
+- Kalman filter state estimation (prediction/update cycle for sensor fusion).
+- LQR (Linear Quadratic Regulator) optimal controller design.
+
+The Kalman filter implements the standard predict-update cycle:
+    Predict:  x_pred = F * x,  P_pred = F * P * F^T + Q
+    Update:   K = P_pred * H^T * (H * P_pred * H^T + R)^{-1}
+              x = x_pred + K * (z - H * x_pred)
+              P = (I - K * H) * P_pred
+
+The LQR controller minimizes the infinite-horizon cost function:
+    J = integral(x^T Q x + u^T R u) dt
+by solving the continuous algebraic Riccati equation (CARE):
+    A^T S + S A - S B R^{-1} B^T S + Q = 0
+to obtain the optimal gain K = R^{-1} B^T S.
+
+WARNING: This module is for educational and research purposes only.
+Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
 import json
@@ -13,7 +28,15 @@ logger = logging.getLogger(__name__)
 
 
 def _convert_to_native(obj):
-    """Convert numpy types to native Python types for JSON serialization."""
+    """Convert numpy types to native Python types for JSON serialization.
+
+    Args:
+        obj: Any Python object, potentially containing numpy types.
+
+    Returns:
+        The same object with all numpy scalars, arrays, and booleans
+        replaced by their native Python equivalents.
+    """
     try:
         import numpy as np
 
@@ -64,7 +87,11 @@ def kalman_filter_state_estimation(
         dt: Time step for prediction (used if not in measurements)
 
     Returns:
-        Formatted string with filtered state estimates
+        Formatted string with filtered state estimates, covariance diagonals,
+        and innovation statistics.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
         # Try to use filterpy if available
@@ -77,29 +104,35 @@ def kalman_filter_state_estimation(
 
         n = len(initial_state)
 
-        # Build state transition matrix based on dynamics model
+        # Build state transition matrix F based on dynamics model.
+        # F propagates the state forward by one time step: x_k+1 = F * x_k
         if dynamics_model == "constant_velocity":
             # State: [x, y, vx, vy]
+            # Kinematic equations: x_new = x + vx*dt, vx_new = vx (constant)
             if n == 4:
                 F = [
-                    [1, 0, dt, 0],
-                    [0, 1, 0, dt],
-                    [0, 0, 1, 0],
-                    [0, 0, 0, 1],
+                    [1, 0, dt, 0],  # x = x + vx*dt
+                    [0, 1, 0, dt],  # y = y + vy*dt
+                    [0, 0, 1, 0],  # vx = vx (constant velocity)
+                    [0, 0, 0, 1],  # vy = vy (constant velocity)
                 ]
             else:
                 # Default to identity
                 F = [[1 if i == j else 0 for j in range(n)] for i in range(n)]
         elif dynamics_model == "constant_acceleration":
             # State: [x, y, vx, vy, ax, ay]
+            # Kinematic equations with constant acceleration:
+            #   x_new = x + vx*dt + 0.5*ax*dt^2
+            #   vx_new = vx + ax*dt
+            #   ax_new = ax (constant)
             if n == 6:
                 F = [
-                    [1, 0, dt, 0, 0.5 * dt**2, 0],
-                    [0, 1, 0, dt, 0, 0.5 * dt**2],
-                    [0, 0, 1, 0, dt, 0],
-                    [0, 0, 0, 1, 0, dt],
-                    [0, 0, 0, 0, 1, 0],
-                    [0, 0, 0, 0, 0, 1],
+                    [1, 0, dt, 0, 0.5 * dt**2, 0],  # x = x + vx*dt + 0.5*ax*dt^2
+                    [0, 1, 0, dt, 0, 0.5 * dt**2],  # y = y + vy*dt + 0.5*ay*dt^2
+                    [0, 0, 1, 0, dt, 0],  # vx = vx + ax*dt
+                    [0, 0, 0, 1, 0, dt],  # vy = vy + ay*dt
+                    [0, 0, 0, 0, 1, 0],  # ax = ax (constant)
+                    [0, 0, 0, 0, 0, 1],  # ay = ay (constant)
                 ]
             else:
                 F = [[1 if i == j else 0 for j in range(n)] for i in range(n)]
@@ -125,10 +158,11 @@ def kalman_filter_state_estimation(
             innovations = []
 
             for i, meas in enumerate(measurements):
-                # Predict
+                # -- PREDICT STEP --
+                # Propagate state estimate forward: x_pred = F*x, P_pred = F*P*F^T + Q
                 kf.predict()
 
-                # Update with measurement
+                # -- UPDATE STEP --
                 z = np.array(meas.get("z", initial_state)).reshape(-1, 1)
 
                 # Custom H matrix if provided
@@ -137,11 +171,15 @@ def kalman_filter_state_estimation(
                 else:
                     kf.H = np.eye(n)
 
-                # Calculate innovation before update
+                # Innovation (measurement residual): y = z - H*x_pred
+                # Measures discrepancy between actual measurement and predicted one.
                 y = z - np.dot(kf.H, kf.x)
                 innovations.append(y.flatten().tolist())
 
-                # Update
+                # Update: compute Kalman gain K, then correct state and covariance.
+                # K = P_pred * H^T * (H * P_pred * H^T + R)^{-1}
+                # x = x_pred + K*y
+                # P = (I - K*H) * P_pred
                 kf.update(z)
 
                 filtered_states.append(kf.x.flatten().tolist())
@@ -199,7 +237,9 @@ def kalman_filter_state_estimation(
             R = measurement_noise
 
             for meas in measurements:
-                # Predict
+                # -- PREDICT STEP (manual implementation) --
+                # x_pred = F * x          (state propagation)
+                # P_pred = F * P * F^T + Q (covariance propagation)
                 x_pred = mat_mult(F, x)
                 P_pred = mat_add(mat_mult(mat_mult(F, P), mat_transpose(F)), Q)
 
@@ -212,11 +252,11 @@ def kalman_filter_state_estimation(
                 y = mat_sub(z, mat_mult(H, x_pred))
                 innovations.append([y[i][0] for i in range(len(y))])
 
-                # Innovation covariance
+                # Innovation covariance: S = H * P_pred * H^T + R
                 S = mat_add(mat_mult(mat_mult(H, P_pred), mat_transpose(H)), R)
 
-                # Kalman gain (simplified for small matrices)
-                # K = P_pred * H^T * S^-1
+                # Kalman gain: K = P_pred * H^T * S^{-1}
+                # Determines how much the measurement residual corrects the state.
                 if n <= 2:
                     S_inv = mat_inverse_2x2(S) if len(S) == 2 else [[1 / S[0][0]]]
                     K = mat_mult(mat_mult(P_pred, mat_transpose(H)), S_inv)
@@ -231,7 +271,9 @@ def kalman_filter_state_estimation(
                     ]
                     K = mat_transpose(K)
 
-                # Update
+                # -- UPDATE STEP (manual) --
+                # x = x_pred + K * y           (state correction)
+                # P = (I - K*H) * P_pred       (covariance update, Joseph form)
                 x = mat_add(x_pred, mat_mult(K, y))
                 I_KH = mat_sub(
                     [[1 if i == j else 0 for j in range(n)] for i in range(n)],
@@ -342,7 +384,12 @@ def lqr_controller_design(
         input_names: Optional names for control inputs (for display)
 
     Returns:
-        Formatted string with optimal gain matrix and analysis
+        Formatted string with optimal gain matrix K, closed-loop eigenvalues,
+        stability analysis, and controllability assessment.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings
+        or JSON error objects (e.g., when system is not controllable).
     """
     try:
         # Try to use control library if available
@@ -370,7 +417,9 @@ def lqr_controller_design(
             Q = np.array(Q_matrix)
             R = np.array(R_matrix)
 
-            # Check controllability
+            # Check controllability: the system (A, B) is controllable iff
+            # the controllability matrix C = [B, AB, A^2B, ..., A^{n-1}B]
+            # has full row rank (rank = n).
             ctrb_matrix = control.ctrb(A, B)
             ctrb_rank = np.linalg.matrix_rank(ctrb_matrix)
             controllable = ctrb_rank == n
@@ -386,7 +435,9 @@ def lqr_controller_design(
                     indent=2,
                 )
 
-            # Solve LQR
+            # Solve LQR by finding the solution to the continuous algebraic
+            # Riccati equation (CARE): A^T S + S A - S B R^{-1} B^T S + Q = 0
+            # Returns: K (optimal gain), S (Riccati solution), E (closed-loop eigenvalues)
             K, S, E = control.lqr(A, B, Q, R)
 
             # Convert to lists
@@ -398,7 +449,10 @@ def lqr_controller_design(
             ol_eigenvalues = np.linalg.eigvals(A)
             ol_eig_list = [complex(e).real for e in ol_eigenvalues]
 
-            # Closed-loop damping and natural frequency
+            # Analyze closed-loop poles: extract natural frequency (wn) and
+            # damping ratio (zeta) from each complex eigenvalue.
+            # For a pole at s = sigma +/- j*omega:
+            #   wn = |s|,  zeta = -sigma / wn
             cl_poles_info = []
             for e in E:
                 e_complex = complex(e)
