@@ -49,7 +49,7 @@ class TestToolSchemaSnapshots:
     def test_tool_count_matches_expected(self, current_schemas):
         """Test that tool count hasn't changed unexpectedly."""
         # Update this number when intentionally adding/removing tools
-        EXPECTED_TOOL_COUNT = 44
+        EXPECTED_TOOL_COUNT = 47
         actual_count = len(current_schemas)
 
         assert actual_count == EXPECTED_TOOL_COUNT, (
@@ -302,3 +302,56 @@ class TestToolCategoryCompleteness:
 
         # GNC tools
         assert len(categories_and_tools.get("gnc", [])) >= 2
+
+
+class TestRegistryConsistency:
+    """The registry, search metadata, and server registration must agree.
+
+    These tests permanently prevent the drift that previously existed
+    between the CLI TOOL_MAP, the FastMCP registration list, and the
+    TOOL_REGISTRY search metadata.
+    """
+
+    def test_registry_matches_search_metadata(self):
+        """Every ALL_TOOLS entry (except discovery) has search metadata, and
+        vice versa."""
+        from aerospace_mcp.tools.registry import ALL_TOOLS, DISCOVERY_TOOLS
+        from aerospace_mcp.tools.tool_search import TOOL_REGISTRY
+
+        registry_names = set(ALL_TOOLS) - set(DISCOVERY_TOOLS)
+        metadata_names = {t.name for t in TOOL_REGISTRY}
+
+        assert registry_names == metadata_names, (
+            f"only in ALL_TOOLS: {sorted(registry_names - metadata_names)}; "
+            f"only in TOOL_REGISTRY: {sorted(metadata_names - registry_names)}"
+        )
+
+    def test_no_duplicate_metadata_names(self):
+        """TOOL_REGISTRY entries have unique names."""
+        from collections import Counter
+
+        from aerospace_mcp.tools.tool_search import TOOL_REGISTRY
+
+        counts = Counter(t.name for t in TOOL_REGISTRY)
+        duplicates = [name for name, count in counts.items() if count > 1]
+        assert not duplicates, f"duplicate metadata entries: {duplicates}"
+
+    def test_cli_uses_shared_registry(self):
+        """The CLI TOOL_MAP is the shared registry object, not a copy."""
+        from aerospace_mcp.cli import TOOL_MAP
+        from aerospace_mcp.tools.registry import ALL_TOOLS
+
+        assert TOOL_MAP is ALL_TOOLS
+
+    def test_fastmcp_registers_all_registry_tools(self):
+        """Every registry tool is registered on the FastMCP server."""
+        import asyncio
+
+        from aerospace_mcp.fastmcp_server import mcp
+        from aerospace_mcp.tools.registry import ALL_TOOLS
+
+        registered = set(asyncio.run(mcp.get_tools()).keys())
+        assert registered == set(ALL_TOOLS), (
+            f"only registered: {sorted(registered - set(ALL_TOOLS))}; "
+            f"only in registry: {sorted(set(ALL_TOOLS) - registered)}"
+        )

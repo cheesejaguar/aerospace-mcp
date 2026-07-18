@@ -2,7 +2,8 @@
 
 Implements a tool search tool following Anthropic's guide for dynamic tool discovery.
 Supports both regex and text-based search patterns for finding relevant tools from
-the 34+ available aerospace tools without loading all definitions upfront.
+the full registry of available aerospace tools without loading all definitions
+upfront (see ``TOOL_REGISTRY`` for the authoritative list).
 
 The search returns ``tool_reference`` blocks compatible with Anthropic's deferred
 tool loading protocol, enabling clients to selectively load only the tools
@@ -15,7 +16,7 @@ Do NOT use for real flight planning, navigation, or aircraft operations.
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 
 @dataclass
@@ -102,6 +103,67 @@ TOOL_REGISTRY: list[ToolMetadata] = [
             "fuel",
             "distance",
             "navigation",
+            "wind",
+            "headwind",
+        ],
+    ),
+    ToolMetadata(
+        name="plan_multi_leg_flight",
+        description="Plan a multi-leg journey through 2-10 waypoints with aggregated totals",
+        category="core",
+        parameters={
+            "waypoints": "Ordered list of waypoint dicts (city, country, iata)",
+            "aircraft": "Aircraft config (ac_type, cruise_alt_ft, mass_kg, route_step_km)",
+        },
+        keywords=[
+            "multi-leg",
+            "multi-city",
+            "journey",
+            "waypoints",
+            "itinerary",
+            "route",
+            "legs",
+            "totals",
+        ],
+    ),
+    ToolMetadata(
+        name="get_aircraft_database",
+        description="Browse or search the OpenAP aircraft performance database",
+        category="core",
+        parameters={
+            "search": "Optional substring filter or exact ICAO type (e.g. 'A320')",
+        },
+        keywords=[
+            "aircraft",
+            "database",
+            "types",
+            "mtow",
+            "openap",
+            "browse",
+            "lookup",
+            "properties",
+        ],
+    ),
+    ToolMetadata(
+        name="convert_units",
+        description="Convert values between aerospace units (length, speed, mass, pressure, temperature, angle)",
+        category="core",
+        parameters={
+            "value": "Numeric value to convert",
+            "from_unit": "Source unit symbol (e.g. 'kts', 'ft', 'kg')",
+            "to_unit": "Target unit symbol (e.g. 'mps', 'm', 'lb')",
+        },
+        keywords=[
+            "units",
+            "conversion",
+            "knots",
+            "feet",
+            "meters",
+            "celsius",
+            "fahrenheit",
+            "pressure",
+            "temperature",
+            "angle",
         ],
     ),
     ToolMetadata(
@@ -894,8 +956,112 @@ TOOL_REGISTRY: list[ToolMetadata] = [
 CATEGORIES = sorted({tool.category for tool in TOOL_REGISTRY})
 
 # Maximum regex pattern length to prevent ReDoS (Regular Expression Denial of
-# Service) attacks. Matches Anthropic's recommended limit for user-supplied patterns.
-MAX_PATTERN_LENGTH = 200
+# Service) attacks against user-supplied patterns.
+MAX_PATTERN_LENGTH = 100
+
+# Complexity limits for user-supplied regex patterns.  Length alone does not
+# prevent catastrophic backtracking (e.g. ``(a+)+$``), so patterns are also
+# scanned for nested quantifiers and excessive repetition before compilation.
+MAX_QUANTIFIERS = 10
+MAX_BOUNDED_REPEAT = 50
+
+
+def _is_safe_pattern(pattern: str) -> bool:
+    """Check a regex pattern for catastrophic-backtracking risk.
+
+    Rejects patterns that apply a quantifier to a group which itself
+    contains a quantifier or alternation (the classic ReDoS shape, e.g.
+    ``(a+)+`` or ``(a|aa)+``), patterns with more than ``MAX_QUANTIFIERS``
+    quantifiers, and bounded repeats larger than ``MAX_BOUNDED_REPEAT``.
+
+    This is a conservative lexical scan, not a full regex parser: some safe
+    patterns may be rejected, in which case callers fall back to a literal
+    (escaped) search.
+
+    Args:
+        pattern: The raw user-supplied regex pattern.
+
+    Returns:
+        True if the pattern appears safe to compile and execute.
+    """
+    quantifier_count = 0
+    # Stack of booleans: does the currently-open group (at each nesting
+    # level) contain a quantifier or alternation?
+    group_stack: list[bool] = []
+    # Set True right after a group closes whose contents were "complex"
+    # (contained a quantifier/alternation); a quantifier in this state is
+    # a nested quantifier -> unsafe.
+    closed_group_was_complex = False
+    in_class = False  # inside [...] character class
+
+    i = 0
+    n = len(pattern)
+    while i < n:
+        ch = pattern[i]
+        if ch == "\\":
+            i += 2  # skip escaped character
+            closed_group_was_complex = False
+            continue
+
+        if in_class:
+            if ch == "]":
+                in_class = False
+            i += 1
+            continue
+
+        if ch == "[":
+            in_class = True
+            closed_group_was_complex = False
+            i += 1
+            continue
+
+        if ch == "(":
+            group_stack.append(False)
+            closed_group_was_complex = False
+            i += 1
+            continue
+
+        if ch == ")":
+            was_complex = group_stack.pop() if group_stack else False
+            closed_group_was_complex = was_complex
+            i += 1
+            continue
+
+        if ch == "|":
+            if group_stack:
+                group_stack[-1] = True
+            closed_group_was_complex = False
+            i += 1
+            continue
+
+        if ch in "*+?" or ch == "{":
+            quantifier_count += 1
+            if quantifier_count > MAX_QUANTIFIERS:
+                return False
+            if closed_group_was_complex:
+                return False  # quantifier applied to a complex group
+            if group_stack:
+                group_stack[-1] = True
+            if ch == "{":
+                # Parse {m}, {m,}, {m,n} and bound-check the counts.
+                j = pattern.find("}", i)
+                if j != -1:
+                    body = pattern[i + 1 : j]
+                    for part in body.split(","):
+                        part = part.strip()
+                        if part.isdigit() and int(part) > MAX_BOUNDED_REPEAT:
+                            return False
+                    i = j + 1
+                    closed_group_was_complex = False
+                    continue
+            closed_group_was_complex = False
+            i += 1
+            continue
+
+        closed_group_was_complex = False
+        i += 1
+
+    return True
 
 
 def _score_text_match(query_terms: list[str], tool: ToolMetadata) -> float:
@@ -960,6 +1126,10 @@ def search_tools_regex(
         max_results: Maximum number of results to return.
         category: Optional category filter (case-insensitive).
 
+    Patterns that fail the ReDoS safety scan (``_is_safe_pattern``) are
+    downgraded to a literal (escaped) substring search rather than rejected,
+    so callers still get results.
+
     Returns:
         List of matching ToolMetadata objects (up to max_results).
 
@@ -968,6 +1138,10 @@ def search_tools_regex(
     """
     if len(pattern) > MAX_PATTERN_LENGTH:
         raise ValueError(f"Pattern exceeds maximum length of {MAX_PATTERN_LENGTH}")
+
+    if not _is_safe_pattern(pattern):
+        # Potential catastrophic backtracking: search for the literal text.
+        pattern = re.escape(pattern)
 
     # Compile the regex upfront; re.error is caught and re-raised as ValueError.
     try:
@@ -1039,7 +1213,7 @@ def search_aerospace_tools(
     """Search for aerospace-mcp tools by name, description, or functionality.
 
     This tool enables dynamic tool discovery, allowing Claude to find relevant
-    tools from the 34+ available aerospace tools without loading all definitions
+    tools from the full aerospace tool registry without loading all definitions
     upfront. Returns tool references matching the search query.
 
     Args:
@@ -1079,8 +1253,10 @@ def search_aerospace_tools(
             search_type = "text"
 
     # Perform search
+    regex_downgraded = False
     try:
         if search_type == "regex":
+            regex_downgraded = not _is_safe_pattern(query)
             results = search_tools_regex(query, max_results, category)
         else:
             results = search_tools_text(query, max_results, category)
@@ -1109,17 +1285,20 @@ def search_aerospace_tools(
         for tool in results
     ]
 
-    return json.dumps(
-        {
-            "tool_references": tool_references,
-            "tool_details": tool_details,
-            "total_matches": len(results),
-            "query": query,
-            "search_type": search_type,
-            "available_categories": CATEGORIES,
-        },
-        indent=2,
-    )
+    response: dict[str, Any] = {
+        "tool_references": tool_references,
+        "tool_details": tool_details,
+        "total_matches": len(results),
+        "query": query,
+        "search_type": search_type,
+        "available_categories": CATEGORIES,
+    }
+    if regex_downgraded:
+        # The pattern failed the ReDoS safety scan and was searched as
+        # literal text instead.
+        response["regex_downgraded"] = True
+
+    return json.dumps(response, indent=2)
 
 
 def list_tool_categories() -> str:

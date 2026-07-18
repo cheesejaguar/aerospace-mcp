@@ -164,6 +164,124 @@ class TestOpenAPEstimates:
 
     @pytest.mark.unit
     @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
+    def test_cruise_time_unit_conversion(
+        self, mock_openap_flight_generator, mock_openap_fuel_flow, mock_openap_props
+    ):
+        """Regression: cruise time must convert knots -> km/s via KM_PER_NM.
+
+        A prior bug used NM_PER_KM (the reciprocal), inflating cruise time
+        and fuel by ~3.43x.
+        """
+        with patch(
+            "aerospace_mcp.core.FlightGenerator",
+            return_value=mock_openap_flight_generator,
+        ):
+            with patch(
+                "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+            ):
+                with patch(
+                    "aerospace_mcp.core.prop.aircraft", return_value=mock_openap_props
+                ):
+                    route_km = 9000.0
+                    estimates, _ = estimates_openap("A359", 35000, None, route_km)
+
+                    # Mock fixtures: climb covers 10 km, descent 12 km,
+                    # cruise groundspeed 450 kts.
+                    d_remaining = route_km - (10.0 + 12.0)
+                    expected_min = d_remaining / (450 * KM_PER_NM) * 60.0
+                    assert estimates["cruise"]["time_min"] == pytest.approx(
+                        expected_min, rel=1e-6
+                    )
+                    # The buggy conversion produced ~3.43x this value; make
+                    # sure we are nowhere near it.
+                    assert estimates["cruise"]["time_min"] < expected_min * 2
+
+    @pytest.mark.unit
+    @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
+    def test_headwind_increases_cruise_time_and_fuel(
+        self, mock_openap_flight_generator, mock_openap_fuel_flow, mock_openap_props
+    ):
+        """Headwind slows the cruise; tailwind speeds it up; default unchanged."""
+        with patch(
+            "aerospace_mcp.core.FlightGenerator",
+            return_value=mock_openap_flight_generator,
+        ):
+            with patch(
+                "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+            ):
+                with patch(
+                    "aerospace_mcp.core.prop.aircraft", return_value=mock_openap_props
+                ):
+                    calm, _ = estimates_openap("A359", 35000, None, 9000.0)
+                    head, _ = estimates_openap(
+                        "A359", 35000, None, 9000.0, headwind_kts=50.0
+                    )
+                    tail, _ = estimates_openap(
+                        "A359", 35000, None, 9000.0, headwind_kts=-50.0
+                    )
+
+                    assert head["cruise"]["time_min"] > calm["cruise"]["time_min"]
+                    assert tail["cruise"]["time_min"] < calm["cruise"]["time_min"]
+                    assert head["cruise"]["fuel_kg"] > calm["cruise"]["fuel_kg"]
+
+                    # Cruise GS 450 kts, 50 kt headwind -> 400 kts effective.
+                    assert head["cruise"]["avg_gs_kts"] == pytest.approx(400.0)
+                    assert head["assumptions"]["zero_wind"] is False
+                    assert calm["assumptions"]["zero_wind"] is True
+
+    @pytest.mark.unit
+    @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
+    def test_fuel_flow_failure_raises(
+        self, mock_openap_flight_generator, mock_openap_props
+    ):
+        """A broken fuel-flow model must raise, not silently report 0 kg."""
+        failing_ff = MagicMock()
+        failing_ff.enroute.side_effect = RuntimeError("model exploded")
+        with patch(
+            "aerospace_mcp.core.FlightGenerator",
+            return_value=mock_openap_flight_generator,
+        ):
+            with patch("aerospace_mcp.core.FuelFlow", return_value=failing_ff):
+                with patch(
+                    "aerospace_mcp.core.prop.aircraft", return_value=mock_openap_props
+                ):
+                    with pytest.raises(OpenAPError, match="Fuel flow"):
+                        estimates_openap("A359", 35000, None, 9000.0)
+
+    @pytest.mark.unit
+    @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
+    def test_mass_source_tracking(
+        self, mock_openap_flight_generator, mock_openap_fuel_flow, mock_openap_props
+    ):
+        """assumptions.mass_source records how the mass was determined."""
+        with patch(
+            "aerospace_mcp.core.FlightGenerator",
+            return_value=mock_openap_flight_generator,
+        ):
+            with patch(
+                "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+            ):
+                with patch(
+                    "aerospace_mcp.core.prop.aircraft", return_value=mock_openap_props
+                ):
+                    est, _ = estimates_openap("A359", 35000, 75000.0, 9000.0)
+                    assert est["assumptions"]["mass_source"] == "user"
+
+                    est, _ = estimates_openap("A359", 35000, None, 9000.0)
+                    assert est["assumptions"]["mass_source"] == "mtow_85pct"
+
+                with patch(
+                    "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+                ):
+                    with patch(
+                        "aerospace_mcp.core.prop.aircraft",
+                        side_effect=Exception("Aircraft not found"),
+                    ):
+                        est, _ = estimates_openap("UNKNOWN", 35000, None, 9000.0)
+                        assert est["assumptions"]["mass_source"] == "default_60t"
+
+    @pytest.mark.unit
+    @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
     def test_openap_with_explicit_mass(
         self, mock_openap_flight_generator, mock_openap_fuel_flow
     ):

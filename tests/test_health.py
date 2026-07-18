@@ -11,9 +11,10 @@ class TestHealthEndpoint:
     @pytest.mark.unit
     def test_health_endpoint_with_openap(self, client):
         """Test health endpoint when OpenAP is available."""
-        with patch("main.OPENAP_AVAILABLE", True):
+        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", True):
             with patch(
-                "main._AIRPORTS_IATA", {"SJC": {"iata": "SJC"}, "NRT": {"iata": "NRT"}}
+                "aerospace_mcp.core._AIRPORTS_IATA",
+                {"SJC": {"iata": "SJC"}, "NRT": {"iata": "NRT"}},
             ):
                 response = client.get("/health")
 
@@ -31,8 +32,8 @@ class TestHealthEndpoint:
     @pytest.mark.unit
     def test_health_endpoint_without_openap(self, client):
         """Test health endpoint when OpenAP is not available."""
-        with patch("main.OPENAP_AVAILABLE", False):
-            with patch("main._AIRPORTS_IATA", {"SJC": {"iata": "SJC"}}):
+        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", False):
+            with patch("aerospace_mcp.core._AIRPORTS_IATA", {"SJC": {"iata": "SJC"}}):
                 response = client.get("/health")
 
                 assert response.status_code == 200
@@ -45,8 +46,8 @@ class TestHealthEndpoint:
     @pytest.mark.unit
     def test_health_endpoint_empty_airports(self, client):
         """Test health endpoint with no airports loaded."""
-        with patch("main.OPENAP_AVAILABLE", True):
-            with patch("main._AIRPORTS_IATA", {}):
+        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", True):
+            with patch("aerospace_mcp.core._AIRPORTS_IATA", {}):
                 response = client.get("/health")
 
                 assert response.status_code == 200
@@ -152,6 +153,22 @@ class TestAirportsByCity:
         assert response.status_code == 422
 
     @pytest.mark.unit
+    def test_airports_by_city_empty_city(self, client, mock_airports_iata):
+        """Regression: empty city must not return the entire airport database."""
+        response = client.get("/airports/by_city?city=")
+
+        # min_length=1 rejects the empty string at validation time
+        assert response.status_code == 422
+
+    @pytest.mark.unit
+    def test_airports_by_city_whitespace_city(self, client, mock_airports_iata):
+        """A whitespace-only city matches nothing (guarded in core)."""
+        response = client.get("/airports/by_city?city=%20%20")
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+    @pytest.mark.unit
     def test_airports_by_city_case_insensitive(self, client, mock_airports_iata):
         """Test that city search is case insensitive."""
         responses = [
@@ -185,12 +202,18 @@ class TestPlanEndpoint:
         mock_openap_props,
     ):
         """Test successful flight planning."""
-        with patch("main.OPENAP_AVAILABLE", True):
+        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", True):
             with patch(
-                "main.FlightGenerator", return_value=mock_openap_flight_generator
+                "aerospace_mcp.core.FlightGenerator",
+                return_value=mock_openap_flight_generator,
             ):
-                with patch("main.FuelFlow", return_value=mock_openap_fuel_flow):
-                    with patch("main.prop.aircraft", return_value=mock_openap_props):
+                with patch(
+                    "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+                ):
+                    with patch(
+                        "aerospace_mcp.core.prop.aircraft",
+                        return_value=mock_openap_props,
+                    ):
                         request_data = {
                             "depart_city": "San Jose",
                             "arrive_city": "Tokyo",
@@ -278,12 +301,18 @@ class TestPlanEndpoint:
         mock_openap_props,
     ):
         """Test planning with preferred IATA codes."""
-        with patch("main.OPENAP_AVAILABLE", True):
+        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", True):
             with patch(
-                "main.FlightGenerator", return_value=mock_openap_flight_generator
+                "aerospace_mcp.core.FlightGenerator",
+                return_value=mock_openap_flight_generator,
             ):
-                with patch("main.FuelFlow", return_value=mock_openap_fuel_flow):
-                    with patch("main.prop.aircraft", return_value=mock_openap_props):
+                with patch(
+                    "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+                ):
+                    with patch(
+                        "aerospace_mcp.core.prop.aircraft",
+                        return_value=mock_openap_props,
+                    ):
                         request_data = {
                             "depart_city": "Any City",  # This would normally fail
                             "arrive_city": "Any City",
@@ -319,7 +348,7 @@ class TestPlanEndpoint:
     @pytest.mark.unit
     def test_plan_endpoint_openap_unavailable(self, client, mock_airports_iata):
         """Test error when OpenAP is unavailable."""
-        with patch("main.OPENAP_AVAILABLE", False):
+        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", False):
             request_data = {
                 "depart_city": "San Jose",
                 "arrive_city": "Tokyo",
@@ -379,12 +408,18 @@ class TestPlanEndpoint:
         mock_openap_props,
     ):
         """Test planning with custom parameters."""
-        with patch("main.OPENAP_AVAILABLE", True):
+        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", True):
             with patch(
-                "main.FlightGenerator", return_value=mock_openap_flight_generator
+                "aerospace_mcp.core.FlightGenerator",
+                return_value=mock_openap_flight_generator,
             ):
-                with patch("main.FuelFlow", return_value=mock_openap_fuel_flow):
-                    with patch("main.prop.aircraft", return_value=mock_openap_props):
+                with patch(
+                    "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+                ):
+                    with patch(
+                        "aerospace_mcp.core.prop.aircraft",
+                        return_value=mock_openap_props,
+                    ):
                         request_data = {
                             "depart_city": "San Jose",
                             "arrive_city": "Tokyo",

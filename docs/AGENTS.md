@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 - `main.py`: Core FastAPI app and domain models/utilities.
 - `app/`: HTTP server wrapper and entrypoint (`app.main:run`).
-- `aerospace_mcp/`: MCP server (`server.py`) and core logic (`core.py`).
+- `aerospace_mcp/`: MCP server (`fastmcp_server.py`) and core logic (`core.py`).
 - `tests/`: Pytest suite and fixtures.
 - `docs/`, `Dockerfile`, `docker-compose.yml`, `kubernetes/`: Ops and docs.
 
@@ -43,5 +43,5 @@
 - Docker healthcheck expects `/health`; prefer read‑only FS and `tmpfs` as in `docker-compose.yml`.
 
 ## Architecture Overview
-- Two interfaces: FastAPI HTTP (`app/`, `main.py`) and MCP tools (`aerospace_mcp/server.py`).
+- Two interfaces: FastAPI HTTP (`app/`, `main.py`) and MCP tools (`aerospace_mcp/fastmcp_server.py`).
 - OpenAP is optional; when unavailable, performance estimates are disabled gracefully.

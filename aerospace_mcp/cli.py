@@ -1,6 +1,6 @@
 """CLI tool for invoking aerospace-mcp tools directly from the command line.
 
-Provides a terminal interface to all 44 aerospace engineering tools without
+Provides a terminal interface to every registered aerospace tool without
 requiring an MCP client. Supports four subcommands:
 
 Usage:
@@ -29,141 +29,13 @@ import types
 from collections.abc import Callable
 from typing import Any, Literal, Union, get_type_hints
 
-# Tool imports — mirrors aerospace_mcp/fastmcp_server.py
-from .tools.aerodynamics import (
-    airfoil_polar_analysis,
-    calculate_stability_derivatives,
-    get_airfoil_database,
-    wing_vlm_analysis,
-)
-from .tools.agents import (
-    format_data_for_tool,
-    select_aerospace_tool,
-)
-from .tools.atmosphere import (
-    get_atmosphere_profile,
-    wind_model_simple,
-)
-from .tools.core import (
-    calculate_distance,
-    get_aircraft_performance,
-    get_system_status,
-    plan_flight,
-    search_airports,
-)
-from .tools.frames import (
-    ecef_to_geodetic,
-    geodetic_to_ecef,
-    transform_frames,
-)
-from .tools.gnc import (
-    kalman_filter_state_estimation,
-    lqr_controller_design,
-)
-from .tools.optimization import (
-    genetic_algorithm_optimization,
-    monte_carlo_uncertainty_analysis,
-    optimize_thrust_profile,
-    particle_swarm_optimization,
-    porkchop_plot_analysis,
-    trajectory_sensitivity_analysis,
-)
-from .tools.orbits import (
-    calculate_ground_track,
-    elements_to_state_vector,
-    hohmann_transfer,
-    lambert_problem_solver,
-    orbital_rendezvous_planning,
-    propagate_orbit_j2,
-    state_vector_to_elements,
-)
-from .tools.performance import (
-    density_altitude_calculator,
-    fuel_reserve_calculator,
-    landing_performance,
-    stall_speed_calculator,
-    takeoff_performance,
-    true_airspeed_converter,
-    weight_and_balance,
-)
-from .tools.propellers import (
-    get_propeller_database,
-    propeller_bemt_analysis,
-    uav_energy_estimate,
-)
-from .tools.rockets import (
-    estimate_rocket_sizing,
-    optimize_launch_angle,
-    rocket_3dof_trajectory,
-)
+# Shared registry: the same tool set the FastMCP server registers.
+from .tools.registry import ALL_TOOLS as TOOL_MAP
 from .tools.tool_search import (
     CATEGORIES,
     TOOL_REGISTRY,
-    list_tool_categories,
     search_aerospace_tools,
 )
-
-# Complete mapping of tool name -> callable for all 44 tools
-TOOL_MAP: dict[str, Callable[..., str]] = {
-    # Discovery
-    "search_aerospace_tools": search_aerospace_tools,
-    "list_tool_categories": list_tool_categories,
-    # Core
-    "search_airports": search_airports,
-    "plan_flight": plan_flight,
-    "calculate_distance": calculate_distance,
-    "get_aircraft_performance": get_aircraft_performance,
-    "get_system_status": get_system_status,
-    # Atmosphere
-    "get_atmosphere_profile": get_atmosphere_profile,
-    "wind_model_simple": wind_model_simple,
-    # Frames
-    "transform_frames": transform_frames,
-    "geodetic_to_ecef": geodetic_to_ecef,
-    "ecef_to_geodetic": ecef_to_geodetic,
-    # Aerodynamics
-    "wing_vlm_analysis": wing_vlm_analysis,
-    "airfoil_polar_analysis": airfoil_polar_analysis,
-    "calculate_stability_derivatives": calculate_stability_derivatives,
-    "get_airfoil_database": get_airfoil_database,
-    # Propellers
-    "propeller_bemt_analysis": propeller_bemt_analysis,
-    "uav_energy_estimate": uav_energy_estimate,
-    "get_propeller_database": get_propeller_database,
-    # Rockets
-    "rocket_3dof_trajectory": rocket_3dof_trajectory,
-    "estimate_rocket_sizing": estimate_rocket_sizing,
-    "optimize_launch_angle": optimize_launch_angle,
-    # Orbits
-    "elements_to_state_vector": elements_to_state_vector,
-    "state_vector_to_elements": state_vector_to_elements,
-    "propagate_orbit_j2": propagate_orbit_j2,
-    "calculate_ground_track": calculate_ground_track,
-    "hohmann_transfer": hohmann_transfer,
-    "orbital_rendezvous_planning": orbital_rendezvous_planning,
-    "lambert_problem_solver": lambert_problem_solver,
-    # GNC
-    "kalman_filter_state_estimation": kalman_filter_state_estimation,
-    "lqr_controller_design": lqr_controller_design,
-    # Performance
-    "density_altitude_calculator": density_altitude_calculator,
-    "true_airspeed_converter": true_airspeed_converter,
-    "stall_speed_calculator": stall_speed_calculator,
-    "weight_and_balance": weight_and_balance,
-    "takeoff_performance": takeoff_performance,
-    "landing_performance": landing_performance,
-    "fuel_reserve_calculator": fuel_reserve_calculator,
-    # Optimization
-    "optimize_thrust_profile": optimize_thrust_profile,
-    "trajectory_sensitivity_analysis": trajectory_sensitivity_analysis,
-    "genetic_algorithm_optimization": genetic_algorithm_optimization,
-    "particle_swarm_optimization": particle_swarm_optimization,
-    "porkchop_plot_analysis": porkchop_plot_analysis,
-    "monte_carlo_uncertainty_analysis": monte_carlo_uncertainty_analysis,
-    # Agents
-    "format_data_for_tool": format_data_for_tool,
-    "select_aerospace_tool": select_aerospace_tool,
-}
 
 
 def parse_tool_args(raw_args: list[str]) -> dict[str, str]:
@@ -534,7 +406,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="aerospace-mcp-cli",
         description=(
-            "CLI for aerospace-mcp — invoke any of 44 aerospace engineering "
+            "CLI for aerospace-mcp — invoke any registered aerospace engineering "
             "tools directly from the command line."
         ),
     )

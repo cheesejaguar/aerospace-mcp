@@ -236,7 +236,7 @@ Assistant: Uses list_tool_categories to show all 9 categories with tool counts
      "mcpServers": {
        "aerospace-mcp": {
          "command": "python",
-         "args": ["-m", "aerospace_mcp.server"],
+         "args": ["-m", "aerospace_mcp.fastmcp_server"],
          "cwd": "/absolute/path/to/aerospace-mcp"
        }
      }
@@ -253,7 +253,7 @@ Assistant: Uses list_tool_categories to show all 9 categories with tool counts
        "aerospace-mcp": {
          "command": "python",
          "args": [
-           "-m", "aerospace_mcp.server"
+           "-m", "aerospace_mcp.fastmcp_server"
          ],
          "cwd": "/absolute/path/to/aerospace-mcp",
          "env": {
@@ -275,7 +275,7 @@ Assistant: Uses list_tool_categories to show all 9 categories with tool counts
      "mcpServers": {
        "aerospace-mcp": {
          "command": "/absolute/path/to/aerospace-mcp/.venv/bin/python",
-         "args": ["-m", "aerospace_mcp.server"],
+         "args": ["-m", "aerospace_mcp.fastmcp_server"],
          "cwd": "/absolute/path/to/aerospace-mcp"
        }
      }
@@ -291,7 +291,7 @@ Assistant: Uses list_tool_categories to show all 9 categories with tool counts
      "mcpServers": {
        "aerospace-mcp": {
          "command": "uv",
-         "args": ["run", "python", "-m", "aerospace_mcp.server"],
+         "args": ["run", "python", "-m", "aerospace_mcp.fastmcp_server"],
          "cwd": "/absolute/path/to/aerospace-mcp"
        }
      }
@@ -353,7 +353,7 @@ Assistant: Uses list_tool_categories to show all 9 categories with tool counts
        {
          "name": "aerospace-mcp",
          "command": "python",
-         "args": ["-m", "aerospace_mcp.server"],
+         "args": ["-m", "aerospace_mcp.fastmcp_server"],
          "workingDirectory": "/absolute/path/to/aerospace-mcp"
        }
      ]
@@ -369,7 +369,7 @@ Assistant: Uses list_tool_categories to show all 9 categories with tool counts
        {
          "name": "aerospace-mcp",
          "command": "/absolute/path/to/aerospace-mcp/.venv/bin/python",
-         "args": ["-m", "aerospace_mcp.server"],
+         "args": ["-m", "aerospace_mcp.fastmcp_server"],
          "workingDirectory": "/absolute/path/to/aerospace-mcp",
          "env": {
            "PYTHONPATH": "/absolute/path/to/aerospace-mcp"
@@ -407,7 +407,7 @@ async def main():
     # Server parameters
     server_params = StdioServerParameters(
         command="python",
-        args=["-m", "aerospace_mcp.server"],
+        args=["-m", "aerospace_mcp.fastmcp_server"],
         cwd="/path/to/aerospace-mcp"
     )
 
@@ -461,7 +461,7 @@ class AerospaceMCPClient {
   constructor(serverPath: string) {
     this.transport = new StdioServerTransport({
       command: 'python',
-      args: ['-m', 'aerospace_mcp.server'],
+      args: ['-m', 'aerospace_mcp.fastmcp_server'],
       cwd: serverPath
     });
 
@@ -729,7 +729,7 @@ You can configure the MCP server behavior through environment variables:
   "mcpServers": {
     "aerospace-mcp": {
       "command": "python",
-      "args": ["-m", "aerospace_mcp.server"],
+      "args": ["-m", "aerospace_mcp.fastmcp_server"],
       "cwd": "/path/to/aerospace-mcp",
       "env": {
         "LOG_LEVEL": "debug",
@@ -750,34 +750,20 @@ Modify tool behavior by creating a custom configuration:
 
 ```python
 # custom_mcp_config.py
-from aerospace_mcp.server import server, TOOLS
-from mcp.types import Tool
+from aerospace_mcp.fastmcp_server import mcp
 
-# Add custom tool
-custom_tool = Tool(
-    name="plan_cargo_flight",
-    description="Plan flights optimized for cargo operations",
-    inputSchema={
-        "type": "object",
-        "properties": {
-            "origin_iata": {"type": "string"},
-            "destination_iata": {"type": "string"},
-            "cargo_weight_kg": {"type": "number"},
-            "aircraft_type": {"type": "string"}
-        },
-        "required": ["origin_iata", "destination_iata", "cargo_weight_kg"]
-    }
-)
-
-# Add to tools list
-TOOLS.append(custom_tool)
-
-# Add handler
-@server.call_tool()
-async def handle_cargo_flight(name: str, arguments: dict):
-    if name == "plan_cargo_flight":
-        # Custom cargo flight planning logic
-        return await _handle_cargo_flight(arguments)
+# Add custom tool - FastMCP derives the schema from the
+# function signature, type hints, and docstring
+@mcp.tool
+def plan_cargo_flight(
+    origin_iata: str,
+    destination_iata: str,
+    cargo_weight_kg: float,
+    aircraft_type: str = "A320",
+) -> str:
+    """Plan flights optimized for cargo operations."""
+    # Custom cargo flight planning logic
+    ...
 ```
 
 ### Performance Tuning
@@ -788,7 +774,7 @@ async def handle_cargo_flight(name: str, arguments: dict):
     "aerospace-mcp": {
       "command": "python",
       "args": [
-        "-m", "aerospace_mcp.server",
+        "-m", "aerospace_mcp.fastmcp_server",
         "--workers", "2",
         "--cache-size", "1000"
       ],
@@ -873,10 +859,10 @@ async def handle_cargo_flight(name: str, arguments: dict):
 ```bash
 # Test server manually
 cd /path/to/aerospace-mcp
-python -m aerospace_mcp.server
+python -m aerospace_mcp.fastmcp_server
 
 # Check for import errors
-python -c "import aerospace_mcp.server; print('OK')"
+python -c "import aerospace_mcp.fastmcp_server; print('OK')"
 
 # Verify dependencies
 python -c "import openap, airportsdata, geographiclib; print('All dependencies OK')"
@@ -896,12 +882,12 @@ python -c "import openap, airportsdata, geographiclib; print('All dependencies O
 ```python
 # Test tool listing
 import asyncio
-from aerospace_mcp.server import server
+from aerospace_mcp.fastmcp_server import mcp
 
 async def test_tools():
-    tools = await server.list_tools()
-    for tool in tools:
-        print(f"Available: {tool.name}")
+    tools = await mcp.get_tools()
+    for name in tools:
+        print(f"Available: {name}")
 
 asyncio.run(test_tools())
 ```
@@ -978,7 +964,7 @@ from mcp.client.stdio import stdio_client
 async def test_connection():
     server_params = StdioServerParameters(
         command="python",
-        args=["-m", "aerospace_mcp.server"],
+        args=["-m", "aerospace_mcp.fastmcp_server"],
         cwd="/path/to/aerospace-mcp"
     )
 
@@ -1018,10 +1004,10 @@ pip install -e .
 2. **Test MCP Server**:
 ```bash
 # Run server directly
-python -m aerospace_mcp.server
+python -m aerospace_mcp.fastmcp_server
 
 # Test with stdio
-echo '{"jsonrpc": "2.0", "id": 1, "method": "list_tools", "params": {}}' | python -m aerospace_mcp.server
+echo '{"jsonrpc": "2.0", "id": 1, "method": "list_tools", "params": {}}' | python -m aerospace_mcp.fastmcp_server
 ```
 
 3. **Development Configuration**:
@@ -1030,7 +1016,7 @@ echo '{"jsonrpc": "2.0", "id": 1, "method": "list_tools", "params": {}}' | pytho
   "mcpServers": {
     "aerospace-mcp-dev": {
       "command": "python",
-      "args": ["-m", "aerospace_mcp.server"],
+      "args": ["-m", "aerospace_mcp.fastmcp_server"],
       "cwd": "/path/to/aerospace-mcp",
       "env": {
         "LOG_LEVEL": "debug",
@@ -1046,34 +1032,26 @@ echo '{"jsonrpc": "2.0", "id": 1, "method": "list_tools", "params": {}}' | pytho
 **Unit Tests for MCP Tools**:
 ```python
 # test_mcp_tools.py
-import pytest
-from aerospace_mcp.server import _handle_search_airports, _handle_plan_flight
+from aerospace_mcp.tools.core import search_airports, plan_flight
 
-@pytest.mark.asyncio
-async def test_search_airports():
+def test_search_airports():
     """Test airport search tool."""
-    result = await _handle_search_airports({
-        "query": "San Francisco",
-        "query_type": "city"
-    })
+    result = search_airports(query="San Francisco", query_type="city")
 
-    assert len(result) == 1
-    assert "SFO" in result[0].text
-    assert "San Francisco International" in result[0].text
+    assert "SFO" in result
+    assert "San Francisco International" in result
 
-@pytest.mark.asyncio
-async def test_plan_flight():
+def test_plan_flight():
     """Test flight planning tool."""
-    result = await _handle_plan_flight({
-        "departure": {"city": "New York"},
-        "arrival": {"city": "Los Angeles"},
-        "aircraft": {"type": "A320"}
-    })
+    result = plan_flight(
+        departure={"city": "New York"},
+        arrival={"city": "Los Angeles"},
+        aircraft={"ac_type": "A320"},
+    )
 
-    assert len(result) == 1
-    assert "JFK" in result[0].text or "LGA" in result[0].text
-    assert "LAX" in result[0].text
-    assert "A320" in result[0].text
+    assert "JFK" in result or "LGA" in result
+    assert "LAX" in result
+    assert "A320" in result
 ```
 
 **Integration Tests**:
@@ -1089,7 +1067,7 @@ async def test_full_mcp_integration():
     """Test full MCP integration."""
     server_params = StdioServerParameters(
         command="python",
-        args=["-m", "aerospace_mcp.server"],
+        args=["-m", "aerospace_mcp.fastmcp_server"],
         cwd="/path/to/aerospace-mcp"
     )
 
@@ -1130,7 +1108,7 @@ async def performance_test():
     """Test MCP server performance."""
     server_params = StdioServerParameters(
         command="python",
-        args=["-m", "aerospace_mcp.server"],
+        args=["-m", "aerospace_mcp.fastmcp_server"],
         cwd="/path/to/aerospace-mcp"
     )
 

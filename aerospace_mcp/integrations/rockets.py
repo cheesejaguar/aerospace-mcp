@@ -26,6 +26,7 @@ Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 from ._array_backend import np
@@ -160,6 +161,7 @@ def get_thrust_at_time(thrust_curve: list[list[float]], time_s: float) -> float:
     return float(np.interp(time_s, times, thrusts))
 
 
+@lru_cache(maxsize=4)
 def _build_atmosphere_table(
     max_alt_m: int = 50000, step_m: int = 1000
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -169,12 +171,18 @@ def _build_atmosphere_table(
     intervals, enabling ``np.interp`` during trajectory integration
     instead of per-step ISA calculations.
 
+    The table is a pure function of its integer arguments, so results are
+    cached (the ISA profile does not change).  This matters for callers
+    like ``optimize_launch_angle`` that run many trajectories in a loop.
+    The returned arrays are marked read-only to keep the cache safe.
+
     Args:
         max_alt_m: Maximum altitude in meters.
         step_m: Altitude spacing in meters.
 
     Returns:
-        Tuple of ``(altitudes, densities, speeds_of_sound)`` NumPy arrays.
+        Tuple of ``(altitudes, densities, speeds_of_sound)`` NumPy arrays
+        (read-only; copy before mutating).
     """
     alt_points = list(range(0, max_alt_m + step_m, step_m))
     atm_profile = get_atmosphere_profile(alt_points, "ISA")
@@ -182,6 +190,9 @@ def _build_atmosphere_table(
     altitudes = np.array([p.altitude_m for p in atm_profile])
     densities = np.array([p.density_kg_m3 for p in atm_profile])
     speeds_of_sound = np.array([p.speed_of_sound_mps for p in atm_profile])
+
+    for arr in (altitudes, densities, speeds_of_sound):
+        arr.setflags(write=False)
 
     return altitudes, densities, speeds_of_sound
 
@@ -224,7 +235,18 @@ def rocket_3dof_trajectory(
 
     Returns:
         List of trajectory points from launch to apogee (or ground impact).
+
+    Raises:
+        ValueError: If the time step or duration is out of bounds, or the
+            resulting step count exceeds the safety cap.
     """
+    if not 0.001 <= dt_s <= 10.0:
+        raise ValueError("dt_s must be between 0.001 and 10 s")
+    if not 0 < max_time_s <= 3600.0:
+        raise ValueError("max_time_s must be > 0 and <= 3600 s")
+    if max_time_s / dt_s > 500_000:
+        raise ValueError("too many integration steps (max 500000); increase dt_s")
+
     # Initial conditions
     trajectory = []
     time = 0.0

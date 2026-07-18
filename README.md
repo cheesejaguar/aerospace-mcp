@@ -69,10 +69,9 @@ Add to your Claude Desktop configuration:
 ```json
 {
   "mcpServers": {
-    "aerospace-mcp": {
+    "aerospace": {
       "command": "uv",
-      "args": ["run", "aerospace-mcp"],
-      "cwd": "/path/to/aerospace-mcp",
+      "args": ["--directory", "/path/to/aerospace-mcp", "run", "aerospace-mcp"],
       "env": {
         "LLM_TOOLS_ENABLED": "true",
         "OPENAI_API_KEY": "your-openai-api-key-here"
@@ -112,7 +111,7 @@ uv run aerospace-mcp sse 0.0.0.0 8001
 
 ### Core Capabilities
 
-- **Airport Resolution**: Intelligent city-to-airport mapping with 28,000+ airports worldwide
+- **Airport Resolution**: Intelligent city-to-airport mapping with 7,861 IATA airports worldwide
 - **Route Planning**: Great-circle distance calculation with geodesic precision
 - **Performance Estimation**: Aircraft-specific fuel and time calculations via OpenAP
 - **Atmospheric Modeling**: ISA atmosphere profiles with optional enhanced precision
@@ -135,10 +134,13 @@ uv run aerospace-mcp sse 0.0.0.0 8001
 
 - ✅ Airport search by city name or IATA code
 - ✅ Flight route planning with polyline generation
-- ✅ Aircraft performance estimation (190+ aircraft types)
+- ✅ Aircraft performance estimation (37 aircraft models via OpenAP)
 - ✅ Fuel consumption and flight time calculations
 - ✅ Great-circle distance calculations
-- ✅ Multi-leg journey planning
+- ✅ Multi-leg journey planning (`plan_multi_leg_flight`, 2-10 waypoints with aggregated totals)
+- ✅ Wind-aware flight planning (optional headwind-adjusted cruise speed, time, and fuel)
+- ✅ Aircraft database browsing and search (`get_aircraft_database`)
+- ✅ Unit conversions (length, speed, mass, pressure, temperature, angle)
 - ✅ Aircraft comparison analysis
 - ✅ Atmospheric profile calculation (ISA standard atmosphere)
 - ✅ Wind profile modeling (logarithmic/power law)
@@ -183,7 +185,7 @@ uv run aerospace-mcp sse 0.0.0.0 8001
 - 📚 **Well-documented**: Complete API documentation with examples
 - ⚡ **Hardware Optimized**: NumPy vectorization with CuPy GPU acceleration support
 - 🔄 **Batch Processing**: Vectorized operations for efficient bulk calculations
-- 🔍 **Tool Discovery**: Dynamic tool search for finding relevant tools from 44+ available
+- 🔍 **Tool Discovery**: Dynamic tool search for finding relevant tools from 47 specialized tools plus 2 discovery tools
 
 ## 💾 Installation
 
@@ -663,8 +665,8 @@ graph TB
     end
 
     subgraph "Data Sources"
-        AirportDB[Airport Database<br/>28,000+ airports]
-        OpenAP[OpenAP Models<br/>190+ aircraft]
+        AirportDB[Airport Database<br/>7,861 IATA airports]
+        OpenAP[OpenAP Models<br/>37 aircraft]
         Geodesic[GeographicLib<br/>WGS84 calculations]
     end
 
@@ -691,7 +693,7 @@ graph TB
    - **Performance Estimation**: OpenAP-based fuel and time calculations
 
 4. **Data Layer**
-   - **In-memory Airport Database**: 28,000+ airports loaded at startup
+   - **In-memory Airport Database**: 7,861 IATA airports loaded at startup
    - **OpenAP Integration**: Aircraft performance models
    - **GeographicLib**: Precise geodesic calculations
 
@@ -783,7 +785,7 @@ The FastMCP refactoring introduced a **modular architecture** with tools organiz
 - **Entry Point**: Now uses `aerospace_mcp.fastmcp_server:run`
 - **Dependencies**: Includes `fastmcp>=2.11.3` instead of raw `mcp`
 - **Server Name**: Still `aerospace-mcp` for client compatibility
-- **All Tools**: All 44 tools maintain exact same names and parameters
+- **All Tools**: All 47 tools maintain exact same names and parameters
 
 ## ⚙️ Configuration (.env)
 
@@ -796,6 +798,12 @@ Both the HTTP server and MCP servers automatically load environment variables fr
 - `AEROSPACE_MCP_ENV`: `development|production` (controls reload)
 - `LLM_TOOLS_ENABLED`: `true|false` to enable AI agent tools (default `false`)
 - `OPENAI_API_KEY`: Required if LLM tools are enabled
+
+HTTP API hardening (the FastAPI app in `main.py` is a thin layer over `aerospace_mcp/core.py`):
+
+- `CORS_ORIGINS`: Comma-separated list of allowed origins; CORS is disabled when unset
+- `RATE_LIMIT_RPM`: Per-IP requests per minute (default `120`, `0` disables rate limiting)
+- `MAX_BODY_BYTES`: Maximum accepted request body size (default 1 MiB)
 
 Example `.env`:
 
@@ -899,7 +907,7 @@ Health check and system status.
 {
   "status": "ok",
   "openap": true,
-  "airports_count": 28756
+  "airports_count": 7861
 }
 ```
 
@@ -958,7 +966,10 @@ Error responses include detailed messages:
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `search_airports` | Find airports by IATA or city | `query`, `country`, `query_type` |
-| `plan_flight` | Complete flight planning | `departure`, `arrival`, `aircraft`, `route_options` |
+| `plan_flight` | Complete flight planning (optional wind-aware estimates) | `departure`, `arrival`, `aircraft`, `route_options`, `wind` |
+| `plan_multi_leg_flight` | Multi-leg journeys through 2-10 waypoints with aggregated totals | `waypoints`, `aircraft` |
+| `get_aircraft_database` | Browse/search available OpenAP aircraft types | `search` |
+| `convert_units` | Length/speed/mass/pressure/temperature/angle conversions | `value`, `from_unit`, `to_unit` |
 | `calculate_distance` | Great-circle distance | `origin`, `destination`, `step_km` |
 | `get_aircraft_performance` | Performance estimates | `aircraft_type`, `distance_km`, `cruise_altitude` |
 | `get_atmosphere_profile` | ISA atmosphere conditions | `altitudes_m`, `model_type` |
@@ -1010,10 +1021,9 @@ Error responses include detailed messages:
 ```json
 {
   "mcpServers": {
-    "aerospace-mcp": {
+    "aerospace": {
       "command": "uv",
-      "args": ["run", "aerospace-mcp"],
-      "cwd": "/path/to/aerospace-mcp"
+      "args": ["--directory", "/path/to/aerospace-mcp", "run", "aerospace-mcp"]
     }
   }
 }
@@ -1024,7 +1034,7 @@ Error responses include detailed messages:
 
 ### Tool Discovery
 
-With 44+ aerospace tools available, the MCP server includes a **tool search tool** following [Anthropic's guide](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool) for dynamic tool discovery:
+With 47 specialized aerospace tools available (plus 2 discovery tools), the MCP server includes a **tool search tool** following [Anthropic's guide](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool) for dynamic tool discovery:
 
 ```python
 # Search by natural language
@@ -1099,7 +1109,7 @@ When Claude needs a specific tool, it uses `search_aerospace_tools` which return
 }
 ```
 
-The API automatically expands these references into full tool definitions, keeping context efficient while providing access to all 44+ tools.
+The API automatically expands these references into full tool definitions, keeping context efficient while providing access to all 47 tools.
 
 ### VS Code Continue Setup
 
@@ -1149,10 +1159,10 @@ pytest
 pytest --cov=. --cov-report=html
 
 # Run specific test file
-pytest tests/test_main.py -v
+pytest tests/test_plan.py -v
 
-# Performance testing
-pytest tests/test_performance.py -v
+# Run tool-specific tests
+pytest tests/tools/ -v
 ```
 
 ### Code Quality
@@ -1178,8 +1188,7 @@ aerospace-mcp/
 ├── main.py                 # FastAPI application
 ├── aerospace_mcp/          # MCP server implementation
 │   ├── __init__.py
-│   ├── server.py          # Legacy MCP server (deprecated)
-│   ├── fastmcp_server.py  # FastMCP server entry point (primary)
+│   ├── fastmcp_server.py  # FastMCP server entry point
 │   ├── core.py            # Shared business logic
 │   ├── tools/             # MCP tool definitions
 │   │   ├── core.py        # Flight planning tools
@@ -1205,12 +1214,11 @@ aerospace-mcp/
 ├── app/                   # Alternative FastAPI structure
 │   ├── __init__.py
 │   └── main.py
-├── tests/                 # Test suite (412 tests)
+├── tests/                 # Test suite
 │   ├── conftest.py
-│   ├── test_main.py
 │   ├── test_airports.py
 │   ├── test_plan.py
-│   ├── test_mcp.py
+│   ├── test_fastmcp.py
 │   ├── test_integrations_*.py  # Integration module tests
 │   └── tools/             # Tool-specific tests
 │       ├── test_tools_performance.py  # Performance tools tests
@@ -1269,7 +1277,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for
 
 - **New Aircraft Support**: Add more aircraft types to OpenAP
 - **Weather Integration**: Add weather data sources
-- **Route Optimization**: Implement waypoint optimization
+- **Route Optimization**: Wind-optimal routing beyond the built-in multi-leg planner (`plan_multi_leg_flight`)
 - **UI/Frontend**: Web interface for flight planning
 - **Database Backend**: PostgreSQL/MongoDB integration
 - **Performance**: Optimization and caching improvements

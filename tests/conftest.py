@@ -1,11 +1,17 @@
 """Test configuration and fixtures for Aerospace MCP tests."""
 
+import os
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
+
+# Disable HTTP rate limiting for the test suite (all TestClient requests
+# share one client IP and would otherwise trip the per-IP limiter).
+# Hardening tests opt back in explicitly via monkeypatch.
+os.environ.setdefault("RATE_LIMIT_RPM", "0")
 
 from aerospace_mcp.core import OPENAP_AVAILABLE, AirportOut, PlanRequest
 from main import app
@@ -179,8 +185,7 @@ def mock_openap_props():
 def mock_airports_iata(sample_airport_data):
     """Mock the airports IATA data loading."""
     with patch("aerospace_mcp.core._AIRPORTS_IATA", sample_airport_data):
-        with patch("main._AIRPORTS_IATA", sample_airport_data):
-            yield sample_airport_data
+        yield sample_airport_data
 
 
 @pytest.fixture
@@ -192,14 +197,9 @@ def client():
 @pytest.fixture(params=["with_openap", "without_openap"])
 def openap_availability(request):
     """Parameterized fixture for testing with and without OpenAP."""
-    if request.param == "with_openap":
-        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", True):
-            with patch("main.OPENAP_AVAILABLE", True):
-                yield True
-    else:
-        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", False):
-            with patch("main.OPENAP_AVAILABLE", False):
-                yield False
+    available = request.param == "with_openap"
+    with patch("aerospace_mcp.core.OPENAP_AVAILABLE", available):
+        yield available
 
 
 # Test data for parametrized tests

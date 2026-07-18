@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aerospace-mcp"
-version = "0.0.2"
+version = "0.1.0"
 description = "MCP server for aerospace and flight planning operations"
 authors = [
-    { name = "Aaron", email = "aaron@example.com" }
+    { name = "Aaron", email = "cheesejaguar@gmail.com" }
 ]
 license = { text = "MIT" }
 readme = "README.md"
@@ -99,9 +99,9 @@ aerospace-mcp = "aerospace_mcp.fastmcp_server:run"
 aerospace-mcp-cli = "aerospace_mcp.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/username/aerospace-mcp"
-Repository = "https://github.com/username/aerospace-mcp"
-Issues = "https://github.com/username/aerospace-mcp/issues"
+Homepage = "https://github.com/cheesejaguar/aerospace-mcp"
+Repository = "https://github.com/cheesejaguar/aerospace-mcp"
+Issues = "https://github.com/cheesejaguar/aerospace-mcp/issues"
 
 # Hatchling configuration
 [tool.hatch.build.targets.wheel]
@@ -207,11 +207,9 @@ omit = [
     "*/test_*.py",
     "*/__init__.py",
     # Omit optional/heavy modules from coverage calculations
-    "aerospace_mcp/integrations/propellers_temp.py",
     "aerospace_mcp/integrations/gnc.py",
     "aerospace_mcp/integrations/orbits.py",
     "aerospace_mcp/integrations/aero.py",
-    "aerospace_mcp/server.py",
 ]
 
 [tool.coverage.report]
@@ -253,7 +251,6 @@ ignore_missing_imports = true
 # Defer typing cleanup in heavy optional modules
 module = [
     "aerospace_mcp.integrations.*",
-    "aerospace_mcp.server",
     "aerospace_mcp.fastmcp_server",
     "aerospace_mcp.core",
     "aerospace_mcp.tools.*",
