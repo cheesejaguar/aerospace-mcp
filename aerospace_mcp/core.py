@@ -17,6 +17,7 @@ that are not certified for operational use.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Literal
 
@@ -45,6 +46,8 @@ except Exception:
 NM_PER_KM = 0.539956803  # 1 / 1.852
 # KM_PER_NM: multiply a distance in nautical miles to get kilometres.
 KM_PER_NM = 1.0 / NM_PER_KM  # ~1.852
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -95,8 +98,12 @@ class PlanRequest(BaseModel):
     """
 
     # You can pass cities, or override with explicit IATA
-    depart_city: str = Field(..., description="e.g., 'San Jose'")
-    arrive_city: str = Field(..., description="e.g., 'Tokyo'")
+    depart_city: str = Field(
+        ..., min_length=1, max_length=100, description="e.g., 'San Jose'"
+    )
+    arrive_city: str = Field(
+        ..., min_length=1, max_length=100, description="e.g., 'Tokyo'"
+    )
     depart_country: str | None = Field(
         None, description="ISO alpha-2 country code (optional)"
     )
@@ -117,7 +124,7 @@ class PlanRequest(BaseModel):
         None, description="If not set, defaults to 85% MTOW when available"
     )
     route_step_km: float = Field(
-        25.0, gt=1.0, description="Sampling step for polyline points"
+        25.0, gt=1.0, le=1000.0, description="Sampling step for polyline points"
     )
     backend: Literal["openap"] = "openap"  # Placeholder for future backends
 
@@ -213,13 +220,49 @@ def _airport_from_iata(iata: str) -> AirportOut | None:
     )
 
 
+# ---------------------------------------------------------------------------
+# City search index
+# ---------------------------------------------------------------------------
+# Precomputed structures for fast city lookups, built lazily on first search
+# and rebuilt automatically whenever ``_AIRPORTS_IATA`` is swapped out (tests
+# patch it with fixture data).  The identity check makes patching transparent:
+# a patched dict is a different object, so the index is rebuilt from it.
+_CITY_INDEX: dict[str, list[str]] | None = None  # city_lower -> [iata, ...]
+_NAME_LIST: list[tuple[str, str]] | None = None  # (iata, name_lower)
+_INDEX_SOURCE: object | None = None
+
+
+def _get_city_indexes() -> tuple[dict[str, list[str]], list[tuple[str, str]]]:
+    """Return (city index, lowercase name list), rebuilding if the DB changed.
+
+    Both structures skip entries without a valid IATA code (heliports,
+    closed fields, etc.) so search never has to re-filter them.
+    """
+    global _CITY_INDEX, _NAME_LIST, _INDEX_SOURCE
+    if _INDEX_SOURCE is not _AIRPORTS_IATA:
+        city_index: dict[str, list[str]] = {}
+        name_list: list[tuple[str, str]] = []
+        for iata, ap in _AIRPORTS_IATA.items():
+            if not iata or not ap.get("iata"):
+                continue
+            city_index.setdefault(ap.get("city", "").strip().lower(), []).append(iata)
+            name_list.append((iata, ap.get("name", "").lower()))
+        _CITY_INDEX = city_index
+        _NAME_LIST = name_list
+        _INDEX_SOURCE = _AIRPORTS_IATA
+    assert _CITY_INDEX is not None and _NAME_LIST is not None
+    return _CITY_INDEX, _NAME_LIST
+
+
 def _find_city_airports(city: str, country: str | None = None) -> list[AirportOut]:
     """Search airports by city name with optional country filter.
 
-    Performs a case-insensitive scan of the in-memory IATA database.  An
-    airport matches if its ``city`` field equals the query exactly, **or**
-    the query appears as a substring of the airport ``name`` (useful for
-    names like "San Jose International").
+    An airport matches if its ``city`` field equals the query exactly,
+    **or** the query appears as a substring of the airport ``name``
+    (useful for names like "San Jose International").  Exact-city matches
+    are resolved through a precomputed index (O(1)); name-substring
+    matches scan a precomputed lowercase name list without re-lowering
+    each row per query.
 
     Results are sorted with a preference heuristic: airports whose name
     contains the word "International" are ranked first, followed by
@@ -239,30 +282,34 @@ def _find_city_airports(city: str, country: str | None = None) -> list[AirportOu
     city_l = city.strip().lower()
     if not city_l:  # Return empty list for empty city names
         return []
+
+    city_index, name_list = _get_city_indexes()
+
+    # Exact-city hits from the index, then name-substring hits; preserve
+    # first-seen order while de-duplicating.
+    matched: dict[str, None] = dict.fromkeys(city_index.get(city_l, []))
+    for iata, name_l in name_list:
+        if city_l in name_l:
+            matched.setdefault(iata, None)
+
     out = []
-    for iata, ap in _AIRPORTS_IATA.items():
-        # Skip entries without a valid IATA code (heliports, closed, etc.)
-        if not iata or not ap.get("iata"):
+    for iata in matched:
+        ap = _AIRPORTS_IATA[iata]
+        # Optionally restrict to a specific country
+        if country is not None and ap.get("country", "").upper() != country.upper():
             continue
-        # Match on exact city name or substring of airport name
-        if (
-            ap.get("city", "").strip().lower() == city_l
-            or city_l in ap.get("name", "").lower()
-        ):
-            # Optionally restrict to a specific country
-            if country is None or (ap.get("country", "").upper() == country.upper()):
-                out.append(
-                    AirportOut(
-                        iata=iata.upper(),
-                        icao=ap.get("icao", ""),
-                        name=ap.get("name", ""),
-                        city=ap.get("city", ""),
-                        country=ap.get("country", ""),
-                        lat=float(ap["lat"]),
-                        lon=float(ap["lon"]),
-                        tz=ap.get("tz"),
-                    )
-                )
+        out.append(
+            AirportOut(
+                iata=iata.upper(),
+                icao=ap.get("icao", ""),
+                name=ap.get("name", ""),
+                city=ap.get("city", ""),
+                country=ap.get("country", ""),
+                lat=float(ap["lat"]),
+                lon=float(ap["lon"]),
+                tz=ap.get("tz"),
+            )
+        )
     # Heuristic sort: airports with "International" in the name float to the
     # top (False < True, so we negate the test).  Ties broken alphabetically.
     out.sort(key=lambda a: ("international" not in a.name.lower(), a.name))
@@ -274,9 +321,16 @@ class AirportResolutionError(Exception):
 
     This may happen if an explicit IATA code is invalid or if no airports
     match a city/country query.
+
+    Attributes:
+        kind: Machine-readable failure category -- ``"iata_not_found"`` or
+            ``"city_not_found"`` -- so interface layers can map to
+            appropriate status codes without parsing the message.
     """
 
-    pass
+    def __init__(self, message: str, kind: str = "city_not_found") -> None:
+        super().__init__(message)
+        self.kind = kind
 
 
 def _resolve_endpoint(
@@ -310,7 +364,9 @@ def _resolve_endpoint(
     if prefer_iata:
         ap = _airport_from_iata(prefer_iata)
         if not ap:
-            raise AirportResolutionError(f"{role}: IATA '{prefer_iata}' not found.")
+            raise AirportResolutionError(
+                f"{role}: IATA '{prefer_iata}' not found.", kind="iata_not_found"
+            )
         return ap
 
     cands = _find_city_airports(city, country)
@@ -390,14 +446,20 @@ class OpenAPError(Exception):
 
 
 def estimates_openap(
-    ac_type: str, cruise_alt_ft: int, mass_kg: float | None, route_dist_km: float
+    ac_type: str,
+    cruise_alt_ft: int,
+    mass_kg: float | None,
+    route_dist_km: float,
+    headwind_kts: float = 0.0,
 ) -> tuple[dict, str]:
     """Generate climb/cruise/descent performance estimates using the OpenAP library.
 
     Simulates a complete flight profile (climb, cruise, descent) for the
     given aircraft type and route distance, computing segment times,
-    distances, ground speeds, and fuel burns.  All calculations assume
-    zero-wind conditions (TAS equals ground speed).
+    distances, ground speeds, and fuel burns.  By default all calculations
+    assume zero-wind conditions (TAS equals ground speed); a constant
+    cruise headwind component can be supplied to adjust cruise ground
+    speed, time, and fuel.
 
     Args:
         ac_type: ICAO aircraft type designator (e.g. ``"A320"``, ``"B738"``).
@@ -412,6 +474,12 @@ def estimates_openap(
         route_dist_km: Total great-circle route distance in kilometres, used
             to derive the cruise segment length after subtracting climb and
             descent distances.
+        headwind_kts: Average headwind component along the cruise segment in
+            knots.  Positive values (headwind) reduce ground speed and
+            increase time/fuel; negative values (tailwind) do the opposite.
+            Cruise ground speed is floored at 30 kts to avoid divide-by-zero
+            for unrealistically strong winds.  Climb/descent segments are
+            left unadjusted (they are short and speed-scheduled).
 
     Returns:
         A two-element tuple:
@@ -421,7 +489,9 @@ def estimates_openap(
             - A string identifying the engine backend (``"openap"``).
 
     Raises:
-        OpenAPError: If the OpenAP package is not available.
+        OpenAPError: If the OpenAP package is not available, the aircraft
+            type is not supported by OpenAP's models, or the fuel-flow
+            model fails.
     """
     if not OPENAP_AVAILABLE:
         raise OpenAPError("OpenAP backend unavailable. Please `pip install openap`.")
@@ -436,19 +506,33 @@ def estimates_openap(
     #             rough generic narrow-body estimate.
     # Priority 4: If the property lookup itself throws, use 60 000 kg.
     mass = mass_kg
+    mass_source = "user" if mass_kg is not None else "default_60t"
     engine_note = "openap"
     try:
         ac_props = prop.aircraft(ac_type, use_synonym=True)
         mtow = (ac_props.get("limits") or {}).get("MTOW") or ac_props.get("mtow")
         if mass is None and mtow:
             mass = 0.85 * float(mtow)  # 85 % MTOW -- conservative default
+            mass_source = "mtow_85pct"
         elif mass is None:
             mass = 60_000.0  # generic narrow-body fallback
     except Exception:
         # Aircraft type not recognised or property tables unavailable.
         mass = mass or 60_000.0
+    if mass_source == "default_60t":
+        logger.warning(
+            "No MTOW available for aircraft type %r; using generic 60t mass default",
+            ac_type,
+        )
 
-    fgen = FlightGenerator(ac=ac_type)
+    # OpenAP raises plain ValueError for aircraft its kinematic/fuel models
+    # don't cover; surface that as a clean domain error instead of a 500.
+    try:
+        fgen = FlightGenerator(ac=ac_type)
+    except Exception as e:
+        raise OpenAPError(
+            f"Aircraft type '{ac_type}' not supported by OpenAP: {e}"
+        ) from e
     dt = 10  # simulation time-step in seconds
 
     # Generate climb & descent DataFrames at the requested cruise altitude.
@@ -499,24 +583,21 @@ def estimates_openap(
     # remaining distance to be flown at cruise speed.
     d_remaining = max(0.0, route_dist_km - (d_climb + d_des))
 
-    # NOTE: The first computation below is intentionally left as-is for
-    # historical context -- it uses a convoluted unit conversion that
-    # produces a correct but hard-to-read expression.  The second (and
-    # authoritative) computation replaces it with a clearer approach:
-    #   cruise_speed_km_per_s = (gs_cru [kts] * NM_PER_KM [nm/km inverted]) / 3600
-    # effectively converting knots -> km/s, then time = distance / speed.
+    # Apply the cruise headwind component: ground speed = TAS - headwind.
+    # TAS itself (used for fuel flow) is unchanged by wind.
+    gs_cru_eff = gs_cru if headwind_kts == 0.0 else max(gs_cru - headwind_kts, 30.0)
+
+    # kts -> km/s: 1 kt = 1 NM/h, so speed_km_s = gs * KM_PER_NM / 3600.
     cruise_time_s = (
-        0.0 if gs_cru <= 1e-6 else (d_remaining * KM_PER_NM) / (gs_cru / 3600.0 / 1.852)
-    )
-    # Corrected, clearer cruise-time computation:
-    # kts -> km/s: multiply knots by (KM_PER_NM / 3600) since 1 kt = 1 NM/h.
-    # Equivalently: speed_km_s = gs_cru * NM_PER_KM / 3600  (but NM_PER_KM < 1,
-    # so we use the reciprocal form below).
-    cruise_time_s = (
-        0.0 if gs_cru <= 1e-6 else (d_remaining / ((gs_cru * NM_PER_KM) / 3600.0))
+        0.0 if gs_cru_eff <= 1e-6 else d_remaining / ((gs_cru_eff * KM_PER_NM) / 3600.0)
     )
 
-    fuelflow = FuelFlow(ac=ac_type)
+    try:
+        fuelflow = FuelFlow(ac=ac_type)
+    except Exception as e:
+        raise OpenAPError(
+            f"Aircraft type '{ac_type}' not supported by OpenAP fuel model: {e}"
+        ) from e
 
     def fuel_from(
         avg_gs_kts: float, avg_alt_ft: float, vs_fpm: float, time_s: float
@@ -534,14 +615,18 @@ def estimates_openap(
 
         Returns:
             Estimated fuel burn in kilograms.
+
+        Raises:
+            OpenAPError: If the fuel-flow model fails, rather than silently
+                reporting zero fuel burn.
         """
         # Zero-wind assumption: TAS ~ GS for baseline fuel estimation.
         try:
             ff_kg_s = float(
                 fuelflow.enroute(mass=mass, tas=avg_gs_kts, alt=avg_alt_ft, vs=vs_fpm)
             )
-        except Exception:
-            ff_kg_s = 0.0
+        except Exception as e:
+            raise OpenAPError(f"Fuel flow computation failed for {ac_type}: {e}") from e
         return ff_kg_s * time_s
 
     fuel_climb = fuel_from(gs_climb, a_climb, vs_climb, t_climb)
@@ -558,7 +643,7 @@ def estimates_openap(
     cruise_out = SegmentEst(
         time_min=cruise_time_s / 60.0,
         distance_km=d_remaining,
-        avg_gs_kts=gs_cru,
+        avg_gs_kts=gs_cru_eff,
         fuel_kg=fuel_cru,
     )
     des_out = SegmentEst(
@@ -575,8 +660,10 @@ def estimates_openap(
         "cruise": cruise_out.model_dump(),
         "descent": des_out.model_dump(),
         "assumptions": {
-            "zero_wind": True,  # All fuel/time estimates assume no wind
+            "zero_wind": headwind_kts == 0.0,
+            "headwind_kts": headwind_kts,
             "mass_kg": mass,
+            "mass_source": mass_source,
             "cruise_alt_ft": cruise_alt_ft,
         },
     }
@@ -692,11 +779,11 @@ def plan_flight(payload: dict) -> dict:
         return response.model_dump()
 
     except (ValueError, AirportResolutionError) as e:
-        raise ValueError(str(e))
+        raise ValueError(str(e)) from e
     except OpenAPError as e:
-        raise RuntimeError(str(e))
+        raise RuntimeError(str(e)) from e
     except Exception as e:
-        raise RuntimeError(f"Flight planning failed: {str(e)}")
+        raise RuntimeError(f"Flight planning failed: {str(e)}") from e
 
 
 # ---------------------------------------------------------------------------
@@ -771,8 +858,10 @@ def create_flight_plan(req: PlanRequest) -> PlanResponse:
         and per-segment performance estimates.
 
     Raises:
-        FlightPlanError: If departure and arrival are identical, airport
-            resolution fails, or the performance backend encounters an error.
+        FlightPlanError: If departure and arrival are identical or the
+            backend is unknown.
+        AirportResolutionError: If either endpoint cannot be resolved.
+        OpenAPError: If the performance backend is unavailable or fails.
     """
     if (
         req.depart_city.strip().lower() == req.arrive_city.strip().lower()
@@ -783,18 +872,15 @@ def create_flight_plan(req: PlanRequest) -> PlanResponse:
             "Departure and arrival look identical—please specify airports explicitly."
         )
 
-    try:
-        dep = _resolve_endpoint(
-            req.depart_city,
-            req.depart_country,
-            req.prefer_depart_iata,
-            role="departure",
-        )
-        arr = _resolve_endpoint(
-            req.arrive_city, req.arrive_country, req.prefer_arrive_iata, role="arrival"
-        )
-    except AirportResolutionError as e:
-        raise FlightPlanError(str(e))
+    dep = _resolve_endpoint(
+        req.depart_city,
+        req.depart_country,
+        req.prefer_depart_iata,
+        role="departure",
+    )
+    arr = _resolve_endpoint(
+        req.arrive_city, req.arrive_country, req.prefer_arrive_iata, role="arrival"
+    )
 
     # Great-circle route
     poly, dist_km = great_circle_points(
@@ -803,12 +889,9 @@ def create_flight_plan(req: PlanRequest) -> PlanResponse:
 
     # Performance estimates via the selected backend
     if req.backend == "openap":
-        try:
-            est, engine_name = estimates_openap(
-                req.ac_type, req.cruise_alt_ft, req.mass_kg, dist_km
-            )
-        except OpenAPError as e:
-            raise FlightPlanError(str(e))
+        est, engine_name = estimates_openap(
+            req.ac_type, req.cruise_alt_ft, req.mass_kg, dist_km
+        )
     else:
         raise FlightPlanError(f"Unknown backend: {req.backend}")
 
@@ -821,3 +904,112 @@ def create_flight_plan(req: PlanRequest) -> PlanResponse:
         polyline=poly,
         estimates=est,
     )
+
+
+MAX_MULTI_LEG_WAYPOINTS = 10
+
+
+def plan_multi_leg(
+    waypoints: list[dict],
+    ac_type: str,
+    cruise_alt_ft: int = 35000,
+    mass_kg: float | None = None,
+    route_step_km: float = 25.0,
+) -> dict:
+    """Plan a multi-leg journey through an ordered list of waypoints.
+
+    Each consecutive pair of waypoints becomes one leg, planned with the
+    same airport resolution, great-circle routing, and OpenAP performance
+    estimation as a single-leg plan.  Totals are aggregated across legs.
+
+    Args:
+        waypoints: Ordered list of 2-10 waypoint dicts, each with keys
+            ``city`` (required unless ``iata`` given), optional ``country``
+            (ISO alpha-2), and optional ``iata`` (forces a specific airport).
+        ac_type: ICAO aircraft type designator used for every leg.
+        cruise_alt_ft: Cruise altitude in feet for every leg.
+        mass_kg: Aircraft mass override in kg (85% MTOW default when None).
+            Note: mass is NOT depleted between legs; each leg uses the same
+            starting mass, so total fuel is a conservative estimate.
+        route_step_km: Polyline sampling interval per leg in kilometres.
+
+    Returns:
+        A dictionary with ``legs`` (list of per-leg summaries including
+        airports, distance, and estimates) and ``totals`` (aggregate
+        distance, time, and fuel).
+
+    Raises:
+        FlightPlanError: If the waypoint list is invalid.
+        AirportResolutionError: If any waypoint cannot be resolved.
+        OpenAPError: If the performance backend is unavailable or fails.
+    """
+    if not isinstance(waypoints, list) or len(waypoints) < 2:
+        raise FlightPlanError("waypoints must be a list of at least 2 entries")
+    if len(waypoints) > MAX_MULTI_LEG_WAYPOINTS:
+        raise FlightPlanError(
+            f"waypoints must contain at most {MAX_MULTI_LEG_WAYPOINTS} entries"
+        )
+
+    # Resolve every waypoint up-front so errors name the failing stop
+    # before any expensive per-leg work happens.
+    resolved: list[AirportOut] = []
+    for idx, wp in enumerate(waypoints):
+        if not isinstance(wp, dict):
+            raise FlightPlanError(f"waypoint {idx} must be an object/dict")
+        city = str(wp.get("city", "") or "")
+        country = wp.get("country")
+        iata = wp.get("iata")
+        if not city and not iata:
+            raise FlightPlanError(f"waypoint {idx} needs a 'city' or 'iata' key")
+        resolved.append(_resolve_endpoint(city, country, iata, role=f"waypoint {idx}"))
+
+    legs = []
+    total_distance_km = 0.0
+    total_time_min = 0.0
+    total_fuel_kg = 0.0
+
+    for i in range(len(resolved) - 1):
+        dep, arr = resolved[i], resolved[i + 1]
+        if dep.iata == arr.iata:
+            raise FlightPlanError(
+                f"leg {i + 1}: departure and arrival are both {dep.iata}"
+            )
+
+        poly, dist_km = great_circle_points(
+            dep.lat, dep.lon, arr.lat, arr.lon, route_step_km
+        )
+        est, engine_name = estimates_openap(ac_type, cruise_alt_ft, mass_kg, dist_km)
+
+        total_distance_km += dist_km
+        total_time_min += est["block"]["time_min"]
+        total_fuel_kg += est["block"]["fuel_kg"]
+
+        legs.append(
+            {
+                "leg": i + 1,
+                "depart": dep.model_dump(),
+                "arrive": arr.model_dump(),
+                "distance_km": dist_km,
+                "distance_nm": dist_km * NM_PER_KM,
+                "polyline": poly,
+                "estimates": est,
+                "engine": engine_name,
+            }
+        )
+
+    return {
+        "legs": legs,
+        "totals": {
+            "legs": len(legs),
+            "distance_km": total_distance_km,
+            "distance_nm": total_distance_km * NM_PER_KM,
+            "time_min": total_time_min,
+            "fuel_kg": total_fuel_kg,
+        },
+        "assumptions": {
+            "constant_mass_between_legs": True,
+            "zero_wind": True,
+            "cruise_alt_ft": cruise_alt_ft,
+            "ac_type": ac_type,
+        },
+    }

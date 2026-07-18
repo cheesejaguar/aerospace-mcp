@@ -94,6 +94,7 @@ def plan_flight(
     arrival: dict,
     aircraft: dict | None = None,
     route_options: dict | None = None,
+    wind: dict | None = None,
 ) -> str:
     """Plan a flight route between two airports with performance estimates.
 
@@ -102,6 +103,12 @@ def plan_flight(
         arrival: Dict with arrival info (city, country, iata)
         aircraft: Optional aircraft config (ac_type, cruise_alt_ft, route_step_km)
         route_options: Optional route options
+        wind: Optional constant-wind model for cruise estimates, as a dict
+            with ``wind_speed_kts`` (float) and ``wind_direction_deg``
+            (float, meteorological convention: direction the wind blows
+            FROM, 0 = north).  The headwind component along the route's
+            initial bearing adjusts cruise ground speed, time, and fuel.
+            Omit for the default zero-wind baseline.
 
     Returns:
         JSON string with flight plan details including departure/arrival airports,
@@ -224,6 +231,26 @@ def plan_flight(
             },
         }
 
+        # Wind: project the supplied constant wind onto the route's initial
+        # bearing to get the average cruise headwind component.
+        # Meteorological convention: wind_direction_deg is the direction the
+        # wind blows FROM, so a wind from dead ahead (direction == bearing)
+        # is a pure headwind: headwind = speed * cos(direction - bearing).
+        headwind_kts = 0.0
+        if wind:
+            import math
+
+            wind_speed = float(wind.get("wind_speed_kts", 0.0) or 0.0)
+            wind_dir = float(wind.get("wind_direction_deg", 0.0) or 0.0)
+            headwind_kts = wind_speed * math.cos(
+                math.radians(wind_dir - initial_bearing)
+            )
+            response["wind"] = {
+                "wind_speed_kts": wind_speed,
+                "wind_direction_deg": wind_dir,
+                "headwind_component_kts": headwind_kts,
+            }
+
         # Add performance estimates if available
         if request.ac_type and OPENAP_AVAILABLE:
             try:
@@ -232,6 +259,7 @@ def plan_flight(
                     request.cruise_alt_ft,
                     request.mass_kg,
                     distance_km,
+                    headwind_kts=headwind_kts,
                 )
                 response["performance"] = performance
                 response["engine"] = engine_name
@@ -371,3 +399,122 @@ def get_system_status() -> str:
         }
 
     return json.dumps(status, indent=2)
+
+
+def plan_multi_leg_flight(
+    waypoints: list[dict],
+    aircraft: dict | None = None,
+) -> str:
+    """Plan a multi-leg journey through 2-10 waypoints with aggregated totals.
+
+    Each consecutive pair of waypoints becomes one flight leg, planned with
+    the same airport resolution, great-circle routing, and OpenAP
+    performance estimation as plan_flight.  The response includes per-leg
+    details plus total distance, time, and fuel across the journey.
+
+    Args:
+        waypoints: Ordered list of 2-10 waypoint dicts, each with keys
+            ``city`` (e.g. "Tokyo"), optional ``country`` (ISO alpha-2,
+            e.g. "JP"), and optional ``iata`` (forces a specific airport,
+            e.g. "NRT").
+        aircraft: Optional aircraft config dict with ``ac_type`` (ICAO
+            designator, default "A320"), ``cruise_alt_ft`` (default 35000),
+            ``mass_kg``, and ``route_step_km`` (default 25).
+
+    Returns:
+        JSON string with ``legs`` (per-leg airports, distance, estimates)
+        and ``totals`` (aggregate distance/time/fuel), or an error message.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+    """
+    from ..core import plan_multi_leg
+
+    try:
+        aircraft = aircraft or {}
+        result = plan_multi_leg(
+            waypoints,
+            ac_type=aircraft.get("ac_type", "A320"),
+            cruise_alt_ft=int(aircraft.get("cruise_alt_ft", 35000)),
+            mass_kg=aircraft.get("mass_kg"),
+            route_step_km=float(aircraft.get("route_step_km", 25.0)),
+        )
+        return json.dumps(result, indent=2)
+    except AirportResolutionError as e:
+        return f"Airport resolution error: {str(e)}"
+    except OpenAPError as e:
+        return f"Performance estimation error: {str(e)}"
+    except Exception as e:
+        logger.error(f"Multi-leg planning error: {str(e)}", exc_info=True)
+        return f"Multi-leg planning error: {str(e)}"
+
+
+def get_aircraft_database(search: str | None = None) -> str:
+    """Browse or search the OpenAP aircraft performance database.
+
+    Lists the aircraft types supported by OpenAP (used by plan_flight and
+    get_aircraft_performance).  With an exact type match, returns key
+    properties for that aircraft (MTOW, engine, wing area, cruise data).
+
+    Args:
+        search: Optional filter.  A substring (e.g. "a3") lists matching
+            type codes; an exact ICAO type (e.g. "A320") returns that
+            aircraft's properties.  Omit to list all supported types.
+
+    Returns:
+        JSON string with matching aircraft types and, for exact matches,
+        detailed properties -- or an error message if OpenAP is missing.
+
+    Raises:
+        No exceptions are raised directly; errors are returned as formatted strings.
+    """
+    if not OPENAP_AVAILABLE:
+        return "OpenAP library is not available. Install with: pip install openap"
+
+    try:
+        from ..core import prop
+
+        # OpenAP's list API has varied across versions; fall back gracefully.
+        available: list[str] = []
+        if hasattr(prop, "available_aircraft"):
+            available = sorted(str(a).upper() for a in prop.available_aircraft())
+
+        result: dict = {"total_aircraft": len(available)}
+
+        if search:
+            needle = search.strip().upper()
+            matches = [a for a in available if needle in a]
+            result["search"] = search
+            result["matches"] = matches
+
+            # Exact match (or unique result): include detailed properties.
+            exact = needle if needle in available else None
+            if exact is None and len(matches) == 1:
+                exact = matches[0]
+            if exact or not available:
+                try:
+                    ac = prop.aircraft(exact or needle, use_synonym=True)
+                    limits = ac.get("limits") or {}
+                    result["aircraft"] = {
+                        "type": exact or needle,
+                        "mtow_kg": limits.get("MTOW") or ac.get("mtow"),
+                        "oew_kg": limits.get("OEW") or ac.get("oew"),
+                        "mfc_kg": limits.get("MFC"),
+                        "engine": (ac.get("engine") or {}).get("default"),
+                        "wing_area_m2": (ac.get("wing") or {}).get("area"),
+                        "wing_span_m": (ac.get("wing") or {}).get("span"),
+                        "cruise_mach": (ac.get("cruise") or {}).get("mach"),
+                        "cruise_height_m": (ac.get("cruise") or {}).get("height"),
+                    }
+                except Exception as e:
+                    if not matches:
+                        return (
+                            f"No aircraft matching '{search}' in the OpenAP "
+                            f"database ({e})"
+                        )
+        else:
+            result["aircraft_types"] = available
+
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        return f"Aircraft database error: {str(e)}"

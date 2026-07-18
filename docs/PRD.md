@@ -106,7 +106,7 @@ Notes: Tools are grouped; each lists candidate libraries. Prefer Tier 1 (light) 
 - gnc.kalman_filter_sim(traj_true: list[dict], sensors: dict) -> dict
 
 4) MCP Tool Definitions
-- Add new Tool entries in `aerospace_mcp/server.py` with JSON Schemas mirroring the wrappers.
+- Register new tools in `aerospace_mcp/fastmcp_server.py` via `mcp.tool(...)`; FastMCP derives JSON Schemas from the wrappers' type hints.
 - Standardize responses: headline, key scalars, and optional tabular blocks.
 - Respect timeouts with `asyncio.wait_for`; catch ImportError and return guidance.
 

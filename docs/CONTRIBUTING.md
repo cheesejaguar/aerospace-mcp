@@ -362,30 +362,19 @@ def new_feature_endpoint(req: NewFeatureRequest):
 
 ### MCP Integration
 
-Future MCP (Model Context Protocol) integration should be added in the `aerospace_mcp/` directory:
+MCP (Model Context Protocol) tools live in `aerospace_mcp/tools/` and are registered with FastMCP in `aerospace_mcp/fastmcp_server.py`:
 
 ```python
-# aerospace_mcp/server.py
-from mcp.server import Server
-from mcp.types import Tool
+# aerospace_mcp/fastmcp_server.py
+from fastmcp import FastMCP
 
-server = Server("aerospace-mcp")
+from .tools.core import plan_flight
 
-@server.list_tools()
-async def list_tools() -> list[Tool]:
-    return [
-        Tool(
-            name="plan_flight",
-            description="Plan a flight route between cities",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "departure": {"type": "string"},
-                    "arrival": {"type": "string"}
-                }
-            }
-        )
-    ]
+mcp = FastMCP("aerospace-mcp")
+
+# FastMCP derives the tool schema from the function's
+# signature, type hints, and docstring
+mcp.tool(plan_flight)
 ```
 
 ## Common Development Tasks

@@ -181,16 +181,52 @@ class TestFrameTransformations:
         assert isinstance(result.z, float)
 
     def test_approximate_transforms(self):
-        """Test that approximate transformations work without high-precision libraries."""
+        """GMST-based ECI<->ECEF works without high-precision libraries."""
         xyz = [1000000.0, 2000000.0, 3000000.0]
 
-        # Without high-precision libraries, should still provide approximate results
         if not ASTROPY_AVAILABLE and not SKYFIELD_AVAILABLE:
             result = transform_frames(xyz, "GCRS", "ITRF")
             assert result.frame == "ITRF"
-            assert result.x == xyz[0]  # Simplified approximation keeps same coordinates
-            assert result.y == xyz[1]
+            # z-axis rotation: z unchanged, xy-magnitude preserved
             assert result.z == xyz[2]
+            xy_mag_in = (xyz[0] ** 2 + xyz[1] ** 2) ** 0.5
+            xy_mag_out = (result.x**2 + result.y**2) ** 0.5
+            assert abs(xy_mag_out - xy_mag_in) < 1e-3
+
+    @pytest.mark.skipif(ASTROPY_AVAILABLE, reason="tests the manual GMST path")
+    def test_eci_ecef_round_trip(self):
+        """ECI -> ECEF -> ECI recovers the input to sub-millimetre level."""
+        xyz = [6500000.0, 1000000.0, 2000000.0]
+        epoch = "2024-03-20T12:00:00"
+
+        ecef = transform_frames(xyz, "ECI", "ECEF", epoch)
+        back = transform_frames([ecef.x, ecef.y, ecef.z], "ECEF", "ECI", epoch)
+
+        assert abs(back.x - xyz[0]) < 1e-3
+        assert abs(back.y - xyz[1]) < 1e-3
+        assert abs(back.z - xyz[2]) < 1e-3
+
+    @pytest.mark.skipif(ASTROPY_AVAILABLE, reason="tests the manual GMST path")
+    def test_eci_ecef_rotation_advances_with_time(self):
+        """Six hours of Earth rotation shifts the transform by ~90.25 deg."""
+        import math
+
+        xyz = [6500000.0, 0.0, 0.0]
+        epoch1 = "2024-01-01T00:00:00"
+        epoch2 = "2024-01-01T06:00:00"
+
+        r1 = transform_frames(xyz, "ECI", "ECEF", epoch1)
+        r2 = transform_frames(xyz, "ECI", "ECEF", epoch2)
+
+        angle1 = math.atan2(r1.y, r1.x)
+        angle2 = math.atan2(r2.y, r2.x)
+        delta_deg = math.degrees(angle2 - angle1) % 360.0
+        # Sidereal rate: 360.9856 deg/day -> 90.246 deg per 6 h.  The ECI->ECEF
+        # rotation angle is -GMST, so the frame angle decreases; check the
+        # magnitude of the advance.
+        assert (
+            abs((360.0 - delta_deg) - 90.246) < 0.01 or abs(delta_deg - 90.246) < 0.01
+        )
 
 
 class TestConvenienceFunctions:

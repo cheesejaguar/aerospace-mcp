@@ -9,7 +9,7 @@ The test suite provides >80% code coverage and includes both unit tests and inte
 - **Airport resolution functionality** (`tests/test_airports.py`)
 - **Flight planning and performance estimation** (`tests/test_plan.py`)
 - **FastAPI health endpoints** (`tests/test_health.py`)
-- **MCP server functionality** (`tests/test_mcp.py`)
+- **MCP server functionality** (`tests/test_fastmcp.py`)
 - **Shared test fixtures and configuration** (`tests/conftest.py`)
 
 ## Test Organization
@@ -28,7 +28,7 @@ tests/
 ├── test_airports.py     # Airport resolution and search tests
 ├── test_plan.py         # Flight planning and distance calculation tests
 ├── test_health.py       # FastAPI endpoint tests
-└── test_mcp.py          # MCP server and tool tests
+└── test_fastmcp.py      # MCP server and tool tests
 ```
 
 ## Running Tests
@@ -136,7 +136,7 @@ Tests use realistic mock data:
 - ✅ Response format verification
 - ✅ Custom parameter handling
 
-### MCP Server (`test_mcp.py`)
+### MCP Server (`test_fastmcp.py`)
 
 - ✅ Server initialization and tool registration
 - ✅ All MCP tools (`search_airports`, `plan_flight`, etc.)
@@ -171,7 +171,7 @@ def openap_availability(request):
         yield available
 
 # Mock performance estimates
-with patch('aerospace_mcp.server.estimates_openap') as mock_estimates:
+with patch('aerospace_mcp.tools.core.estimates_openap') as mock_estimates:
     mock_estimates.return_value = (sample_estimates, "openap")
 ```
 

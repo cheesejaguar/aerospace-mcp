@@ -3,1529 +3,1124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aerospace MCP - Comprehensive Flight Planning & Space Operations API</title>
-    <meta name="description" content="Open-source aerospace research platform with flight planning, orbital mechanics, and spacecraft trajectory optimization. Features 44+ tools, 28,000+ airports, and FastMCP integration.">
-    <meta name="keywords" content="aerospace, flight planning, orbital mechanics, MCP, FastAPI, space operations, aviation API, aircraft performance">
-    <meta name="author" content="Aerospace MCP Project">
+    <title>Aerospace MCP — Flight Planning &amp; Orbital Mechanics for AI Agents</title>
+    <meta name="description" content="Open-source Model Context Protocol server with 47 aerospace engineering tools: flight planning, orbital mechanics, rocket trajectories, aerodynamics, and trajectory optimization for AI agents.">
+    <meta name="keywords" content="MCP, Model Context Protocol, aerospace, flight planning, orbital mechanics, rocket trajectory, aerodynamics, AI agents, Claude">
+    <meta name="author" content="Cheesejaguar">
+    <link rel="canonical" href="https://aeroastro.org/">
+    <meta name="theme-color" content="#0A1020">
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Aerospace MCP - Flight Planning & Space Operations API">
-    <meta property="og:description" content="Open-source aerospace research platform with 44+ tools for flight planning, orbital mechanics, and spacecraft trajectory optimization.">
-    <meta property="og:url" content="https://aeroastro.org">
+    <meta property="og:url" content="https://aeroastro.org/">
     <meta property="og:site_name" content="Aerospace MCP">
+    <meta property="og:title" content="Aerospace MCP — Flight Planning &amp; Orbital Mechanics for AI Agents">
+    <meta property="og:description" content="Open-source MCP server with 47 aerospace engineering tools: flight planning, orbital mechanics, rockets, aerodynamics, and optimization.">
+    <meta property="og:image" content="https://aeroastro.org/assets/og-card.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Aerospace MCP — mission-control style banner with a plotted great-circle route">
 
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="Aerospace MCP - Flight Planning & Space Operations API">
-    <meta name="twitter:description" content="Open-source aerospace research platform with 44+ tools for flight planning, orbital mechanics, and spacecraft trajectory optimization.">
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Aerospace MCP — Flight Planning &amp; Orbital Mechanics for AI Agents">
+    <meta name="twitter:description" content="Open-source MCP server with 47 aerospace engineering tools for AI agents.">
+    <meta name="twitter:image" content="https://aeroastro.org/assets/og-card.png">
 
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" href="favicon.ico">
+    <link rel="preload" href="assets/fonts/space-grotesk-var.woff2" as="font" type="font/woff2" crossorigin>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Aerospace MCP",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "macOS, Linux, Windows",
+      "description": "Model Context Protocol server providing 47 aerospace engineering tools for AI agents: flight planning, orbital mechanics, rocket trajectories, aerodynamics, and trajectory optimization.",
+      "url": "https://aeroastro.org/",
+      "license": "https://opensource.org/licenses/MIT",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "codeRepository": "https://github.com/cheesejaguar/aerospace-mcp"
+    }
+    </script>
 
     <style>
+        /* ================= Design tokens ================= */
         :root {
-            --primary-color: #1e40af;
-            --secondary-color: #7c3aed;
-            --accent-color: #f59e0b;
-            --text-color: #f8fafc;
-            --text-secondary: #cbd5e1;
-            --bg-dark: #0f172a;
-            --bg-card: #1e293b;
-            --bg-gradient: linear-gradient(135deg, #1e40af, #7c3aed, #0f172a);
-            --shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-            --border-radius: 12px;
-            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --bg: #0A1020;
+            --bg-raise: #0E1628;
+            --panel: #101B33;
+            --line: rgba(148, 178, 255, 0.12);
+            --line-strong: rgba(148, 178, 255, 0.22);
+            --ink: #E8EEF9;
+            --ink-dim: #A6B4CE;
+            --ink-faint: #6E7F9F;
+            --amber: #FFB547;
+            --amber-deep: #C97E10;
+            --cyan: #6FD9F2;
+            --ok: #5DD39E;
+            --danger: #E5484D;
+            --font-display: 'Space Grotesk', 'Segoe UI Variable', -apple-system, sans-serif;
+            --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+            --maxw: 1140px;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        @font-face {
+            font-family: 'Space Grotesk';
+            src: url('assets/fonts/space-grotesk-var.woff2') format('woff2-variations');
+            font-weight: 300 700;
+            font-display: swap;
         }
 
-        html {
-            scroll-behavior: smooth;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: var(--bg-dark);
-            color: var(--text-color);
+            font-family: var(--font-body);
+            background: var(--bg);
+            color: var(--ink);
             line-height: 1.6;
-            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
         }
 
-        /* Animated background particles */
-        .particles {
-            position: fixed;
+        ::selection { background: rgba(255, 181, 71, 0.28); }
+
+        /* ================= Utility ================= */
+        .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 1.5rem; }
+
+        .kicker {
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--amber);
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-bottom: 0.9rem;
+        }
+        .kicker::before {
+            content: "";
+            display: inline-block;
+            width: 1.6rem;
+            height: 1px;
+            background: var(--amber);
+        }
+
+        .skip-link {
+            position: absolute;
+            left: -9999px;
             top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            opacity: 0.1;
-        }
-
-        .particle {
-            position: absolute;
-            background: var(--accent-color);
-            border-radius: 50%;
-            animation: float 6s ease-in-out infinite;
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0px) rotate(0deg); }
-            50% { transform: translateY(-20px) rotate(180deg); }
-        }
-
-        /* Header */
-        .header {
-            background: var(--bg-gradient);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            position: relative;
-            padding: 2rem;
-        }
-
-        .hero-content h1 {
-            font-size: clamp(2.5rem, 5vw, 4rem);
-            font-weight: 700;
-            margin-bottom: 1rem;
-            background: linear-gradient(45deg, var(--text-color), var(--accent-color));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .hero-content p {
-            font-size: clamp(1.1rem, 2.5vw, 1.3rem);
-            margin-bottom: 2rem;
-            color: var(--text-secondary);
-            max-width: 600px;
-        }
-
-        .hero-buttons {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-bottom: 3rem;
-        }
-
-        .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: var(--border-radius);
-            font-size: 1rem;
+            background: var(--amber);
+            color: #131313;
+            padding: 0.6rem 1rem;
+            z-index: 200;
             font-weight: 600;
-            text-decoration: none;
-            cursor: pointer;
-            transition: var(--transition);
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
+            border-radius: 0 0 6px 0;
+        }
+        .skip-link:focus { left: 0; }
+
+        a { color: var(--cyan); }
+
+        :focus-visible {
+            outline: 2px solid var(--amber);
+            outline-offset: 2px;
+            border-radius: 2px;
         }
 
-        .btn-primary {
-            background: var(--accent-color);
-            color: var(--bg-dark);
+        h2 {
+            font-family: var(--font-display);
+            font-size: clamp(1.6rem, 3.2vw, 2.15rem);
+            font-weight: 600;
+            letter-spacing: -0.015em;
+            line-height: 1.2;
+            margin-bottom: 0.6rem;
         }
 
-        .btn-secondary {
-            background: transparent;
-            color: var(--text-color);
-            border: 2px solid var(--text-color);
-        }
+        .section { padding: 5.5rem 0; }
+        .section-intro { color: var(--ink-dim); max-width: 46rem; margin-bottom: 2.6rem; }
 
-        .btn:hover {
-            transform: translateY(-3px);
-            box-shadow: var(--shadow);
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 2rem;
-            margin-top: 2rem;
-        }
-
-        .stat {
-            text-align: center;
-        }
-
-        .stat-number {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--accent-color);
-            display: block;
-        }
-
-        .stat-label {
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-            margin-top: 0.5rem;
-        }
-
-        /* Sections */
-        .section {
-            padding: 5rem 2rem;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .section h2 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            text-align: center;
-            margin-bottom: 3rem;
-            color: var(--text-color);
-        }
-
-        /* Features Grid */
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-        }
-
-        .feature-card {
-            background: var(--bg-card);
-            padding: 2rem;
-            border-radius: var(--border-radius);
-            transition: var(--transition);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .feature-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 40px rgba(30, 64, 175, 0.2);
-            border-color: transparent;
-            background-image: linear-gradient(var(--bg-card), var(--bg-card)),
-                              linear-gradient(135deg, var(--primary-color), var(--secondary-color), var(--accent-color));
-            background-origin: border-box;
-            background-clip: padding-box, border-box;
-        }
-
-        .feature-icon {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-            display: block;
-        }
-
-        .feature-card h3 {
-            font-size: 1.3rem;
-            margin-bottom: 1rem;
-            color: var(--text-color);
-        }
-
-        .feature-card p {
-            color: var(--text-secondary);
-            margin-bottom: 1rem;
-        }
-
-        .feature-list {
-            list-style: none;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-        }
-
-        .feature-list li {
-            padding: 0.2rem 0;
-            padding-left: 1rem;
-            position: relative;
-        }
-
-        .feature-list li:before {
-            content: "✓";
-            position: absolute;
-            left: 0;
-            color: var(--accent-color);
-            font-weight: bold;
-        }
-
-        /* Code Examples */
-        .code-section {
-            background: var(--bg-card);
-            border-radius: var(--border-radius);
-            margin: 2rem 0;
-        }
-
-        .code-tabs {
-            display: flex;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            overflow-x: auto;
-        }
-
-        .code-tab {
-            padding: 1rem 1.5rem;
-            cursor: pointer;
-            border: none;
-            background: transparent;
-            color: var(--text-secondary);
-            transition: var(--transition);
-            white-space: nowrap;
-        }
-
-        .code-tab.active,
-        .code-tab:hover {
-            color: var(--accent-color);
-            background: rgba(245, 158, 11, 0.1);
-        }
-
-        .code-content {
-            display: none;
-            padding: 2rem;
-        }
-
-        .code-content.active {
-            display: block;
-        }
-
-        .code-block {
-            background: var(--bg-dark);
-            padding: 1.5rem;
-            border-radius: 8px;
-            overflow-x: auto;
-            margin: 1rem 0;
-            position: relative;
-        }
-
-        .code-block code {
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            font-size: 0.9rem;
-            line-height: 1.5;
-            color: var(--text-color);
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-
-        .copy-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            padding: 5px 10px;
-            background: var(--accent-color);
-            color: var(--bg-dark);
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.8rem;
-            opacity: 0.8;
-        }
-
-        .copy-btn:hover {
-            opacity: 1;
-        }
-
-        /* Installation Methods */
-        .install-methods {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            margin: 2rem 0;
-        }
-
-        .install-card {
-            background: var(--bg-card);
-            padding: 2rem;
-            border-radius: var(--border-radius);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .install-card h3 {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-            color: var(--accent-color);
-        }
-
-        /* Warning Section */
-        .warning {
-            background: linear-gradient(45deg, #dc2626, #ea580c);
-            padding: 2rem;
-            border-radius: var(--border-radius);
-            margin: 3rem 0;
-            text-align: center;
-        }
-
-        .warning h3 {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-            color: white;
-        }
-
-        .warning p {
-            color: rgba(255, 255, 255, 0.9);
-            margin-bottom: 0.5rem;
-        }
-
-        /* Footer */
-        .footer {
-            background: var(--bg-card);
-            padding: 3rem 2rem;
-            text-align: center;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .footer-content {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
-        .footer-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr;
-            gap: 3rem;
-            text-align: left;
-            max-width: 1000px;
-            margin: 0 auto 2rem;
-        }
-
-        .footer-brand h3 {
-            color: var(--accent-color);
-            margin-bottom: 0.75rem;
-        }
-
-        .footer-brand p {
-            color: var(--text-secondary);
-            font-size: 0.95rem;
-            line-height: 1.6;
-        }
-
-        .footer-col {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .footer-col h4 {
-            color: var(--text-color);
-            margin-bottom: 0.5rem;
-            font-size: 1rem;
-        }
-
-        .footer-col a {
-            color: var(--text-secondary);
-            text-decoration: none;
-            font-size: 0.9rem;
-            transition: color 0.2s ease;
-        }
-
-        .footer-col a:hover {
-            color: var(--accent-color);
-        }
-
-        .footer-bottom {
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-            padding-top: 1.5rem;
-            text-align: center;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-        }
-
-        /* Sticky Navigation */
+        /* ================= Nav ================= */
         .navbar {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1000;
-            padding: 1rem 2rem;
-            transition: background 0.3s ease, box-shadow 0.3s ease;
+            inset: 0 0 auto 0;
+            z-index: 100;
+            border-bottom: 1px solid transparent;
+            transition: background 0.25s, border-color 0.25s;
         }
-
         .navbar.scrolled {
-            background: rgba(15, 23, 42, 0.95);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
+            background: rgba(10, 16, 32, 0.88);
+            backdrop-filter: blur(12px);
+            border-bottom-color: var(--line);
         }
-
-        .navbar-content {
-            max-width: 1200px;
+        .navbar-inner {
+            max-width: var(--maxw);
             margin: 0 auto;
+            padding: 0.85rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        .navbar-logo {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: var(--ink);
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        .navbar-logo .tick { color: var(--amber); }
+        .navbar-links {
+            display: flex;
+            align-items: center;
+            gap: 1.4rem;
+            list-style: none;
+        }
+        .navbar-links a {
+            color: var(--ink-dim);
+            text-decoration: none;
+            font-size: 0.88rem;
+            white-space: nowrap;
+        }
+        .navbar-links a:hover { color: var(--ink); }
+        .navbar-links a.nav-cta {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            color: var(--amber);
+            border: 1px solid var(--amber-deep);
+            border-radius: 6px;
+            padding: 0.35rem 0.75rem;
+        }
+        .navbar-links a.nav-cta:hover { background: rgba(255, 181, 71, 0.1); }
+
+        /* ================= Hero ================= */
+        .hero {
+            min-height: 100vh;
+            min-height: 100svh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 7.5rem 0 3.5rem;
+            position: relative;
+            overflow: hidden;
+            background:
+                radial-gradient(1200px 600px at 75% -10%, rgba(38, 62, 120, 0.35), transparent 65%),
+                var(--bg);
+        }
+        .hero-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+            gap: 3rem;
+            align-items: center;
+        }
+        .hero h1 {
+            font-family: var(--font-display);
+            font-size: clamp(2.1rem, 4.6vw, 3.3rem);
+            font-weight: 650;
+            letter-spacing: -0.025em;
+            line-height: 1.08;
+            margin-bottom: 1.1rem;
+        }
+        .hero h1 .accent { color: var(--amber); }
+        .hero-sub {
+            color: var(--ink-dim);
+            font-size: 1.02rem;
+            max-width: 34rem;
+            margin-bottom: 1.8rem;
+        }
+        .hero-buttons { display: flex; gap: 0.8rem; flex-wrap: wrap; }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-decoration: none;
+            padding: 0.7rem 1.25rem;
+            border-radius: 7px;
+            border: 1px solid transparent;
+            transition: transform 0.15s, background 0.2s, border-color 0.2s;
+        }
+        .btn:hover { transform: translateY(-1px); }
+        .btn-primary { background: var(--amber); color: #17110a; }
+        .btn-primary:hover { background: #ffc46b; }
+        .btn-ghost { color: var(--ink); border-color: var(--line-strong); }
+        .btn-ghost:hover { border-color: var(--ink-faint); }
+
+        /* Route panel — the signature element */
+        .route-panel {
+            background: linear-gradient(180deg, rgba(16, 27, 51, 0.9), rgba(13, 21, 40, 0.9));
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        }
+        .route-panel-head {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 1rem;
+            padding: 0.65rem 1rem;
+            border-bottom: 1px solid var(--line);
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            letter-spacing: 0.12em;
+            color: var(--ink-faint);
         }
-
-        .navbar-logo {
-            font-size: 1.2rem;
-            font-weight: 700;
-            color: var(--accent-color);
-            text-decoration: none;
+        .route-panel-head .live {
+            color: var(--ok);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
         }
-
-        .navbar-links {
-            display: flex;
-            gap: 2rem;
+        .route-panel-head .live::before {
+            content: "";
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--ok);
         }
-
-        .navbar-links a {
-            color: var(--text-secondary);
-            text-decoration: none;
+        .route-panel svg { display: block; width: 100%; height: auto; }
+        .route-readout {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border-top: 1px solid var(--line);
+        }
+        .route-readout div {
+            padding: 0.7rem 1rem;
+            font-family: var(--font-mono);
+        }
+        .route-readout div + div { border-left: 1px solid var(--line); }
+        .route-readout .label {
+            display: block;
+            font-size: 0.62rem;
+            letter-spacing: 0.14em;
+            color: var(--ink-faint);
+            text-transform: uppercase;
+        }
+        .route-readout .value {
             font-size: 0.95rem;
-            transition: color 0.2s ease;
+            color: var(--ink);
+            font-variant-numeric: tabular-nums;
+        }
+        .route-readout .value em { color: var(--amber); font-style: normal; }
+
+        .gc-route {
+            fill: none;
+            stroke: var(--amber);
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-dasharray: 640;
+            stroke-dashoffset: 640;
+            animation: draw-route 2.4s 0.5s ease-out forwards;
+        }
+        .gc-endpoint { fill: var(--amber); }
+        .gc-endpoint-ring {
+            fill: none;
+            stroke: var(--amber);
+            opacity: 0.6;
+            animation: ping 2.6s 1.4s ease-out infinite;
+            transform-origin: center;
+            transform-box: fill-box;
+        }
+        @keyframes draw-route { to { stroke-dashoffset: 0; } }
+        @keyframes ping {
+            0% { transform: scale(0.4); opacity: 0.7; }
+            70%, 100% { transform: scale(1.9); opacity: 0; }
         }
 
-        .navbar-links a:hover {
-            color: var(--accent-color);
+        /* Stats */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1px;
+            background: var(--line);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 3.2rem;
+        }
+        .stat {
+            background: var(--bg-raise);
+            padding: 1.1rem 1.2rem;
+        }
+        .stat-number {
+            font-family: var(--font-mono);
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--amber);
+            font-variant-numeric: tabular-nums;
+        }
+        .stat-label {
+            font-size: 0.78rem;
+            color: var(--ink-dim);
+            letter-spacing: 0.04em;
         }
 
-        /* Scroll-to-top button */
+        /* ================= Capability cards ================= */
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(255px, 1fr));
+            gap: 1rem;
+        }
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 1.4rem 1.3rem;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+        .card:hover { border-color: var(--line-strong); transform: translateY(-3px); }
+        .card svg.icon {
+            width: 1.7rem;
+            height: 1.7rem;
+            color: var(--amber);
+            margin-bottom: 0.85rem;
+        }
+        .card h3 {
+            font-family: var(--font-display);
+            font-size: 1.02rem;
+            font-weight: 600;
+            margin-bottom: 0.45rem;
+        }
+        .card p { color: var(--ink-dim); font-size: 0.88rem; }
+        .card .tools {
+            display: block;
+            margin-top: 0.75rem;
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            letter-spacing: 0.05em;
+            color: var(--ink-faint);
+        }
+
+        /* ================= Tabs (code + console) ================= */
+        .tabbed {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            overflow: hidden;
+            background: var(--panel);
+        }
+        .tablist {
+            display: flex;
+            overflow-x: auto;
+            border-bottom: 1px solid var(--line);
+            background: var(--bg-raise);
+            scrollbar-width: thin;
+            scrollbar-color: var(--line-strong) transparent;
+        }
+        .tablist::-webkit-scrollbar { height: 4px; }
+        .tablist::-webkit-scrollbar-track { background: transparent; }
+        .tablist::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 2px; }
+        .tab {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            color: var(--ink-dim);
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            padding: 0.75rem 1.1rem;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .tab:hover { color: var(--ink); }
+        .tab[aria-selected="true"] {
+            color: var(--amber);
+            border-bottom-color: var(--amber);
+        }
+        .tabpanel { position: relative; }
+        .tabpanel[hidden] { display: none; }
+        .tabpanel pre {
+            margin: 0;
+            padding: 1.3rem 1.4rem;
+            overflow-x: auto;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            line-height: 1.65;
+        }
+        .tabpanel code { font-family: inherit; }
+
+        .copy-btn {
+            position: absolute;
+            top: 0.7rem;
+            right: 0.7rem;
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            color: var(--ink-dim);
+            background: var(--bg-raise);
+            border: 1px solid var(--line);
+            border-radius: 5px;
+            padding: 0.32rem 0.6rem;
+            cursor: pointer;
+        }
+        .copy-btn:hover { color: var(--ink); border-color: var(--line-strong); }
+        .copy-btn.copied { color: var(--ok); border-color: var(--ok); }
+
+        /* Syntax accents */
+        .tok-c { color: #7A8AA6; }           /* comment */
+        .tok-k { color: var(--cyan); }        /* keyword / flag */
+        .tok-s { color: #A8D08D; }            /* string */
+        .tok-a { color: var(--amber); }       /* emphasis */
+
+        /* Console (demo) */
+        .console-body pre {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+        }
+        .console-prompt { color: var(--ok); }
+        .console-out { color: var(--ink-dim); }
+
+        /* ================= Quick start ================= */
+        .qs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+            gap: 1rem;
+        }
+        .qs-card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .qs-card h3 {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--amber);
+            padding: 0.8rem 1.2rem;
+            border-bottom: 1px solid var(--line);
+            background: var(--bg-raise);
+        }
+        .qs-card .body { position: relative; }
+        .qs-card pre {
+            margin: 0;
+            padding: 1.1rem 1.2rem;
+            overflow-x: auto;
+            font-family: var(--font-mono);
+            font-size: 0.76rem;
+            line-height: 1.7;
+        }
+
+        /* ================= Safety note ================= */
+        .safety {
+            border: 1px solid rgba(229, 72, 77, 0.5);
+            background: rgba(229, 72, 77, 0.09);
+            border-radius: 10px;
+            padding: 1.3rem 1.5rem;
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+        .safety svg { flex-shrink: 0; width: 1.4rem; height: 1.4rem; color: var(--danger); margin-top: 0.15rem; }
+        .safety strong { color: var(--danger); }
+        .safety p { color: var(--ink-dim); font-size: 0.9rem; }
+
+        /* ================= Footer ================= */
+        footer {
+            border-top: 1px solid var(--line);
+            padding: 3.5rem 0 2.5rem;
+            background: var(--bg-raise);
+        }
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 2.5rem;
+            margin-bottom: 2.5rem;
+        }
+        .footer-brand p { color: var(--ink-faint); font-size: 0.85rem; margin-top: 0.7rem; max-width: 26rem; }
+        footer h4 {
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--ink-faint);
+            margin-bottom: 0.9rem;
+        }
+        footer ul { list-style: none; }
+        footer li { margin-bottom: 0.5rem; }
+        footer li a { color: var(--ink-dim); text-decoration: none; font-size: 0.88rem; }
+        footer li a:hover { color: var(--ink); }
+        .footer-bottom {
+            border-top: 1px solid var(--line);
+            padding-top: 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+            color: var(--ink-faint);
+            font-size: 0.8rem;
+        }
+
+        /* Scroll top */
         .scroll-top-btn {
             position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: var(--accent-color);
-            color: var(--bg-dark);
-            border: none;
-            font-size: 1.5rem;
+            right: 1.4rem;
+            bottom: 1.4rem;
+            width: 2.6rem;
+            height: 2.6rem;
+            border-radius: 8px;
+            border: 1px solid var(--line-strong);
+            background: var(--bg-raise);
+            color: var(--ink-dim);
+            font-size: 1.1rem;
             cursor: pointer;
             opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease;
-            z-index: 999;
-            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+            pointer-events: none;
+            transition: opacity 0.25s;
+            z-index: 90;
+        }
+        .scroll-top-btn.visible { opacity: 1; pointer-events: auto; }
+        .scroll-top-btn:hover { color: var(--ink); }
+
+        /* Reveal on scroll — only active when JS confirms an observer exists,
+           so content is never hidden without JavaScript. */
+        .has-observer .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.55s ease, transform 0.55s ease; }
+        .has-observer .reveal.in { opacity: 1; transform: none; }
+
+        /* ================= Responsive ================= */
+        @media (max-width: 1024px) {
+            .hero-grid { grid-template-columns: 1fr; gap: 2.2rem; }
+            .hero { padding-top: 6.5rem; }
+            .hero-sub { max-width: none; }
         }
 
-        .scroll-top-btn.visible {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .scroll-top-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
-        }
-
-        /* Scroll offset for anchor targets */
-        section[id] {
-            scroll-margin-top: 80px;
-        }
-
-        /* Responsive Design */
         @media (max-width: 768px) {
-            .navbar {
-                padding: 0.75rem 1rem;
+            .section { padding: 3.8rem 0; }
+            .stats { grid-template-columns: repeat(2, 1fr); }
+            .footer-grid { grid-template-columns: 1fr; gap: 1.8rem; }
+            .navbar-links { gap: 1rem; }
+            .navbar-links .hide-sm { display: none; }
+        }
+
+        @media (max-width: 480px) {
+            .wrap { padding: 0 1rem; }
+            .hero h1 { font-size: 2rem; }
+            .hero-buttons .btn { width: 100%; justify-content: center; }
+            .stat { padding: 0.85rem 0.9rem; }
+            .stat-number { font-size: 1.25rem; }
+            .route-readout { grid-template-columns: 1fr; }
+            .route-readout div + div { border-left: none; border-top: 1px solid var(--line); }
+            .navbar-inner { padding: 0.75rem 1rem; }
+            .navbar-links .hide-xs { display: none; }
+        }
+
+        /* ================= Reduced motion ================= */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
             }
-
-            .navbar-links {
-                gap: 1rem;
-                font-size: 0.85rem;
-            }
-
-            .section {
-                padding: 3rem 1rem;
-            }
-
-            .features-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .hero-buttons {
-                flex-direction: column;
-                align-items: center;
-            }
-
-            .stats {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 1rem;
-            }
-
-            .code-tabs {
-                flex-direction: column;
-            }
-
-            .footer-grid {
-                grid-template-columns: 1fr;
-                text-align: center;
-                gap: 2rem;
-            }
-        }
-
-        /* Syntax highlighting */
-        .keyword { color: #8b5cf6; }
-        .string { color: #10b981; }
-        .number { color: #f59e0b; }
-        .comment { color: #64748b; font-style: italic; }
-        .function { color: #06b6d4; }
-
-        /* Mock Terminal Styles */
-        .terminal-section {
-            background: var(--bg-card);
-            border-radius: var(--border-radius);
-            overflow: hidden;
-            box-shadow: var(--shadow);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .terminal-tabs {
-            display: flex;
-            background: #1a1a2e;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            overflow-x: auto;
-        }
-
-        .terminal-tab {
-            padding: 0.75rem 1.25rem;
-            cursor: pointer;
-            border: none;
-            background: transparent;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            transition: var(--transition);
-            white-space: nowrap;
-            border-bottom: 2px solid transparent;
-        }
-
-        .terminal-tab:hover {
-            color: var(--text-color);
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .terminal-tab.active {
-            color: var(--accent-color);
-            border-bottom-color: var(--accent-color);
-            background: rgba(245, 158, 11, 0.1);
-        }
-
-        .terminal-window {
-            display: none;
-        }
-
-        .terminal-window.active {
-            display: block;
-        }
-
-        .terminal-header {
-            background: linear-gradient(180deg, #3d3d5c 0%, #2d2d44 100%);
-            padding: 0.5rem 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .terminal-buttons {
-            display: flex;
-            gap: 6px;
-        }
-
-        .terminal-btn {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-        }
-
-        .terminal-btn.red { background: #ff5f56; }
-        .terminal-btn.yellow { background: #ffbd2e; }
-        .terminal-btn.green { background: #27ca40; }
-
-        .terminal-title {
-            flex: 1;
-            text-align: center;
-            color: var(--text-secondary);
-            font-size: 0.8rem;
-            font-family: 'Monaco', 'Menlo', monospace;
-        }
-
-        .terminal-body {
-            background: #0d1117;
-            padding: 1.5rem;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
-            font-size: 0.85rem;
-            line-height: 1.6;
-            min-height: min(400px, 60vh);
-            overflow-x: auto;
-        }
-
-        .terminal-line {
-            margin-bottom: 0.5rem;
-        }
-
-        .terminal-prompt {
-            color: #58a6ff;
-        }
-
-        .terminal-user-input {
-            color: #c9d1d9;
-        }
-
-        .terminal-tool-call {
-            background: rgba(136, 87, 255, 0.1);
-            border-left: 3px solid #8957ff;
-            padding: 0.75rem 1rem;
-            margin: 0.75rem 0;
-            border-radius: 0 6px 6px 0;
-        }
-
-        .terminal-tool-name {
-            color: #d2a8ff;
-            font-weight: 600;
-        }
-
-        .terminal-tool-params {
-            color: #7ee787;
-            margin-left: 1rem;
-        }
-
-        .terminal-response {
-            background: rgba(33, 38, 45, 0.8);
-            border-radius: 6px;
-            padding: 1rem;
-            margin: 0.75rem 0;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .terminal-response-header {
-            color: var(--accent-color);
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .terminal-response-content {
-            color: #8b949e;
-        }
-
-        .terminal-response-content .highlight {
-            color: #58a6ff;
-        }
-
-        .terminal-response-content .value {
-            color: #7ee787;
-        }
-
-        .terminal-response-content .label {
-            color: #d2a8ff;
-        }
-
-        .terminal-json {
-            color: #c9d1d9;
-        }
-
-        .terminal-json .json-key {
-            color: #79c0ff;
-        }
-
-        .terminal-json .json-string {
-            color: #a5d6ff;
-        }
-
-        .terminal-json .json-number {
-            color: #7ee787;
-        }
-
-        .terminal-cursor {
-            display: inline-block;
-            width: 8px;
-            height: 16px;
-            background: #58a6ff;
-            animation: blink 1s step-end infinite;
-            vertical-align: middle;
-            margin-left: 2px;
-        }
-
-        @keyframes blink {
-            50% { opacity: 0; }
-        }
-
-        .terminal-divider {
-            border: none;
-            border-top: 1px dashed rgba(255, 255, 255, 0.1);
-            margin: 1rem 0;
-        }
-
-        /* Utility classes for terminal content */
-        .terminal-output {
-            font-family: monospace;
-            white-space: pre-wrap;
-        }
-
-        .terminal-line-spaced {
-            margin-top: 1rem;
-        }
-
-        .section-intro {
-            text-align: center;
-            color: var(--text-secondary);
-            margin-bottom: 2rem;
-            max-width: 700px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .terminal-explanation {
-            margin-top: 0.5rem;
-            color: #8b949e;
+            html { scroll-behavior: auto; }
+            .gc-route { stroke-dashoffset: 0; animation: none; }
+            .gc-endpoint-ring { display: none; }
         }
     </style>
 
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-PNQSKR40DH"></script>
     <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-PNQSKR40DH');
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-PNQSKR40DH');
     </script>
 </head>
 <body>
-    <!-- Navigation Bar -->
-    <nav class="navbar" id="navbar">
-        <div class="navbar-content">
-            <a href="#" class="navbar-logo">Aerospace MCP</a>
-            <div class="navbar-links">
-                <a href="#features">Features</a>
-                <a href="#quick-start">Quick Start</a>
-                <a href="https://github.com/cheesejaguar/aerospace-mcp" target="_blank">GitHub</a>
-            </div>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <!-- Icon sprite (stroke icons, referenced with <use>) -->
+    <svg style="display:none" aria-hidden="true">
+        <defs>
+            <symbol id="i-plane" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></symbol>
+            <symbol id="i-orbit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M20.3 7.7c1.5 2.9 1.2 6-.7 7.9-2.6 2.6-7.6 1.8-11.2-1.7C4.9 10.4 4.1 5.4 6.7 2.8c1.9-1.9 5-2.2 7.9-.7"/><path d="M3.7 16.3c-1.5-2.9-1.2-6 .7-7.9"/><path d="M17.6 21.2c1.9-1.9 2.2-5 .7-7.9"/></symbol>
+            <symbol id="i-rocket" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.3-2 5-2 5s3.7-.5 5-2c.7-.8.7-2 0-2.8-.8-.7-2.2-.7-3 .8z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.9 12.9 0 0 1 22 2c0 2.72-.78 7.5-6 11a22 22 0 0 1-4 2z"/><path d="M9 12H4s.5-3.7 2-5c.8-.7 2-.7 2.8 0"/><path d="M12 15v5s3.7-.5 5-2c.7-.8.7-2 0-2.8"/></symbol>
+            <symbol id="i-wing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 15c4-6 12-9 20-9-1 3-2.5 5.2-5 7-3.2 2.3-8 3-12 3z"/><path d="M9.5 15.5 8 20"/><path d="m14 13 2.5 6"/></symbol>
+            <symbol id="i-atmo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 8h10a3 3 0 1 0-3-3"/><path d="M3 12h15a3 3 0 1 1-3 3"/><path d="M3 16h7a3 3 0 1 1-2 5.2"/></symbol>
+            <symbol id="i-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 14 8.5 9.5"/><path d="M3.3 17a9 9 0 1 1 17.4 0"/><path d="M7 20h10"/></symbol>
+            <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+            <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.9-4.9"/></symbol>
+            <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18.5A2 2 0 0 0 3.5 21.5h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v5"/><path d="M12 17.5h.01"/></symbol>
+        </defs>
+    </svg>
+
+    <nav class="navbar" aria-label="Main">
+        <div class="navbar-inner">
+            <a href="#" class="navbar-logo"><span class="tick">▸</span> AEROSPACE-MCP</a>
+            <ul class="navbar-links">
+                <li class="hide-sm"><a href="#capabilities">Capabilities</a></li>
+                <li class="hide-sm"><a href="#examples">Examples</a></li>
+                <li class="hide-xs"><a href="#quick-start">Quick start</a></li>
+                <li><a class="nav-cta" href="https://github.com/cheesejaguar/aerospace-mcp" target="_blank" rel="noopener">GitHub ↗</a></li>
+            </ul>
         </div>
     </nav>
 
-    <!-- Animated Background -->
-    <div class="particles" id="particles"></div>
-
-    <!-- Header Section -->
-    <header class="header">
-        <div class="hero-content">
-            <h1>🚀 Aerospace MCP</h1>
-            <p>Comprehensive flight planning, orbital mechanics, and spacecraft trajectory optimization platform with FastMCP integration and 44+ specialized aerospace tools.</p>
-
-            <div class="hero-buttons">
-                <a href="https://github.com/cheesejaguar/aerospace-mcp" class="btn btn-primary" target="_blank">
-                    📱 View on GitHub
-                </a>
-                <a href="#features" class="btn btn-secondary">
-                    ✨ Explore Features
-                </a>
-                <a href="#quick-start" class="btn btn-secondary">
-                    🚀 Get Started
-                </a>
-            </div>
-
-            <div class="stats">
-                <div class="stat">
-                    <span class="stat-number">44+</span>
-                    <div class="stat-label">Aerospace Tools</div>
-                </div>
-                <div class="stat">
-                    <span class="stat-number">28K+</span>
-                    <div class="stat-label">Airports</div>
-                </div>
-                <div class="stat">
-                    <span class="stat-number">190+</span>
-                    <div class="stat-label">Aircraft Types</div>
-                </div>
-                <div class="stat">
-                    <span class="stat-number">&lt;1s</span>
-                    <div class="stat-label">Response Time</div>
-                </div>
-            </div>
-        </div>
-    </header>
-
-    <!-- Features Section -->
-    <section id="features" class="section">
-        <h2>🌟 Comprehensive Aerospace Capabilities</h2>
-        <div class="features-grid">
-            <div class="feature-card">
-                <span class="feature-icon">✈️</span>
-                <h3>Flight Planning & Airport Resolution</h3>
-                <p>Intelligent airport search, route planning, and aircraft performance modeling with real-time calculations.</p>
-                <ul class="feature-list">
-                    <li>28,000+ airports worldwide</li>
-                    <li>Great-circle route calculation</li>
-                    <li>Aircraft-specific performance</li>
-                    <li>Fuel consumption estimation</li>
-                    <li>Multi-leg journey planning</li>
-                </ul>
-            </div>
-
-            <div class="feature-card">
-                <span class="feature-icon">🛰️</span>
-                <h3>Orbital Mechanics & Space Operations</h3>
-                <p>Complete orbital mechanics suite with propagation, rendezvous planning, and trajectory optimization.</p>
-                <ul class="feature-list">
-                    <li>Keplerian elements conversion</li>
-                    <li>J2 perturbation modeling</li>
-                    <li>Ground track computation</li>
-                    <li>Hohmann transfers</li>
-                    <li>Lambert problem solving</li>
-                </ul>
-            </div>
-
-            <div class="feature-card">
-                <span class="feature-icon">🌪️</span>
-                <h3>Atmospheric & Aerodynamics</h3>
-                <p>Advanced atmospheric modeling and aerodynamic analysis for comprehensive flight envelope studies.</p>
-                <ul class="feature-list">
-                    <li>ISA atmosphere profiles</li>
-                    <li>Wind modeling (logarithmic/power law)</li>
-                    <li>Wing VLM analysis</li>
-                    <li>Airfoil polar generation</li>
-                    <li>Stability derivatives</li>
-                </ul>
-            </div>
-
-            <div class="feature-card">
-                <span class="feature-icon">🚀</span>
-                <h3>Rocket Trajectory Optimization</h3>
-                <p>3DOF trajectory simulation, sizing estimation, and thrust profile optimization for rocket systems.</p>
-                <ul class="feature-list">
-                    <li>3DOF numerical integration</li>
-                    <li>Launch angle optimization</li>
-                    <li>Thrust profile optimization</li>
-                    <li>Sizing requirements estimation</li>
-                    <li>Sensitivity analysis</li>
-                </ul>
-            </div>
-
-            <div class="feature-card">
-                <span class="feature-icon">🔧</span>
-                <h3>FastMCP & REST API</h3>
-                <p>Dual interface support with modern FastMCP framework and traditional REST API for maximum flexibility.</p>
-                <ul class="feature-list">
-                    <li>FastMCP integration</li>
-                    <li>RESTful API endpoints</li>
-                    <li>Claude Desktop compatible</li>
-                    <li>70% code reduction</li>
-                    <li>Modular tool architecture</li>
-                </ul>
-            </div>
-
-            <div class="feature-card">
-                <span class="feature-icon">🔬</span>
-                <h3>Research & Analysis Tools</h3>
-                <p>Specialized tools for propeller analysis, UAV optimization, and Monte Carlo uncertainty studies.</p>
-                <ul class="feature-list">
-                    <li>BEMT propeller analysis</li>
-                    <li>UAV energy optimization</li>
-                    <li>Monte Carlo simulations</li>
-                    <li>Genetic algorithms</li>
-                    <li>Coordinate transformations</li>
-                </ul>
-            </div>
-
-            <div class="feature-card">
-                <span class="feature-icon">🎯</span>
-                <h3>GNC & Flight Performance</h3>
-                <p>Guidance, navigation, and control analysis tools alongside practical flight performance calculations.</p>
-                <ul class="feature-list">
-                    <li>Kalman filter state estimation</li>
-                    <li>LQR optimal controller design</li>
-                    <li>Density altitude & airspeed conversion</li>
-                    <li>Takeoff/landing performance</li>
-                    <li>Weight & balance calculations</li>
-                </ul>
-            </div>
-        </div>
-    </section>
-
-    <!-- Code Examples Section -->
-    <section class="section">
-        <h2>💻 Easy Integration</h2>
-
-        <div class="code-section">
-            <div class="code-tabs">
-                <button class="code-tab active" onclick="showTab('rest-api', this)">REST API</button>
-                <button class="code-tab" onclick="showTab('mcp-client', this)">MCP Client</button>
-                <button class="code-tab" onclick="showTab('python-client', this)">Python Client</button>
-            </div>
-
-            <div id="rest-api" class="code-content active">
-                <h3>REST API Usage</h3>
-                <div class="code-block">
-                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-                    <code># Search for airports
-<span class="comment"># GET /airports/by_city?city=San Jose&country=US</span>
-curl <span class="string">"http://localhost:8080/airports/by_city?city=San Jose&country=US"</span>
-
-<span class="comment"># Plan a flight</span>
-curl -X <span class="keyword">POST</span> <span class="string">"http://localhost:8080/plan"</span> \
-  -H <span class="string">"Content-Type: application/json"</span> \
-  -d <span class="string">'{
-    "depart_city": "San Jose",
-    "arrive_city": "Tokyo",
-    "ac_type": "A320",
-    "cruise_alt_ft": 35000
-  }'</span></code>
-                </div>
-            </div>
-
-            <div id="mcp-client" class="code-content">
-                <h3>MCP Integration (Anthropic API with Deferred Loading)</h3>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Enable deferred tool loading for efficient context usage with 44+ tools:</p>
-                <div class="code-block">
-                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-                    <code><span class="comment">// Anthropic API with deferred tool loading</span>
-{
-  <span class="string">"tools"</span>: [
-    {
-      <span class="string">"type"</span>: <span class="string">"tool_search_tool_regex_20251119"</span>,
-      <span class="string">"name"</span>: <span class="string">"tool_search_tool_regex"</span>
-    },
-    {
-      <span class="string">"type"</span>: <span class="string">"mcp_toolset"</span>,
-      <span class="string">"mcp_server_name"</span>: <span class="string">"aerospace-mcp"</span>,
-      <span class="string">"default_config"</span>: { <span class="string">"defer_loading"</span>: <span class="keyword">true</span> },
-      <span class="string">"configs"</span>: {
-        <span class="string">"search_aerospace_tools"</span>: { <span class="string">"defer_loading"</span>: <span class="keyword">false</span> },
-        <span class="string">"list_tool_categories"</span>: { <span class="string">"defer_loading"</span>: <span class="keyword">false</span> }
-      }
-    }
-  ]
-}</code>
-                </div>
-            </div>
-
-            <div id="python-client" class="code-content">
-                <h3>Python Client Example</h3>
-                <div class="code-block">
-                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-                    <code><span class="keyword">import</span> requests
-
-<span class="comment"># Initialize client</span>
-base_url = <span class="string">"http://localhost:8080"</span>
-
-<span class="comment"># Search airports</span>
-response = requests.<span class="function">get</span>(
-    <span class="string">f"{base_url}/airports/by_city"</span>,
-    params={<span class="string">"city"</span>: <span class="string">"San Jose"</span>, <span class="string">"country"</span>: <span class="string">"US"</span>}
-)
-airports = response.<span class="function">json</span>()
-
-<span class="comment"># Plan flight</span>
-flight_data = {
-    <span class="string">"depart_city"</span>: <span class="string">"San Jose"</span>,
-    <span class="string">"arrive_city"</span>: <span class="string">"Tokyo"</span>,
-    <span class="string">"ac_type"</span>: <span class="string">"A320"</span>
-}
-
-response = requests.<span class="function">post</span>(<span class="string">f"{base_url}/plan"</span>, json=flight_data)
-flight_plan = response.<span class="function">json</span>()</code>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Mock Terminal Section -->
-    <section class="section">
-        <h2>🖥️ See It In Action</h2>
-        <p class="section-intro">
-            Experience aerospace-mcp tools through Claude Code. Click the tabs below to see example interactions.
-        </p>
-
-        <div class="terminal-section">
-            <div class="terminal-tabs" role="tablist" aria-label="Terminal examples">
-                <button class="terminal-tab active" role="tab" aria-selected="true" aria-controls="airport-search" id="tab-airport" onclick="showTerminalTab('airport-search', this)">
-                    ✈️ Airport Search
-                </button>
-                <button class="terminal-tab" role="tab" aria-selected="false" aria-controls="launch-optimization" id="tab-launch" onclick="showTerminalTab('launch-optimization', this)">
-                    🚀 Launch Optimization
-                </button>
-                <button class="terminal-tab" role="tab" aria-selected="false" aria-controls="hohmann-transfer" id="tab-hohmann" onclick="showTerminalTab('hohmann-transfer', this)">
-                    🛰️ Hohmann Transfer
-                </button>
-            </div>
-
-            <!-- Airport Search Example -->
-            <div id="airport-search" class="terminal-window active" role="tabpanel" aria-labelledby="tab-airport">
-                <div class="terminal-header">
-                    <div class="terminal-buttons">
-                        <span class="terminal-btn red"></span>
-                        <span class="terminal-btn yellow"></span>
-                        <span class="terminal-btn green"></span>
-                    </div>
-                    <span class="terminal-title">claude — aerospace-mcp</span>
-                </div>
-                <div class="terminal-body">
-                    <div class="terminal-line">
-                        <span class="terminal-prompt">❯ </span>
-                        <span class="terminal-user-input">Find airports in Tokyo, Japan</span>
-                    </div>
-
-                    <div class="terminal-tool-call">
-                        <div><span class="terminal-tool-name">search_airports</span></div>
-                        <div class="terminal-tool-params">
-                            query: <span class="json-string">"Tokyo"</span>, country: <span class="json-string">"JP"</span>, query_type: <span class="json-string">"city"</span>
+    <main id="main">
+        <!-- ================= Hero ================= -->
+        <header class="hero">
+            <div class="wrap">
+                <div class="hero-grid">
+                    <div>
+                        <p class="kicker">Model Context Protocol server</p>
+                        <h1>Aerospace engineering tools, <span class="accent">wired into your AI agent</span></h1>
+                        <p class="hero-sub">
+                            An open-source MCP server exposing 47 tools across flight planning,
+                            orbital mechanics, rocket trajectories, aerodynamics, and trajectory
+                            optimization — callable from Claude and any MCP-compatible client.
+                        </p>
+                        <div class="hero-buttons">
+                            <a href="#quick-start" class="btn btn-primary">Get started</a>
+                            <a href="https://github.com/cheesejaguar/aerospace-mcp" class="btn btn-ghost" target="_blank" rel="noopener">View source ↗</a>
                         </div>
                     </div>
 
-                    <div class="terminal-response">
-                        <div class="terminal-response-content terminal-output">Found 3 airport(s):
-
-• <span class="highlight">NRT</span> (RJAA) - Narita International Airport
-  City: <span class="value">Tokyo, JP</span>
-  Coordinates: <span class="value">35.7647, 140.3864</span>
-  Timezone: <span class="value">Asia/Tokyo</span>
-
-• <span class="highlight">HND</span> (RJTT) - Tokyo Haneda International Airport
-  City: <span class="value">Tokyo, JP</span>
-  Coordinates: <span class="value">35.5494, 139.7798</span>
-  Timezone: <span class="value">Asia/Tokyo</span>
-
-• <span class="highlight">NJA</span> (RJTA) - Atsugi Naval Air Facility
-  City: <span class="value">Tokyo, JP</span>
-  Coordinates: <span class="value">35.4546, 139.4500</span>
-  Timezone: <span class="value">Asia/Tokyo</span></div>
-                    </div>
-
-                    <hr class="terminal-divider">
-
-                    <div class="terminal-line">
-                        <span class="terminal-prompt">❯ </span>
-                        <span class="terminal-user-input">What's the IATA code for San Francisco?</span>
-                    </div>
-
-                    <div class="terminal-tool-call">
-                        <div><span class="terminal-tool-name">search_airports</span></div>
-                        <div class="terminal-tool-params">
-                            query: <span class="json-string">"San Francisco"</span>, country: <span class="json-string">"US"</span>
+                    <!-- Signature: real SJC->NRT great-circle, computed with geographiclib -->
+                    <figure class="route-panel" aria-label="Plot of the great-circle route from San Jose to Tokyo Narita">
+                        <div class="route-panel-head">
+                            <span>GC-PLOT · WGS-84</span>
+                            <span class="live">PLAN_FLIGHT</span>
                         </div>
+                        <svg viewBox="180 40 660 340" role="img" aria-hidden="true">
+                            <!-- graticule: 15 deg spacing -->
+                            <g stroke="rgba(148,178,255,0.08)" stroke-width="1">
+                                <path d="M180,83.3 H840 M180,125 H840 M180,166.7 H840 M180,208.3 H840 M180,250 H840 M180,291.7 H840 M180,333.3 H840"/>
+                                <path d="M208.3,40 V380 M250,40 V380 M291.7,40 V380 M333.3,40 V380 M375,40 V380 M416.7,40 V380 M458.3,40 V380 M500,40 V380 M541.7,40 V380 M583.3,40 V380 M625,40 V380 M666.7,40 V380 M708.3,40 V380 M750,40 V380 M791.7,40 V380 M833.3,40 V380"/>
+                            </g>
+                            <!-- equator, slightly stronger -->
+                            <path d="M180,250 H840" stroke="rgba(148,178,255,0.16)" stroke-width="1"/>
+                            <!-- airport scatter (real IATA coordinates, Pacific-centred projection) -->
+                            <g fill="rgba(148,178,255,0.35)">
+                                <circle cx="661.3" cy="146.2" r="1.6"/><circle cx="660.1" cy="145.5" r="1.6"/><circle cx="671.1" cy="155.7" r="1.6"/><circle cx="660.2" cy="118.2" r="1.6"/><circle cx="709.2" cy="139.3" r="1.6"/><circle cx="755.8" cy="133.4" r="1.6"/><circle cx="795.1" cy="137.1" r="1.6"/><circle cx="765.5" cy="156.6" r="1.6"/><circle cx="777" cy="178.3" r="1.6"/><circle cx="657.8" cy="113.4" r="1.6"/><circle cx="724.8" cy="196" r="1.6"/><circle cx="583.3" cy="80.1" r="1.6"/><circle cx="561.3" cy="190.8" r="1.6"/><circle cx="202.4" cy="197" r="1.6"/><circle cx="214.2" cy="170.6" r="1.6"/><circle cx="288.9" cy="246.2" r="1.6"/><circle cx="279.9" cy="212" r="1.6"/><circle cx="316.4" cy="188" r="1.6"/><circle cx="338.3" cy="163.5" r="1.6"/><circle cx="323.8" cy="138.7" r="1.6"/><circle cx="351.3" cy="145.9" r="1.6"/><circle cx="388.3" cy="151.2" r="1.6"/><circle cx="419.9" cy="344.3" r="1.6"/><circle cx="485.5" cy="352.8" r="1.6"/><circle cx="402.3" cy="354.6" r="1.6"/><circle cx="778.8" cy="128.7" r="1.6"/>
+                            </g>
+                            <!-- the great-circle arc -->
+                            <path class="gc-route" d="M661.3,146.2 L656.1,143.5 L650.7,140.9 L645.2,138.4 L639.5,136.0 L633.7,133.7 L627.8,131.5 L621.6,129.5 L615.4,127.5 L609.0,125.7 L602.5,124.0 L595.8,122.4 L589.0,121.0 L582.0,119.7 L575.0,118.6 L567.9,117.6 L560.6,116.8 L553.3,116.2 L546.0,115.7 L538.6,115.5 L531.2,115.3 L523.8,115.4 L516.4,115.6 L509.0,116.0 L501.7,116.6 L494.4,117.3 L487.2,118.2 L480.1,119.2 L473.2,120.4 L466.3,121.8 L459.6,123.3 L453.0,125.0 L446.5,126.7 L440.2,128.6 L434.0,130.7 L428.0,132.8 L422.2,135.1 L416.4,137.4 L410.9,139.9 L405.4,142.5 L400.1,145.1 L395.0,147.8 L390.0,150.7"/>
+                            <!-- endpoints -->
+                            <circle class="gc-endpoint" cx="661.3" cy="146.2" r="3.2"/>
+                            <circle class="gc-endpoint-ring" cx="661.3" cy="146.2" r="6"/>
+                            <circle class="gc-endpoint" cx="390.0" cy="150.7" r="3.2"/>
+                            <circle class="gc-endpoint-ring" cx="390.0" cy="150.7" r="6"/>
+                            <!-- labels -->
+                            <g font-family="ui-monospace, Menlo, monospace" font-size="11" fill="#A6B4CE">
+                                <text x="670" y="163">SJC</text>
+                                <text x="368" y="168">NRT</text>
+                            </g>
+                        </svg>
+                        <div class="route-readout">
+                            <div><span class="label">Route</span><span class="value">SJC <em>→</em> NRT</span></div>
+                            <div><span class="label">Great circle</span><span class="value">8,295 km</span></div>
+                            <div><span class="label">Engine</span><span class="value">OpenAP · A359</span></div>
+                        </div>
+                    </figure>
+                </div>
+
+                <div class="stats" role="list" aria-label="Project statistics">
+                    <div class="stat" role="listitem"><span class="stat-number">47</span><br><span class="stat-label">aerospace tools</span></div>
+                    <div class="stat" role="listitem"><span class="stat-number">11</span><br><span class="stat-label">engineering domains</span></div>
+                    <div class="stat" role="listitem"><span class="stat-number">7,861</span><br><span class="stat-label">airports (IATA)</span></div>
+                    <div class="stat" role="listitem"><span class="stat-number">37</span><br><span class="stat-label">aircraft models</span></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- ================= Capabilities ================= -->
+        <section class="section" id="capabilities">
+            <div class="wrap">
+                <p class="kicker">Capabilities</p>
+                <h2>Eleven domains, one protocol</h2>
+                <p class="section-intro">
+                    Every tool is a typed Python function with an auto-generated MCP schema —
+                    discoverable at runtime through the built-in tool search, and callable from
+                    the CLI without an MCP client.
+                </p>
+                <div class="cards">
+                    <div class="card reveal">
+                        <svg class="icon" aria-hidden="true"><use href="#i-plane"/></svg>
+                        <h3>Flight planning</h3>
+                        <p>Great-circle routes on WGS-84, multi-leg journeys, wind-aware ETA and fuel from OpenAP performance models.</p>
+                        <span class="tools">plan_flight · plan_multi_leg_flight · search_airports</span>
                     </div>
-
-                    <div class="terminal-response">
-                        <div class="terminal-response-content terminal-output">Found 1 airport(s):
-
-• <span class="highlight">SFO</span> (KSFO) - San Francisco International Airport
-  City: <span class="value">San Francisco, US</span>
-  Coordinates: <span class="value">37.6213, -122.3790</span>
-  Timezone: <span class="value">America/Los_Angeles</span></div>
+                    <div class="card reveal">
+                        <svg class="icon" aria-hidden="true"><use href="#i-orbit"/></svg>
+                        <h3>Orbital mechanics</h3>
+                        <p>Kepler element conversions, J2 propagation, ground tracks, Hohmann transfers, rendezvous, and Lambert solvers.</p>
+                        <span class="tools">propagate_orbit_j2 · hohmann_transfer · lambert_problem_solver</span>
                     </div>
-
-                    <div class="terminal-line terminal-line-spaced">
-                        <span class="terminal-prompt">❯ </span>
-                        <span class="terminal-cursor"></span>
+                    <div class="card reveal">
+                        <svg class="icon" aria-hidden="true"><use href="#i-rocket"/></svg>
+                        <h3>Rockets</h3>
+                        <p>3-DOF trajectory simulation with ISA atmosphere, vehicle sizing estimates, and launch-angle optimization.</p>
+                        <span class="tools">rocket_3dof_trajectory · optimize_launch_angle</span>
+                    </div>
+                    <div class="card reveal">
+                        <svg class="icon" aria-hidden="true"><use href="#i-wing"/></svg>
+                        <h3>Aerodynamics</h3>
+                        <p>Wing VLM analysis, airfoil polars, stability derivatives, and propeller BEMT with UAV energy estimates.</p>
+                        <span class="tools">wing_vlm_analysis · airfoil_polar_analysis · propeller_bemt_analysis</span>
+                    </div>
+                    <div class="card reveal">
+                        <svg class="icon" aria-hidden="true"><use href="#i-atmo"/></svg>
+                        <h3>Atmosphere &amp; frames</h3>
+                        <p>ISA atmosphere profiles, wind models, and ECEF/ECI/geodetic transforms with GMST Earth-rotation handling.</p>
+                        <span class="tools">get_atmosphere_profile · transform_frames · geodetic_to_ecef</span>
+                    </div>
+                    <div class="card reveal">
+                        <svg class="icon" aria-hidden="true"><use href="#i-gauge"/></svg>
+                        <h3>Aircraft performance</h3>
+                        <p>Density altitude, V-speeds, weight &amp; balance, takeoff and landing distances, fuel reserves, and unit conversion.</p>
+                        <span class="tools">takeoff_performance · weight_and_balance · convert_units</span>
+                    </div>
+                    <div class="card reveal">
+                        <svg class="icon" aria-hidden="true"><use href="#i-target"/></svg>
+                        <h3>Optimization &amp; GNC</h3>
+                        <p>Genetic algorithms, particle swarm, Monte Carlo uncertainty, porkchop plots, Kalman filtering, and LQR design.</p>
+                        <span class="tools">porkchop_plot_analysis · kalman_filter_state_estimation</span>
+                    </div>
+                    <div class="card reveal">
+                        <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+                        <h3>Tool discovery</h3>
+                        <p>Search tools by name, keyword, or safe regex — built for Anthropic's deferred tool loading so agents keep context lean.</p>
+                        <span class="tools">search_aerospace_tools · list_tool_categories</span>
                     </div>
                 </div>
             </div>
+        </section>
 
-            <!-- Launch Optimization Example -->
-            <div id="launch-optimization" class="terminal-window" role="tabpanel" aria-labelledby="tab-launch" aria-hidden="true">
-                <div class="terminal-header">
-                    <div class="terminal-buttons">
-                        <span class="terminal-btn red"></span>
-                        <span class="terminal-btn yellow"></span>
-                        <span class="terminal-btn green"></span>
+        <!-- ================= Code examples ================= -->
+        <section class="section" id="examples">
+            <div class="wrap">
+                <p class="kicker">Integration</p>
+                <h2>Call it your way</h2>
+                <p class="section-intro">
+                    The same core logic is exposed three ways: an MCP server for AI agents,
+                    a FastAPI HTTP service, and a direct CLI.
+                </p>
+                <div class="tabbed reveal">
+                    <div class="tablist" role="tablist" aria-label="Code examples">
+                        <button class="tab" role="tab" id="tab-mcp" aria-controls="panel-mcp" aria-selected="true">claude_desktop_config.json</button>
+                        <button class="tab" role="tab" id="tab-rest" aria-controls="panel-rest" aria-selected="false" tabindex="-1">REST</button>
+                        <button class="tab" role="tab" id="tab-python" aria-controls="panel-python" aria-selected="false" tabindex="-1">Python</button>
+                        <button class="tab" role="tab" id="tab-cli" aria-controls="panel-cli" aria-selected="false" tabindex="-1">CLI</button>
                     </div>
-                    <span class="terminal-title">claude — aerospace-mcp</span>
-                </div>
-                <div class="terminal-body">
-                    <div class="terminal-line">
-                        <span class="terminal-prompt">❯ </span>
-                        <span class="terminal-user-input">Simulate a 3DOF trajectory for my sounding rocket: 15kg dry mass, 8kg propellant, 0.12m diameter, 2.0m length, launched at 85 degrees</span>
-                    </div>
-
-                    <div class="terminal-tool-call">
-                        <div><span class="terminal-tool-name">rocket_3dof_trajectory</span></div>
-                        <div class="terminal-tool-params">
-                            rocket_geometry: { dry_mass_kg: <span class="json-number">15</span>, propellant_mass_kg: <span class="json-number">8</span>, diameter_m: <span class="json-number">0.12</span>, length_m: <span class="json-number">2.0</span> }<br>
-                            launch_conditions: { launch_angle_deg: <span class="json-number">85</span> }
-                        </div>
-                    </div>
-
-                    <div class="terminal-response">
-                        <div class="terminal-response-content terminal-output"><span class="highlight">3DOF Rocket Trajectory Analysis</span>
-==================================================
-Rocket: <span class="value">2.0m</span> long, <span class="value">0.12m</span> dia
-Mass: <span class="value">15.0 kg</span> dry + <span class="value">8.0 kg</span> prop
-Launch Angle: <span class="value">85.0°</span>
-
-<span class="label">Performance Summary:</span>
-  Max Altitude: <span class="value">12847 m (12.85 km)</span>
-  Max Velocity: <span class="value">412.3 m/s (Mach 1.21)</span>
-  Apogee Time: <span class="value">45.2 s</span>
-  Burnout Time: <span class="value">8.4 s</span>
-  Max Q: <span class="value">89.4 kPa</span>
-  Total Impulse: <span class="value">21000 N⋅s</span>
-  Specific Impulse: <span class="value">267.8 s</span>
-
-<span class="label">Key Trajectory Points:</span>
-Time (s)  Alt (m)  Vel (m/s)  Accel (m/s²)
----------------------------------------------
-     0.0        0        0.0         108.7
-    11.3     1847      312.4          -9.8
-    22.5     8234      198.2          -9.8
-    33.8    11892       89.1          -9.8
-    45.0    12847        0.0          -9.8</div>
-                    </div>
-
-                    <hr class="terminal-divider">
-
-                    <div class="terminal-line">
-                        <span class="terminal-prompt">❯ </span>
-                        <span class="terminal-user-input">Now optimize the launch angle for maximum altitude</span>
-                    </div>
-
-                    <div class="terminal-tool-call">
-                        <div><span class="terminal-tool-name">optimize_launch_angle</span></div>
-                        <div class="terminal-tool-params">
-                            rocket_geometry: { dry_mass_kg: <span class="json-number">15</span>, propellant_mass_kg: <span class="json-number">8</span>, ... }<br>
-                            optimize_for: <span class="json-string">"altitude"</span>, angle_bounds_deg: [<span class="json-number">75</span>, <span class="json-number">90</span>]
-                        </div>
-                    </div>
-
-                    <div class="terminal-response">
-                        <div class="terminal-response-content terminal-output">{
-  <span class="json-key">"optimal_angle_deg"</span>: <span class="json-number">87.3</span>,
-  <span class="json-key">"objective"</span>: <span class="json-string">"altitude"</span>,
-  <span class="json-key">"max_altitude_m"</span>: <span class="json-number">13102.4</span>,
-  <span class="json-key">"max_velocity_ms"</span>: <span class="json-number">418.7</span>,
-  <span class="json-key">"apogee_time_s"</span>: <span class="json-number">46.8</span>,
-  <span class="json-key">"iterations"</span>: <span class="json-number">12</span>,
-  <span class="json-key">"convergence"</span>: <span class="json-string">"success"</span>
-}</div>
-                    </div>
-
-                    <div class="terminal-line terminal-line-spaced">
-                        <span class="terminal-prompt">❯ </span>
-                        <span class="terminal-cursor"></span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Hohmann Transfer Example -->
-            <div id="hohmann-transfer" class="terminal-window" role="tabpanel" aria-labelledby="tab-hohmann" aria-hidden="true">
-                <div class="terminal-header">
-                    <div class="terminal-buttons">
-                        <span class="terminal-btn red"></span>
-                        <span class="terminal-btn yellow"></span>
-                        <span class="terminal-btn green"></span>
-                    </div>
-                    <span class="terminal-title">claude — aerospace-mcp</span>
-                </div>
-                <div class="terminal-body">
-                    <div class="terminal-line">
-                        <span class="terminal-prompt">❯ </span>
-                        <span class="terminal-user-input">Calculate a Hohmann transfer from a 400km LEO orbit to geostationary orbit at 35,786km altitude</span>
-                    </div>
-
-                    <div class="terminal-tool-call">
-                        <div><span class="terminal-tool-name">hohmann_transfer</span></div>
-                        <div class="terminal-tool-params">
-                            r1_m: <span class="json-number">6778000</span> <span style="color: #8b949e;">(400km + 6378km Earth radius)</span><br>
-                            r2_m: <span class="json-number">42164000</span> <span style="color: #8b949e;">(35786km + 6378km Earth radius)</span>
-                        </div>
-                    </div>
-
-                    <div class="terminal-response">
-                        <div class="terminal-response-content terminal-output">{
-  <span class="json-key">"delta_v1_ms"</span>: <span class="json-number">2397.51</span>,
-  <span class="json-key">"delta_v2_ms"</span>: <span class="json-number">1456.50</span>,
-  <span class="json-key">"total_delta_v_ms"</span>: <span class="json-number">3854.01</span>,
-  <span class="json-key">"transfer_time_s"</span>: <span class="json-number">19048.40</span>,
-  <span class="json-key">"transfer_time_h"</span>: <span class="json-number">5.29</span>,
-  <span class="json-key">"transfer_semi_major_axis_m"</span>: <span class="json-number">24471000</span>
-}</div>
-                    </div>
-
-                    <div class="terminal-line terminal-explanation">
-                        The transfer requires <span class="value">3,854 m/s</span> total Δv: first burn of <span class="value">2,398 m/s</span> at perigee raises apogee to GEO, then <span class="value">1,457 m/s</span> at apogee circularizes the orbit. Transfer time is about <span class="value">5.3 hours</span>.
-                    </div>
-
-                    <hr class="terminal-divider">
-
-                    <div class="terminal-line">
-                        <span class="terminal-prompt">❯ </span>
-                        <span class="terminal-user-input">What about a transfer to lunar distance at 384,400km?</span>
-                    </div>
-
-                    <div class="terminal-tool-call">
-                        <div><span class="terminal-tool-name">hohmann_transfer</span></div>
-                        <div class="terminal-tool-params">
-                            r1_m: <span class="json-number">6778000</span>, r2_m: <span class="json-number">384400000</span> <span style="color: #8b949e;">(Earth-centered distance)</span>
-                        </div>
-                    </div>
-
-                    <div class="terminal-response">
-                        <div class="terminal-response-content terminal-output">{
-  <span class="json-key">"delta_v1_ms"</span>: <span class="json-number">3082.09</span>,
-  <span class="json-key">"delta_v2_ms"</span>: <span class="json-number">828.74</span>,
-  <span class="json-key">"total_delta_v_ms"</span>: <span class="json-number">3910.82</span>,
-  <span class="json-key">"transfer_time_s"</span>: <span class="json-number">430416.00</span>,
-  <span class="json-key">"transfer_time_h"</span>: <span class="json-number">119.56</span>,
-  <span class="json-key">"transfer_semi_major_axis_m"</span>: <span class="json-number">195589000</span>
-}</div>
-                    </div>
-
-                    <div class="terminal-line terminal-explanation">
-                        A Hohmann transfer to lunar distance requires <span class="value">3,082 m/s</span> at perigee, with a <span class="value">~5 day</span> coast. Note: real lunar missions use 3-body trajectories (~3 days) and require separate LOI burns relative to the Moon.
-                    </div>
-
-                    <div class="terminal-line terminal-line-spaced">
-                        <span class="terminal-prompt">❯ </span>
-                        <span class="terminal-cursor"></span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Quick Start Section -->
-    <section id="quick-start" class="section">
-        <h2>🚀 Quick Start</h2>
-
-        <div class="install-methods">
-            <div class="install-card">
-                <h3>⚡ UV (Recommended)</h3>
-                <p>Fastest Python package manager with excellent dependency resolution.</p>
-                <div class="code-block">
-                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-                    <code><span class="comment"># Install UV</span>
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-<span class="comment"># Clone and setup</span>
-git clone https://github.com/cheesejaguar/aerospace-mcp.git
-cd aerospace-mcp
-uv venv && source .venv/bin/activate
-uv sync
-
-<span class="comment"># Run HTTP server</span>
-uvicorn main:app --reload --host <span class="number">0.0.0.0</span> --port <span class="number">8080</span></code>
-                </div>
-            </div>
-
-            <div class="install-card">
-                <h3>🐳 Docker</h3>
-                <p>Containerized deployment for consistent environments.</p>
-                <div class="code-block">
-                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-                    <code><span class="comment"># Clone and build</span>
-git clone https://github.com/cheesejaguar/aerospace-mcp.git
-cd aerospace-mcp
-
-<span class="comment"># Build and run</span>
-docker build -t aerospace-mcp .
-docker run -p <span class="number">8080</span>:<span class="number">8080</span> aerospace-mcp
-
-<span class="comment"># Test the API</span>
-curl <span class="string">"http://localhost:8080/health"</span></code>
-                </div>
-            </div>
-
-            <div class="install-card">
-                <h3>🤖 Claude Code MCP</h3>
-                <p>Add aerospace-mcp to your Claude Code settings for full tool access.</p>
-                <div class="code-block">
-                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-                    <code><span class="comment">// Add to ~/.claude/settings.json</span>
-{
-  <span class="string">"mcpServers"</span>: {
-    <span class="string">"aerospace-mcp"</span>: {
-      <span class="string">"command"</span>: <span class="string">"uv"</span>,
-      <span class="string">"args"</span>: [
-        <span class="string">"--directory"</span>,
-        <span class="string">"/path/to/aerospace-mcp"</span>,
-        <span class="string">"run"</span>,
-        <span class="string">"aerospace-mcp"</span>
+                    <div class="tabpanel" role="tabpanel" id="panel-mcp" aria-labelledby="tab-mcp">
+                        <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
+<pre><code>{
+  <span class="tok-k">"mcpServers"</span>: {
+    <span class="tok-k">"aerospace"</span>: {
+      <span class="tok-k">"command"</span>: <span class="tok-s">"uv"</span>,
+      <span class="tok-k">"args"</span>: [
+        <span class="tok-s">"--directory"</span>,
+        <span class="tok-s">"/path/to/aerospace-mcp"</span>,
+        <span class="tok-s">"run"</span>,
+        <span class="tok-s">"aerospace-mcp"</span>
       ]
     }
   }
-}</code>
+}</code></pre>
+                    </div>
+                    <div class="tabpanel" role="tabpanel" id="panel-rest" aria-labelledby="tab-rest" hidden>
+                        <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
+<pre><code><span class="tok-c"># Search airports by city</span>
+curl <span class="tok-s">"http://localhost:8080/airports/by_city?city=San%20Jose&amp;country=US"</span>
+
+<span class="tok-c"># Plan a flight with performance estimates</span>
+curl -X POST <span class="tok-s">"http://localhost:8080/plan"</span> \
+  -H <span class="tok-s">"Content-Type: application/json"</span> \
+  -d <span class="tok-s">'{
+    "depart_city": "San Jose",
+    "arrive_city": "Tokyo",
+    "ac_type": "A359",
+    "cruise_alt_ft": 35000
+  }'</span></code></pre>
+                    </div>
+                    <div class="tabpanel" role="tabpanel" id="panel-python" aria-labelledby="tab-python" hidden>
+                        <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
+<pre><code><span class="tok-k">import</span> requests
+
+plan = requests.post(<span class="tok-s">"http://localhost:8080/plan"</span>, json={
+    <span class="tok-s">"depart_city"</span>: <span class="tok-s">"San Jose"</span>,
+    <span class="tok-s">"arrive_city"</span>: <span class="tok-s">"Tokyo"</span>,
+    <span class="tok-s">"ac_type"</span>: <span class="tok-s">"A359"</span>,
+}).json()
+
+est = plan[<span class="tok-s">"estimates"</span>][<span class="tok-s">"block"</span>]
+<span class="tok-k">print</span>(<span class="tok-s">f"{plan['distance_km']:.0f} km, "</span>
+      <span class="tok-s">f"{est['time_min']/60:.1f} h, {est['fuel_kg']:.0f} kg fuel"</span>)</code></pre>
+                    </div>
+                    <div class="tabpanel" role="tabpanel" id="panel-cli" aria-labelledby="tab-cli" hidden>
+                        <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
+<pre><code><span class="tok-c"># Discover tools</span>
+aerospace-mcp-cli search <span class="tok-s">"orbit transfer"</span>
+
+<span class="tok-c"># Convert units</span>
+aerospace-mcp-cli run convert_units <span class="tok-k">--value</span> 100 <span class="tok-k">--from_unit</span> kts <span class="tok-k">--to_unit</span> mps
+
+<span class="tok-c"># Plan a multi-leg journey</span>
+aerospace-mcp-cli run plan_multi_leg_flight \
+  <span class="tok-k">--waypoints</span> <span class="tok-s">'[{"iata":"SJC"},{"iata":"NRT"},{"iata":"SIN"}]'</span> \
+  <span class="tok-k">--aircraft</span> <span class="tok-s">'{"ac_type":"A359"}'</span></code></pre>
+                    </div>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Warning Section -->
-    <div class="warning">
-        <h3>⚠️ IMPORTANT SAFETY NOTICE</h3>
-        <p><strong>THIS SOFTWARE IS FOR EDUCATIONAL, RESEARCH, AND DEVELOPMENT PURPOSES ONLY</strong></p>
-        <p>• NOT FOR REAL NAVIGATION - Do not use for actual flight planning or navigation</p>
-        <p>• NOT CERTIFIED - This system is not certified by any aviation authority</p>
-        <p>• ESTIMATES ONLY - Performance calculations are theoretical estimates</p>
-        <p>• NO LIABILITY - Authors assume no responsibility for any consequences of use</p>
-        <p style="margin-top: 1rem; font-weight: bold;">For real flight planning, always use certified aviation software and consult official sources.</p>
-    </div>
+        <!-- ================= Console demo ================= -->
+        <section class="section" id="demo">
+            <div class="wrap">
+                <p class="kicker">On the wire</p>
+                <h2>What an agent sees</h2>
+                <p class="section-intro">Representative tool calls and their responses.</p>
+                <div class="tabbed reveal">
+                    <div class="tablist" role="tablist" aria-label="Demo outputs">
+                        <button class="tab" role="tab" id="tab-d1" aria-controls="panel-d1" aria-selected="true">search_airports</button>
+                        <button class="tab" role="tab" id="tab-d2" aria-controls="panel-d2" aria-selected="false" tabindex="-1">optimize_launch_angle</button>
+                        <button class="tab" role="tab" id="tab-d3" aria-controls="panel-d3" aria-selected="false" tabindex="-1">hohmann_transfer</button>
+                    </div>
+                    <div class="tabpanel console-body" role="tabpanel" id="panel-d1" aria-labelledby="tab-d1">
+<pre><span class="console-prompt">▸ search_airports</span> {"query": "SJC"}
+<span class="console-out">Found 1 airport(s):
 
-    <!-- Scroll to top button -->
-    <button class="scroll-top-btn" id="scrollTopBtn" aria-label="Scroll to top" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">&#8679;</button>
+• SJC (KSJC) - Norman Y. Mineta San Jose International Airport
+  City: San Jose, US
+  Coordinates: 37.3626, -121.9290
+  Timezone: America/Los_Angeles</span></pre>
+                    </div>
+                    <div class="tabpanel console-body" role="tabpanel" id="panel-d2" aria-labelledby="tab-d2" hidden>
+<pre><span class="console-prompt">▸ optimize_launch_angle</span> {"target_range_m": 2000, "dry_mass_kg": 20, "propellant_mass_kg": 80}
+<span class="console-out">Launch Angle Optimization Results:
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="footer-content">
+Optimal launch angle: 47.2°
+Achieved range:       2,003 m
+Apogee altitude:      1,247 m
+Flight time:          32.4 s
+Iterations:           14</span></pre>
+                    </div>
+                    <div class="tabpanel console-body" role="tabpanel" id="panel-d3" aria-labelledby="tab-d3" hidden>
+<pre><span class="console-prompt">▸ hohmann_transfer</span> {"r1_km": 6778, "r2_km": 42164}
+<span class="console-out">Hohmann Transfer: LEO (400 km) → GEO
+
+Delta-v burn 1:    2.44 km/s
+Delta-v burn 2:    1.47 km/s
+Total delta-v:     3.91 km/s
+Transfer time:     5.26 h
+Transfer SMA:      24,471 km</span></pre>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= Quick start ================= -->
+        <section class="section" id="quick-start">
+            <div class="wrap">
+                <p class="kicker">Quick start</p>
+                <h2>Running in under a minute</h2>
+                <div class="qs-grid">
+                    <div class="qs-card reveal">
+                        <h3>UV (recommended)</h3>
+                        <div class="body">
+                            <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
+<pre><code>git clone https://github.com/cheesejaguar/aerospace-mcp
+cd aerospace-mcp
+uv sync
+
+<span class="tok-c"># MCP server (stdio)</span>
+uv run aerospace-mcp
+
+<span class="tok-c"># or the HTTP API on :8080</span>
+uv run aerospace-mcp-http</code></pre>
+                        </div>
+                    </div>
+                    <div class="qs-card reveal">
+                        <h3>Docker</h3>
+                        <div class="body">
+                            <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
+<pre><code>docker build -t aerospace-mcp .
+docker run -p 8080:8080 aerospace-mcp
+
+<span class="tok-c"># verify</span>
+curl http://localhost:8080/health</code></pre>
+                        </div>
+                    </div>
+                    <div class="qs-card reveal">
+                        <h3>Claude Code</h3>
+                        <div class="body">
+                            <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
+<pre><code>claude mcp add aerospace -- \
+  uv --directory /path/to/aerospace-mcp \
+  run aerospace-mcp
+
+<span class="tok-c"># then, in a session:</span>
+<span class="tok-c"># "Plan a flight from SJC to Tokyo on an A359"</span></code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= Safety ================= -->
+        <section class="section" id="safety" aria-label="Safety notice">
+            <div class="wrap">
+                <div class="safety" role="note">
+                    <svg aria-hidden="true"><use href="#i-warn"/></svg>
+                    <div>
+                        <strong>Research and education only.</strong>
+                        <p>
+                            Outputs are simplified engineering estimates with no certification,
+                            no weather data, and no airspace awareness. Never use this software
+                            for real navigation, flight planning, or aircraft and spacecraft
+                            operations.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="wrap">
             <div class="footer-grid">
                 <div class="footer-brand">
-                    <h3>Aerospace MCP</h3>
-                    <p>Open-source aerospace research platform powered by FastMCP. 44+ tools for flight planning, orbital mechanics, and spacecraft operations.</p>
+                    <a href="#" class="navbar-logo"><span class="tick">▸</span> AEROSPACE-MCP</a>
+                    <p>
+                        Open-source aerospace engineering tools for AI agents, exposed through
+                        the Model Context Protocol, an HTTP API, and a CLI. MIT licensed.
+                    </p>
                 </div>
-                <div class="footer-col">
+                <div>
                     <h4>Project</h4>
-                    <a href="https://github.com/cheesejaguar/aerospace-mcp" target="_blank">GitHub Repository</a>
-                    <a href="https://github.com/cheesejaguar/aerospace-mcp/blob/main/README.md" target="_blank">Documentation</a>
-                    <a href="https://github.com/cheesejaguar/aerospace-mcp/issues" target="_blank">Issues</a>
-                    <a href="https://github.com/cheesejaguar/aerospace-mcp/blob/main/LICENSE" target="_blank">MIT License</a>
+                    <ul>
+                        <li><a href="https://github.com/cheesejaguar/aerospace-mcp" target="_blank" rel="noopener">GitHub</a></li>
+                        <li><a href="https://github.com/cheesejaguar/aerospace-mcp#readme" target="_blank" rel="noopener">Documentation</a></li>
+                        <li><a href="https://github.com/cheesejaguar/aerospace-mcp/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a></li>
+                        <li><a href="https://github.com/cheesejaguar/aerospace-mcp/issues" target="_blank" rel="noopener">Issues</a></li>
+                    </ul>
                 </div>
-                <div class="footer-col">
-                    <h4>Resources</h4>
-                    <a href="https://fastmcp.com" target="_blank">FastMCP</a>
-                    <a href="https://modelcontextprotocol.io" target="_blank">MCP Protocol</a>
-                    <a href="https://github.com/TUDelft-CNS-ATM/openap" target="_blank">OpenAP</a>
-                    <a href="https://aeroastro.org" target="_blank">AeroAstro.org</a>
+                <div>
+                    <h4>Built with</h4>
+                    <ul>
+                        <li><a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">Model Context Protocol</a></li>
+                        <li><a href="https://gofastmcp.com" target="_blank" rel="noopener">FastMCP</a></li>
+                        <li><a href="https://github.com/TUDelft-CNS-ATM/openap" target="_blank" rel="noopener">OpenAP</a></li>
+                        <li><a href="https://github.com/mborsetti/airportsdata" target="_blank" rel="noopener">airportsdata</a></li>
+                    </ul>
                 </div>
             </div>
             <div class="footer-bottom">
-                <p>Made with care for the aerospace community &middot; &copy; 2025-2026 Cheesejaguar</p>
+                <span>© 2025–2026 Cheesejaguar · aeroastro.org</span>
+                <span>Not for operational use — see safety notice.</span>
             </div>
         </div>
     </footer>
 
+    <button class="scroll-top-btn" aria-label="Scroll to top">↑</button>
+
     <script>
-        // Create animated particles
-        function createParticles() {
-            const particlesContainer = document.getElementById('particles');
-            const particleCount = 50;
+        (function () {
+            "use strict";
 
-            for (let i = 0; i < particleCount; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'particle';
-                particle.style.left = Math.random() * 100 + '%';
-                particle.style.top = Math.random() * 100 + '%';
-                particle.style.width = Math.random() * 4 + 2 + 'px';
-                particle.style.height = particle.style.width;
-                particle.style.animationDelay = Math.random() * 6 + 's';
-                particle.style.animationDuration = (Math.random() * 3 + 3) + 's';
-                particlesContainer.appendChild(particle);
+            var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+            /* Navbar background on scroll + scroll-top button (rAF-throttled) */
+            var navbar = document.querySelector(".navbar");
+            var topBtn = document.querySelector(".scroll-top-btn");
+            var ticking = false;
+            function onScroll() {
+                if (ticking) return;
+                ticking = true;
+                requestAnimationFrame(function () {
+                    var y = window.scrollY;
+                    navbar.classList.toggle("scrolled", y > 24);
+                    topBtn.classList.toggle("visible", y > 600);
+                    ticking = false;
+                });
             }
-        }
+            window.addEventListener("scroll", onScroll, { passive: true });
+            onScroll();
 
-        // Tab switching functionality for code examples
-        function showTab(tabId, element) {
-            // Hide all content
-            const contents = document.querySelectorAll('.code-content');
-            contents.forEach(content => content.classList.remove('active'));
-
-            // Remove active class from all tabs
-            const tabs = document.querySelectorAll('.code-tab');
-            tabs.forEach(tab => tab.classList.remove('active'));
-
-            // Show selected content and activate tab
-            document.getElementById(tabId).classList.add('active');
-            element.classList.add('active');
-        }
-
-        // Terminal tab switching functionality
-        function showTerminalTab(tabId, element) {
-            // Hide all terminal windows and update ARIA
-            const windows = document.querySelectorAll('.terminal-window');
-            windows.forEach(win => {
-                win.classList.remove('active');
-                win.setAttribute('aria-hidden', 'true');
+            topBtn.addEventListener("click", function () {
+                window.scrollTo({ top: 0, behavior: reducedMotion ? "auto" : "smooth" });
             });
 
-            // Remove active class from all terminal tabs and update ARIA
-            const tabs = document.querySelectorAll('.terminal-tab');
-            tabs.forEach(tab => {
-                tab.classList.remove('active');
-                tab.setAttribute('aria-selected', 'false');
+            /* Smooth-scroll anchors (guard the bare "#" logo links) */
+            document.querySelectorAll('a[href^="#"]').forEach(function (link) {
+                link.addEventListener("click", function (e) {
+                    var href = link.getAttribute("href");
+                    e.preventDefault();
+                    if (href === "#") {
+                        window.scrollTo({ top: 0, behavior: reducedMotion ? "auto" : "smooth" });
+                        return;
+                    }
+                    var target = document.querySelector(href);
+                    if (target) target.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth" });
+                });
             });
 
-            // Show selected terminal window and activate tab
-            const selectedWindow = document.getElementById(tabId);
-            selectedWindow.classList.add('active');
-            selectedWindow.setAttribute('aria-hidden', 'false');
-            element.classList.add('active');
-            element.setAttribute('aria-selected', 'true');
-        }
+            /* Accessible tabs: click + arrow-key roving focus */
+            document.querySelectorAll('[role="tablist"]').forEach(function (tablist) {
+                var tabs = Array.prototype.slice.call(tablist.querySelectorAll('[role="tab"]'));
 
-        // Copy to clipboard functionality
-        async function copyCode(button) {
-            const codeBlock = button.nextElementSibling;
-            // Get the original text content and preserve line breaks
-            let text = codeBlock.innerHTML
-                .replace(/<span[^>]*>/g, '') // Remove opening span tags
-                .replace(/<\/span>/g, '')    // Remove closing span tags
-                .replace(/&lt;/g, '<')       // Decode HTML entities
-                .replace(/&gt;/g, '>')
-                .replace(/&amp;/g, '&')
-                .replace(/&quot;/g, '"')
-                .trim();
-
-            try {
-                await navigator.clipboard.writeText(text);
-                button.textContent = 'Copied!';
-                button.style.background = '#10b981';
-
-                setTimeout(() => {
-                    button.textContent = 'Copy';
-                    button.style.background = 'var(--accent-color)';
-                }, 2000);
-            } catch (err) {
-                console.error('Failed to copy text: ', err);
-                button.textContent = 'Failed';
-            }
-        }
-
-        // Sticky navbar and scroll-to-top button on scroll
-        window.addEventListener('scroll', function() {
-            const navbar = document.getElementById('navbar');
-            const scrollTopBtn = document.getElementById('scrollTopBtn');
-            if (window.scrollY > 50) {
-                navbar.classList.add('scrolled');
-            } else {
-                navbar.classList.remove('scrolled');
-            }
-            if (window.scrollY > 500) {
-                scrollTopBtn.classList.add('visible');
-            } else {
-                scrollTopBtn.classList.remove('visible');
-            }
-        });
-
-        // Smooth scrolling for anchor links
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'start'
+                function activate(tab) {
+                    tabs.forEach(function (t) {
+                        var selected = t === tab;
+                        t.setAttribute("aria-selected", String(selected));
+                        t.tabIndex = selected ? 0 : -1;
+                        var panel = document.getElementById(t.getAttribute("aria-controls"));
+                        if (panel) panel.hidden = !selected;
                     });
+                    tab.focus();
                 }
+
+                tabs.forEach(function (tab) {
+                    tab.addEventListener("click", function () { activate(tab); });
+                    tab.addEventListener("keydown", function (e) {
+                        var i = tabs.indexOf(tab);
+                        var next = null;
+                        if (e.key === "ArrowRight") next = tabs[(i + 1) % tabs.length];
+                        else if (e.key === "ArrowLeft") next = tabs[(i - 1 + tabs.length) % tabs.length];
+                        else if (e.key === "Home") next = tabs[0];
+                        else if (e.key === "End") next = tabs[tabs.length - 1];
+                        if (next) { e.preventDefault(); activate(next); }
+                    });
+                });
             });
-        });
 
-        // Initialize particles on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            createParticles();
-        });
-
-        // Add scroll-based animations
-        const observerOptions = {
-            threshold: 0.1,
-            rootMargin: '0px 0px -100px 0px'
-        };
-
-        const observer = new IntersectionObserver(function(entries) {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.style.opacity = '1';
-                    entry.target.style.transform = 'translateY(0)';
-                }
+            /* Copy buttons with visual confirmation */
+            document.querySelectorAll(".copy-btn").forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    var pre = btn.parentElement.querySelector("pre");
+                    if (!pre) return;
+                    navigator.clipboard.writeText(pre.textContent).then(function () {
+                        btn.textContent = "copied";
+                        btn.classList.add("copied");
+                        setTimeout(function () {
+                            btn.textContent = "copy";
+                            btn.classList.remove("copied");
+                        }, 1600);
+                    });
+                });
             });
-        }, observerOptions);
 
-        // Observe all feature cards and terminal section for animation
-        document.addEventListener('DOMContentLoaded', function() {
-            const cards = document.querySelectorAll('.feature-card, .install-card, .terminal-section');
-            cards.forEach(card => {
-                card.style.opacity = '0';
-                card.style.transform = 'translateY(30px)';
-                card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
-                observer.observe(card);
-            });
-        });
+            /* Reveal-on-scroll (skipped for reduced motion; content stays
+               visible whenever the observer is not active) */
+            if (!reducedMotion && "IntersectionObserver" in window) {
+                document.body.classList.add("has-observer");
+                var observer = new IntersectionObserver(function (entries) {
+                    entries.forEach(function (entry) {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add("in");
+                            observer.unobserve(entry.target);
+                        }
+                    });
+                }, { threshold: 0.12 });
+                document.querySelectorAll(".reveal").forEach(function (el) { observer.observe(el); });
+            }
+        })();
     </script>
 </body>
 </html>

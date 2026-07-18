@@ -312,7 +312,7 @@ For AI assistant integration (Claude, etc.):
   "mcpServers": {
     "aerospace-mcp": {
       "command": "python",
-      "args": ["-m", "aerospace_mcp.server"],
+      "args": ["-m", "aerospace_mcp.fastmcp_server"],
       "cwd": "/absolute/path/to/aerospace-mcp",
       "env": {
         "PYTHONPATH": "/absolute/path/to/aerospace-mcp"
@@ -340,7 +340,7 @@ Add to your Continue config (`~/.continue/config.json`):
     {
       "name": "aerospace-mcp",
       "command": "python",
-      "args": ["-m", "aerospace_mcp.server"],
+      "args": ["-m", "aerospace_mcp.fastmcp_server"],
       "workingDirectory": "/absolute/path/to/aerospace-mcp"
     }
   ]
@@ -465,7 +465,7 @@ netstat -an | grep 8000  # Check if port is in use
   "mcpServers": {
     "aerospace-mcp": {
       "command": "python",
-      "args": ["-m", "aerospace_mcp.server"],
+      "args": ["-m", "aerospace_mcp.fastmcp_server"],
       "cwd": "/Users/yourname/aerospace-mcp"
     }
   }
@@ -475,7 +475,7 @@ netstat -an | grep 8000  # Check if port is in use
 2. **Verify MCP server works standalone:**
 ```bash
 cd /path/to/aerospace-mcp
-python -m aerospace_mcp.server
+aerospace-mcp
 # Should show MCP server starting up
 ```
 

@@ -129,6 +129,59 @@ class TestRegexSearch:
         assert results == []
 
 
+class TestReDoSGuard:
+    """Catastrophic-backtracking patterns must complete quickly (downgraded)."""
+
+    @pytest.mark.parametrize(
+        "evil_pattern",
+        [
+            "(a+)+$",
+            "(a|aa)+b",
+            "(x+x+)+y",
+            "((a*)*)*!",
+            "a{99}{99}",
+        ],
+    )
+    def test_evil_patterns_complete_quickly(self, evil_pattern):
+        """ReDoS-shaped patterns finish fast via literal downgrade."""
+        import time
+
+        start = time.monotonic()
+        results = search_tools_regex(evil_pattern)
+        elapsed = time.monotonic() - start
+
+        assert elapsed < 1.0
+        # Downgraded to a literal search, which matches no tool text.
+        assert results == []
+
+    def test_downgrade_flag_in_output(self):
+        """search_aerospace_tools reports when a pattern was downgraded."""
+        import json
+
+        result = json.loads(search_aerospace_tools("(a+)+$", search_type="regex"))
+        assert result.get("regex_downgraded") is True
+
+    def test_safe_patterns_not_downgraded(self):
+        """Ordinary regex queries behave exactly as before."""
+        import json
+
+        results = search_tools_regex("orbit.*transfer")
+        assert len(results) > 0
+
+        result = json.loads(
+            search_aerospace_tools("orbit.*transfer", search_type="regex")
+        )
+        assert "regex_downgraded" not in result
+
+    def test_bounded_repeat_over_limit_downgraded(self):
+        """Bounded repeats above MAX_BOUNDED_REPEAT are treated as literals."""
+        from aerospace_mcp.tools.tool_search import _is_safe_pattern
+
+        assert not _is_safe_pattern("a{100}")
+        assert _is_safe_pattern("a{5}")
+        assert _is_safe_pattern("orbit.*")
+
+
 class TestTextSearch:
     """Test suite for text-based tool search."""
 

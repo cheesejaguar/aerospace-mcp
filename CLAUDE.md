@@ -24,8 +24,11 @@ UVICORN_HOST=localhost UVICORN_PORT=8080 aerospace-mcp-http
 # Run MCP server (stdio mode for production)
 aerospace-mcp
 
-# Run MCP server in TCP mode for debugging
-aerospace-mcp --tcp localhost:8000
+# Run MCP server in SSE mode for debugging (defaults localhost:8001)
+aerospace-mcp sse [host] [port]
+
+# Invoke any tool directly from the terminal
+aerospace-mcp-cli run convert_units --value 100 --from_unit kts --to_unit mps
 ```
 
 ### Development & Testing
@@ -80,17 +83,16 @@ The system follows a layered architecture with shared business logic:
 - Pydantic models for all data structures (AirportOut, PlanRequest, PlanResponse, SegmentEst)
 - Business logic functions: `health()`, `airports_by_city()`, `plan_flight()`
 
-**HTTP Interface** (`app/main.py`):
-- FastAPI application with three endpoints: `/health`, `/airports/by_city`, `/plan`
-- Environment-driven configuration (UVICORN_HOST, UVICORN_PORT, CORS_ORIGINS)
-- OpenAPI documentation at `/docs` and AI plugin manifest at `/.well-known/ai-plugin.json`
+**HTTP Interface** (root `main.py`, launched via `app/main.py`):
+- Thin FastAPI layer over `aerospace_mcp.core` with three endpoints: `/health`, `/airports/by_city`, `/plan`
+- Environment-driven configuration: UVICORN_HOST, UVICORN_PORT, CORS_ORIGINS (comma-separated origins; CORS disabled when unset), RATE_LIMIT_RPM (per-IP requests/minute, default 120, 0 disables), MAX_BODY_BYTES (default 1 MiB)
+- OpenAPI documentation at `/docs`
 
 **MCP Interface** (`aerospace_mcp/fastmcp_server.py`):
-- 44 MCP tools organized across 11 domain modules (core, atmosphere, frames, aerodynamics, propellers, rockets, orbits, gnc, performance, optimization, agents)
+- 47 MCP tools plus 2 discovery tools, organized across 11 domain modules (core, atmosphere, frames, aerodynamics, propellers, rockets, orbits, gnc, performance, optimization, agents)
+- Single registration source: `aerospace_mcp/tools/registry.py` (`ALL_TOOLS`) — shared by the FastMCP server and the CLI; a contract test keeps it in sync with `TOOL_REGISTRY` search metadata. New tools register in exactly two places: `ALL_TOOLS` and `TOOL_REGISTRY`.
 - FastMCP framework for simplified tool development with decorators and automatic schema generation
-- Modular architecture with tools organized by aerospace domain
 - **Tool search tool** for dynamic tool discovery following Anthropic's guide
-- Full compatibility with traditional MCP protocol
 
 **Tool Discovery** (`aerospace_mcp/tools/tool_search.py`):
 - `search_aerospace_tools`: Search tools by name, description, or functionality
@@ -108,9 +110,10 @@ The system follows a layered architecture with shared business logic:
 
 **Flight Performance Modeling**:
 - OpenAP integration for realistic climb/cruise/descent profiles
-- Aircraft mass resolution (85% MTOW default, with fallbacks)
+- Aircraft mass resolution (85% MTOW default, with fallbacks; `assumptions.mass_source` records which)
 - Fuel consumption calculations per flight phase
-- Zero-wind assumptions for baseline estimates
+- Zero-wind default; optional cruise headwind via `estimates_openap(headwind_kts=...)` and the `wind` parameter on the `plan_flight` tool
+- Multi-leg journeys via `plan_multi_leg()` / `plan_multi_leg_flight` tool (2-10 waypoints)
 
 **Route Generation**:
 - Great-circle path calculation between airports
@@ -119,9 +122,12 @@ The system follows a layered architecture with shared business logic:
 
 ### Entry Points
 
-The package provides two console scripts:
+The package provides three console scripts:
 - `aerospace-mcp-http`: Starts FastAPI server (calls `app.main:run`)
 - `aerospace-mcp`: Starts MCP server (calls `aerospace_mcp.fastmcp_server:run`)
+- `aerospace-mcp-cli`: Direct CLI for any registered tool (list/search/info/run)
+
+The legacy low-level MCP server (`aerospace_mcp/server.py`) was removed; `fastmcp_server.py` is the only MCP server.
 
 ### Development Patterns
 

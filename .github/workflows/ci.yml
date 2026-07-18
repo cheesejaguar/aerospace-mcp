@@ -136,7 +136,7 @@ jobs:
     - name: Run integration tests
       if: matrix.test-group == 'integration'
       run: |
-        uv run pytest tests/test_mcp.py tests/test_health.py -v \
+        uv run pytest tests/test_fastmcp.py tests/test_health.py -v \
           --maxfail=1 \
           --tb=short \
           -n 2 \

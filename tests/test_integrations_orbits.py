@@ -194,6 +194,46 @@ class TestOrbitPropagation:
         assert abs(final_state.position_m[0] - initial_state.position_m[0]) > 1000.0
         assert abs(final_state.position_m[1] - initial_state.position_m[1]) > 1000.0
 
+    def test_sub_second_time_step_epochs(self):
+        """Regression: sub-second steps must not truncate epochs to whole seconds."""
+        from datetime import datetime
+
+        initial_state = StateVector(
+            position_m=[7000000.0, 0.0, 0.0],
+            velocity_ms=[0.0, 7546.0, 0.0],
+            epoch_utc="2000-01-01T12:00:00",
+        )
+
+        states = propagate_orbit_j2(initial_state, 2.0, 0.5)
+
+        epochs = [datetime.fromisoformat(s.epoch_utc) for s in states]
+        deltas = [
+            (b - a).total_seconds()
+            for a, b in zip(epochs[:-1], epochs[1:], strict=False)
+        ]
+        assert all(abs(d - 0.5) < 1e-6 for d in deltas), deltas
+
+    @pytest.mark.parametrize(
+        "time_span_s,time_step_s",
+        [
+            (3600.0, 0.01),  # step below minimum
+            (3600.0, -1.0),  # negative step
+            (31 * 86400.0, 60.0),  # span above 30 days
+            (0.0, 60.0),  # zero span
+            (86400.0, 0.5),  # 172800 steps > 100k cap
+        ],
+    )
+    def test_propagation_bounds_rejected(self, time_span_s, time_step_s):
+        """DoS guard: out-of-range propagation parameters raise ValueError."""
+        initial_state = StateVector(
+            position_m=[7000000.0, 0.0, 0.0],
+            velocity_ms=[0.0, 7546.0, 0.0],
+            epoch_utc="2000-01-01T12:00:00",
+        )
+
+        with pytest.raises(ValueError):
+            propagate_orbit_j2(initial_state, time_span_s, time_step_s)
+
 
 class TestGroundTrack:
     """Test ground track calculation."""

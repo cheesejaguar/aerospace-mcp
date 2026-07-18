@@ -132,6 +132,23 @@ class TestRocketTrajectory:
         coast_points = [p for p in trajectory if p.time_s > 8.5]
         assert all(p.thrust_n == 0 for p in coast_points)
 
+    @pytest.mark.parametrize(
+        "dt_s,max_time_s",
+        [
+            (0.0001, 100.0),  # dt below minimum
+            (20.0, 100.0),  # dt above maximum
+            (0.1, 4000.0),  # duration above 1 hour
+            (0.1, 0.0),  # zero duration
+            (0.005, 3600.0),  # 720000 steps > 500k cap
+        ],
+    )
+    def test_trajectory_bounds_rejected(self, dt_s, max_time_s):
+        """DoS guard: out-of-range integration parameters raise ValueError."""
+        geometry = self.create_test_rocket()
+
+        with pytest.raises(ValueError):
+            rocket_3dof_trajectory(geometry, dt_s=dt_s, max_time_s=max_time_s)
+
     def test_angled_launch(self):
         """Test angled launch trajectory."""
         geometry = self.create_test_rocket()

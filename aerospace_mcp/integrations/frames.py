@@ -27,6 +27,9 @@ WARNING: This module is for educational and research purposes only.
 Do NOT use for real flight planning, navigation, or spacecraft operations.
 """
 
+import math
+from datetime import UTC, datetime
+
 from pydantic import BaseModel, Field
 
 from . import update_availability
@@ -54,6 +57,32 @@ EARTH_B = EARTH_A * (1.0 - EARTH_F)
 # Appears in the radius-of-curvature formula: N = a / sqrt(1 - e^2 * sin^2(lat)).
 # Dimensionless.
 EARTH_E2 = 2.0 * EARTH_F - EARTH_F**2
+
+
+def _gmst_rad(epoch_iso: str) -> float:
+    """Greenwich Mean Sidereal Time in radians for an ISO-8601 epoch (UTC).
+
+    Uses the IAU 1982 linear approximation:
+        GMST_deg = 280.46061837 + 360.98564736629 * d
+    where ``d`` is the number of UT1 days since J2000.0 (JD 2451545.0).
+    UT1 is approximated by UTC (|UT1-UTC| < 0.9 s, i.e. < 0.004 deg).
+
+    Args:
+        epoch_iso: Epoch as an ISO-8601 string, e.g. "2000-01-01T12:00:00".
+            Naive timestamps are interpreted as UTC.
+
+    Returns:
+        GMST angle in radians, wrapped to [0, 2*pi).
+    """
+    epoch = datetime.fromisoformat(epoch_iso.replace("Z", "+00:00"))
+    if epoch.tzinfo is None:
+        epoch = epoch.replace(tzinfo=UTC)
+    # Julian Date from Unix time: JD = unix/86400 + 2440587.5
+    jd = epoch.timestamp() / 86400.0 + 2440587.5
+    d = jd - 2451545.0  # days since J2000.0
+    gmst_deg = (280.46061837 + 360.98564736629 * d) % 360.0
+    return math.radians(gmst_deg)
+
 
 # ===========================================================================
 # Optional Library Imports
@@ -378,12 +407,30 @@ def transform_frames(
     elif from_frame == "GEODETIC" and to_frame == "ECEF":
         x_new, y_new, z_new = _manual_geodetic_to_ecef(x, y, z)
         return CoordinatePoint(x=x_new, y=y_new, z=z_new, frame="ECEF", epoch=epoch_iso)
-    elif (from_frame in ["ECI", "GCRS"] and to_frame in ["ECEF", "ITRF"]) or (
-        from_frame in ["ECEF", "ITRF"] and to_frame in ["ECI", "GCRS"]
-    ):
-        # Simple approximation: ECI ≈ ECEF (ignoring Earth rotation)
-        # In real implementation, would apply rotation matrix based on GMST
-        return CoordinatePoint(x=x, y=y, z=z, frame=to_frame, epoch=epoch_iso)
+    elif from_frame in ["ECI", "GCRS"] and to_frame in ["ECEF", "ITRF"]:
+        # Rotate about the z-axis by GMST (Earth's rotation angle).
+        # Neglects precession, nutation, and polar motion (~arcsec level);
+        # the astropy branch above remains the precise path.
+        theta = _gmst_rad(epoch_iso)
+        cos_t, sin_t = math.cos(theta), math.sin(theta)
+        return CoordinatePoint(
+            x=x * cos_t + y * sin_t,
+            y=-x * sin_t + y * cos_t,
+            z=z,
+            frame=to_frame,
+            epoch=epoch_iso,
+        )
+    elif from_frame in ["ECEF", "ITRF"] and to_frame in ["ECI", "GCRS"]:
+        # Inverse rotation (ECEF -> ECI): rotate by -GMST.
+        theta = _gmst_rad(epoch_iso)
+        cos_t, sin_t = math.cos(theta), math.sin(theta)
+        return CoordinatePoint(
+            x=x * cos_t - y * sin_t,
+            y=x * sin_t + y * cos_t,
+            z=z,
+            frame=to_frame,
+            epoch=epoch_iso,
+        )
 
     raise NotImplementedError(
         f"Transformation from {from_frame} to {to_frame} not implemented. "

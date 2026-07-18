@@ -26,7 +26,7 @@ Do NOT use for real flight planning, navigation, or spacecraft operations.
 
 import math
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 # ===========================================================================
@@ -580,7 +580,19 @@ def propagate_orbit_j2(
 
     Returns:
         List of state vectors sampled at each time step.
+
+    Raises:
+        ValueError: If the time step or span is out of bounds, or the
+            resulting step count exceeds the safety cap.
     """
+    if time_step_s < 0.1:
+        raise ValueError("time_step_s must be >= 0.1 s")
+    if not 0 < time_span_s <= 30 * 86400:
+        raise ValueError("time_span_s must be > 0 and <= 30 days (2592000 s)")
+    if time_span_s / time_step_s > 100_000:
+        raise ValueError(
+            "too many integration steps (max 100000); increase time_step_s"
+        )
 
     def acceleration_j2(r_vec: list[float]) -> list[float]:
         """Calculate total acceleration (central body + J2).
@@ -660,7 +672,7 @@ def propagate_orbit_j2(
         t += dt
 
         # Create new state
-        new_epoch = epoch.replace(microsecond=0) + type(epoch - epoch)(seconds=int(t))
+        new_epoch = epoch + timedelta(seconds=t)
 
         states.append(
             StateVector(
@@ -695,7 +707,16 @@ def calculate_ground_track(
 
     Returns:
         List of ground track points with lat/lon/alt.
+
+    Raises:
+        ValueError: If the time step is below the minimum or the state
+            list exceeds the safety cap.
     """
+    if time_step_s < 0.1:
+        raise ValueError("time_step_s must be >= 0.1 s")
+    if len(orbit_states) > 100_000:
+        raise ValueError("too many orbit states (max 100000)")
+
     ground_track = []
 
     for i, state in enumerate(orbit_states):
