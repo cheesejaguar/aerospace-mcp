@@ -93,7 +93,7 @@ def test_agent_model_default_and_override(monkeypatch):
     agents.litellm = StubLLM()  # type: ignore
     agents.format_data_for_tool("search_airports", "Find airports")
 
-    assert used_models == ["gpt-5.6", "custom/provider-model"]
+    assert used_models == ["gpt-5.6-sol", "custom/provider-model"]
 
 
 def test_agents_exception_paths(monkeypatch):

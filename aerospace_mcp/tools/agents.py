@@ -29,8 +29,8 @@ LLM_TOOLS_ENABLED = os.environ.get("LLM_TOOLS_ENABLED", "false").lower() == "tru
 litellm.set_verbose = False
 
 # Model used for agentic tool calls. Allow deployments to select any model
-# supported by LiteLLM while defaulting to OpenAI's current flagship alias.
-_AGENT_MODEL = os.environ.get("LLM_MODEL", "gpt-5.6")
+# supported by LiteLLM while defaulting to OpenAI's flagship model ID.
+_AGENT_MODEL = os.environ.get("LLM_MODEL", "gpt-5.6-sol")
 
 # Log status of LLM tools
 if not LLM_TOOLS_ENABLED:
