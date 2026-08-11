@@ -28,6 +28,10 @@ LLM_TOOLS_ENABLED = os.environ.get("LLM_TOOLS_ENABLED", "false").lower() == "tru
 # Configure LiteLLM for OpenAI GPT-5-Medium
 litellm.set_verbose = False
 
+# Model used for agentic tool calls. "gpt-5-medium" does not exist; default to a
+# real, widely-available model and allow override via the LLM_MODEL env var.
+_AGENT_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
+
 # Log status of LLM tools
 if not LLM_TOOLS_ENABLED:
     logger.info("LLM tools disabled via LLM_TOOLS_ENABLED environment variable.")
@@ -239,7 +243,7 @@ If the user's requirements are unclear or insufficient data is provided, return 
     try:
         # Call GPT-5-Medium via LiteLLM
         response = litellm.completion(
-            model="gpt-5-medium",
+            model=_AGENT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -328,7 +332,7 @@ If the user's task cannot be accomplished with the available tools, clearly expl
     try:
         # Call GPT-5-Medium via LiteLLM
         response = litellm.completion(
-            model="gpt-5-medium",
+            model=_AGENT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
