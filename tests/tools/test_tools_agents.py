@@ -59,6 +59,43 @@ def test_agents_success(monkeypatch):
     assert "search_airports" in out
 
 
+def test_agent_model_default_and_override(monkeypatch):
+    import importlib
+
+    import aerospace_mcp.tools.agents as agents
+
+    monkeypatch.setenv("LLM_TOOLS_ENABLED", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+
+    class Choice:
+        class Msg:
+            content = '{"tool": "search_airports"}'
+
+        message = Msg()
+
+    class Resp:
+        choices = [Choice()]
+
+    used_models = []
+
+    class StubLLM:
+        def completion(self, *a, **k):
+            used_models.append(k["model"])
+            return Resp()
+
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    importlib.reload(agents)
+    agents.litellm = StubLLM()  # type: ignore
+    agents.format_data_for_tool("search_airports", "Find airports")
+
+    monkeypatch.setenv("LLM_MODEL", "custom/provider-model")
+    importlib.reload(agents)
+    agents.litellm = StubLLM()  # type: ignore
+    agents.format_data_for_tool("search_airports", "Find airports")
+
+    assert used_models == ["gpt-5.6-sol", "custom/provider-model"]
+
+
 def test_agents_exception_paths(monkeypatch):
     import importlib
 

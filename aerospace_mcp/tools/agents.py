@@ -4,7 +4,7 @@ Provides LLM-powered assistant tools that help users:
 - Select the most appropriate aerospace-mcp tool for a given task.
 - Format input data correctly for a specific tool's expected schema.
 
-These tools use GPT-5-Medium via LiteLLM and require:
+These tools use a configurable LLM via LiteLLM and require:
 - LLM_TOOLS_ENABLED=true environment variable to be set.
 - OPENAI_API_KEY environment variable for API authentication.
 
@@ -25,8 +25,12 @@ logger = logging.getLogger(__name__)
 # Check if LLM tools are enabled via environment variable
 LLM_TOOLS_ENABLED = os.environ.get("LLM_TOOLS_ENABLED", "false").lower() == "true"
 
-# Configure LiteLLM for OpenAI GPT-5-Medium
+# Configure LiteLLM for agentic tool calls
 litellm.set_verbose = False
+
+# Model used for agentic tool calls. Allow deployments to select any model
+# supported by LiteLLM while defaulting to OpenAI's flagship model ID.
+_AGENT_MODEL = os.environ.get("LLM_MODEL", "gpt-5.6-sol")
 
 # Log status of LLM tools
 if not LLM_TOOLS_ENABLED:
@@ -185,7 +189,7 @@ def format_data_for_tool(
     """
     Help format data in the correct format for a specific aerospace-mcp tool.
 
-    Uses GPT-5-Medium to analyze the user's requirements and raw data, then provides
+    Uses the configured LLM to analyze the user's requirements and raw data, then provides
     the correctly formatted parameters for the specified tool.
 
     Args:
@@ -219,7 +223,7 @@ def format_data_for_tool(
     if "OPENAI_API_KEY" not in os.environ:
         return "Error: OPENAI_API_KEY environment variable not set. Cannot use agent tools."
 
-    # Build the prompt for GPT-5-Medium
+    # Build the formatting prompt
     system_prompt = f"""You are a data formatting assistant for aerospace-mcp tools. Your job is to help format data correctly for the '{tool_name}' tool.
 
 Tool Information:
@@ -237,9 +241,9 @@ Please provide ONLY a valid JSON object with the correctly formatted parameters 
 If the user's requirements are unclear or insufficient data is provided, return a JSON object with an "error" field explaining what additional information is needed."""
 
     try:
-        # Call GPT-5-Medium via LiteLLM
+        # Call the configured model via LiteLLM
         response = litellm.completion(
-            model="gpt-5-medium",
+            model=_AGENT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -268,7 +272,7 @@ def select_aerospace_tool(user_task: str, user_context: str = "") -> str:
     """
     Help select the most appropriate aerospace-mcp tool for a given task.
 
-    Uses GPT-5-Medium to analyze the user's task and recommend the best tool(s)
+    Uses the configured LLM to analyze the user's task and recommend the best tool(s)
     along with guidance on how to use them.
 
     Args:
@@ -326,9 +330,9 @@ Respond in a clear, structured format with:
 If the user's task cannot be accomplished with the available tools, clearly explain what's missing and suggest alternatives."""
 
     try:
-        # Call GPT-5-Medium via LiteLLM
+        # Call the configured model via LiteLLM
         response = litellm.completion(
-            model="gpt-5-medium",
+            model=_AGENT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
