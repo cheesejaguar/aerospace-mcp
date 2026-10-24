@@ -17,7 +17,6 @@ import logging
 import os
 from typing import Any
 
-import litellm
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -25,8 +24,23 @@ logger = logging.getLogger(__name__)
 # Check if LLM tools are enabled via environment variable
 LLM_TOOLS_ENABLED = os.environ.get("LLM_TOOLS_ENABLED", "false").lower() == "true"
 
-# Configure LiteLLM for agentic tool calls
-litellm.set_verbose = False
+# LiteLLM takes ~2.5 s to import -- over half of the MCP server's startup --
+# and the agent tools are disabled by default, so it is imported on first
+# use by _get_litellm(). Tests replace this attribute with a stub.
+litellm: Any = None
+
+
+def _get_litellm() -> Any:
+    """Import and configure LiteLLM on first use (or return the stub set)."""
+    global litellm
+    if litellm is None:
+        import litellm as _litellm
+
+        # Configure LiteLLM for agentic tool calls
+        _litellm.set_verbose = False
+        litellm = _litellm
+    return litellm
+
 
 # Model used for agentic tool calls. Allow deployments to select any model
 # supported by LiteLLM while defaulting to OpenAI's flagship model ID.
@@ -242,7 +256,7 @@ If the user's requirements are unclear or insufficient data is provided, return 
 
     try:
         # Call the configured model via LiteLLM
-        response = litellm.completion(
+        response = _get_litellm().completion(
             model=_AGENT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -331,7 +345,7 @@ If the user's task cannot be accomplished with the available tools, clearly expl
 
     try:
         # Call the configured model via LiteLLM
-        response = litellm.completion(
+        response = _get_litellm().completion(
             model=_AGENT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},

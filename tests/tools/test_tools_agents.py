@@ -166,3 +166,37 @@ def test_format_data_invalid_json(monkeypatch):
     agents.litellm = StubLLM()  # type: ignore
     out = agents.format_data_for_tool("search_airports", "Find airports")
     assert "failed to generate valid json" in out.lower()
+
+
+def test_server_import_does_not_import_litellm():
+    """LiteLLM costs ~2.5 s of startup and the agent tools are off by default."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, aerospace_mcp.fastmcp_server\n"
+        "assert 'litellm' not in sys.modules, 'litellm imported at startup'\n"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True, timeout=120)
+
+
+def test_litellm_is_imported_and_configured_on_first_use(monkeypatch):
+    import importlib
+    import sys
+    import types
+
+    import aerospace_mcp.tools.agents as agents
+
+    importlib.reload(agents)
+    assert agents.litellm is None
+    fake = types.ModuleType("litellm")
+    fake.set_verbose = True
+    monkeypatch.setitem(sys.modules, "litellm", fake)
+
+    assert agents._get_litellm() is fake
+    assert fake.set_verbose is False
+    assert agents.litellm is fake
+    # A stub assigned by a caller (as the tests above do) is used as is.
+    stub = object()
+    agents.litellm = stub
+    assert agents._get_litellm() is stub
