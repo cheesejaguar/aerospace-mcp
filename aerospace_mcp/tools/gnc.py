@@ -6,15 +6,29 @@ Provides tools for:
 
 The Kalman filter implements the standard predict-update cycle:
     Predict:  x_pred = F * x,  P_pred = F * P * F^T + Q
-    Update:   K = P_pred * H^T * (H * P_pred * H^T + R)^{-1}
+    Update:   S = H * P_pred * H^T + R
+              K = P_pred * H^T * S^{-1}
               x = x_pred + K * (z - H * x_pred)
-              P = (I - K * H) * P_pred
+              P = (I - K H) P_pred (I - K H)^T + K R K^T   (Joseph form)
+For the "orbital" model F is the state transition matrix of the two-body
+problem linearised about the propagated state (an extended Kalman filter).
 
 The LQR controller minimizes the infinite-horizon cost function:
     J = integral(x^T Q x + u^T R u) dt
 by solving the continuous algebraic Riccati equation (CARE):
     A^T S + S A - S B R^{-1} B^T S + Q = 0
 to obtain the optimal gain K = R^{-1} B^T S.
+
+References:
+    - Simon, D., "Optimal State Estimation" (2006), Ch. 5 (discrete Kalman
+      filter, Joseph-form covariance update) and Ch. 13 (extended KF)
+    - Bar-Shalom, Y., Li, X.R. & Kirubarajan, T., "Estimation with
+      Applications to Tracking and Navigation" (2001), Sec. 6.2-6.3
+      (constant-velocity / constant-acceleration kinematic models)
+    - Vallado, D.A., "Fundamentals of Astrodynamics and Applications"
+      (4th ed., 2013), Sec. 10.7 (two-body state transition matrix)
+    - Anderson, B.D.O. & Moore, J.B., "Optimal Control: Linear Quadratic
+      Methods" (1990), Ch. 3 (CARE, stabilizability/detectability)
 
 WARNING: This module is for educational and research purposes only.
 Do NOT use for real flight planning, navigation, or aircraft operations.
@@ -25,6 +39,18 @@ import logging
 import math
 
 logger = logging.getLogger(__name__)
+
+# Earth gravitational parameter (m^3/s^2), WGS-84 / EGM-96 value.
+_MU_EARTH = 3.986004418e14
+
+# Size limits so a single tool call cannot run unbounded.
+_MAX_STATE_DIM = 50
+_MAX_MEASUREMENTS = 10_000
+# Two-body propagation: RK4 sub-step of at most 10 s, at most 2000
+# sub-steps per measurement interval (longer gaps use longer sub-steps).
+_ORBIT_MAX_SUBSTEP_S = 10.0
+_ORBIT_MAX_SUBSTEPS = 2000
+_MAX_LQR_DIM = 100
 
 
 def _convert_to_native(obj):
@@ -50,11 +76,155 @@ def _convert_to_native(obj):
             return obj.tolist()
         elif isinstance(obj, dict):
             return {k: _convert_to_native(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
+        elif isinstance(obj, list | tuple):
             return [_convert_to_native(item) for item in obj]
         return obj
     except ImportError:
         return obj
+
+
+def _as_matrix(name, value, rows=None, cols=None):
+    """Convert a nested list to a finite 2-D float array, checking its shape.
+
+    Args:
+        name: Parameter name used in error messages.
+        value: Nested list (or scalar for a 1x1 matrix).
+        rows: Required number of rows, or None.
+        cols: Required number of columns, or None.
+
+    Raises:
+        ValueError: On ragged, non-numeric, non-finite or mis-shaped input.
+    """
+    import numpy as np
+
+    try:
+        arr = np.array(value, dtype=float)
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be a numeric matrix (list of rows)") from None
+    if arr.ndim == 0:
+        arr = arr.reshape(1, 1)
+    if arr.ndim != 2:
+        raise ValueError(f"{name} must be a 2-D matrix, got {arr.ndim}-D")
+    if (rows is not None and arr.shape[0] != rows) or (
+        cols is not None and arr.shape[1] != cols
+    ):
+        if cols is None:
+            want = f"have {rows} rows"
+        elif rows is None:
+            want = f"have {cols} columns"
+        else:
+            want = f"be {rows}x{cols}"
+        raise ValueError(f"{name} must {want}, got {arr.shape[0]}x{arr.shape[1]}")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"{name} contains non-finite values")
+    return arr
+
+
+# ===========================================================================
+# Kalman filter helpers
+# ===========================================================================
+
+
+def _kinematic_transition(dynamics_model: str, n: int, dt: float):
+    """State transition matrix for the linear kinematic models.
+
+    The state is laid out block-wise for ``k`` spatial axes:
+        - constant_velocity:     [p_1..p_k, v_1..v_k]            (n = 2k)
+        - constant_acceleration: [p_1..p_k, v_1..v_k, a_1..a_k]  (n = 3k)
+        - static:                any n, F = I (random walk)
+    with ``k`` in {1, 2, 3}.  For example the 2-D constant-velocity state is
+    [x, y, vx, vy] and the 2-D constant-acceleration state is
+    [x, y, vx, vy, ax, ay].
+
+    Raises:
+        ValueError: If the model is unknown or ``n`` does not fit it.
+    """
+    import numpy as np
+
+    if dynamics_model == "static":
+        return np.eye(n)
+    if dynamics_model == "constant_velocity":
+        if n not in (2, 4, 6):
+            raise ValueError(
+                "constant_velocity needs a state [positions, velocities] of "
+                f"length 2, 4 or 6 (1-D, 2-D or 3-D); got {n}"
+            )
+        k = n // 2
+        eye = np.eye(k)
+        # p_new = p + v*dt ; v_new = v
+        return np.block([[eye, dt * eye], [np.zeros((k, k)), eye]])
+    if dynamics_model == "constant_acceleration":
+        if n not in (3, 6, 9):
+            raise ValueError(
+                "constant_acceleration needs a state [positions, velocities, "
+                f"accelerations] of length 3, 6 or 9; got {n}"
+            )
+        k = n // 3
+        eye, zero = np.eye(k), np.zeros((k, k))
+        # p_new = p + v*dt + a*dt^2/2 ; v_new = v + a*dt ; a_new = a
+        return np.block(
+            [
+                [eye, dt * eye, 0.5 * dt**2 * eye],
+                [zero, eye, dt * eye],
+                [zero, zero, eye],
+            ]
+        )
+    raise ValueError(
+        f"Unknown dynamics_model {dynamics_model!r}; expected one of "
+        "'constant_velocity', 'constant_acceleration', 'orbital', 'static'"
+    )
+
+
+def _two_body_propagate(x, dt: float):
+    """Propagate a two-body state and its state transition matrix.
+
+    Integrates the equations of motion r'' = -mu r / |r|^3 together with
+    the variational equations Phi' = A(t) Phi, where::
+
+        A = [[0, I], [G, 0]],   G = mu / |r|^5 * (3 r r^T - |r|^2 I)
+
+    using fixed-step RK4 (sub-step <= 10 s).
+
+    Args:
+        x: State [x, y, z, vx, vy, vz] in m and m/s (Earth-centred inertial).
+        dt: Propagation interval in seconds (>= 0).
+
+    Returns:
+        Tuple ``(x_new, Phi)`` with the propagated state and the 6x6 state
+        transition matrix d x_new / d x.
+    """
+    import numpy as np
+
+    if float(np.linalg.norm(x[:3])) < 1.0e5:
+        raise ValueError(
+            "orbital model needs an Earth-centred position in meters "
+            "(|r| < 100 km is inside the Earth)"
+        )
+
+    def deriv(y):
+        r = y[:3]
+        v = y[3:6]
+        phi = y[6:].reshape(6, 6)
+        r2 = float(r @ r)
+        rn = math.sqrt(r2)
+        acc = -_MU_EARTH * r / rn**3
+        G = _MU_EARTH / rn**5 * (3.0 * np.outer(r, r) - r2 * np.eye(3))
+        A = np.zeros((6, 6))
+        A[:3, 3:] = np.eye(3)
+        A[3:, :3] = G
+        return np.concatenate([v, acc, (A @ phi).ravel()])
+
+    y = np.concatenate([np.asarray(x, dtype=float), np.eye(6).ravel()])
+    if dt > 0:
+        n_sub = min(_ORBIT_MAX_SUBSTEPS, max(1, math.ceil(dt / _ORBIT_MAX_SUBSTEP_S)))
+        h = dt / n_sub
+        for _ in range(n_sub):
+            k1 = deriv(y)
+            k2 = deriv(y + 0.5 * h * k1)
+            k3 = deriv(y + 0.5 * h * k2)
+            k4 = deriv(y + h * k3)
+            y = y + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+    return y[:6], y[6:].reshape(6, 6)
 
 
 def kalman_filter_state_estimation(
@@ -65,26 +235,43 @@ def kalman_filter_state_estimation(
     measurements: list[dict],
     dynamics_model: str = "constant_velocity",
     dt: float = 1.0,
+    initial_time: float | None = None,
 ) -> str:
-    """Extended Kalman Filter for aircraft/spacecraft state estimation.
+    """Kalman filter (EKF for the orbital model) for aircraft/spacecraft state estimation.
 
     Implements a Kalman filter for sensor fusion and state estimation from
-    noisy measurements.
+    noisy measurements, with the exact gain K = P H^T S^-1 and a Joseph-form
+    covariance update.
 
     Args:
-        initial_state: Initial state vector estimate
-        initial_covariance: Initial state covariance matrix (P0)
-        process_noise: Process noise covariance matrix (Q)
-        measurement_noise: Measurement noise covariance matrix (R)
+        initial_state: Initial state vector estimate (length n)
+        initial_covariance: Initial state covariance matrix P0 (n x n)
+        process_noise: Process noise covariance Q (n x n), added once per
+            prediction step (it is not rescaled with the step length)
+        measurement_noise: Measurement noise covariance R (m x m, where m is
+            the length of each measurement vector z)
         measurements: Time-series of measurements, each with:
-            - time: Measurement timestamp
-            - z: Measurement vector
-            - H: Optional measurement matrix (uses identity if not provided)
+            - z: Measurement vector (length m)
+            - time: Optional timestamp in seconds.  The prediction step
+              before each measurement uses the elapsed time since the
+              previous one; measurements without a time use ``dt``.
+            - H: Measurement matrix (m x n).  Optional when m == n (identity
+              is used); required otherwise, e.g. [[1,0,0,0],[0,1,0,0]] to
+              measure position only with the 2-D constant-velocity model.
         dynamics_model: Dynamics model type:
-            - "constant_velocity": 2D position + velocity
-            - "constant_acceleration": 2D position + velocity + acceleration
-            - "orbital": Simplified orbital dynamics
-        dt: Time step for prediction (used if not in measurements)
+            - "constant_velocity": state [positions, velocities], n = 2, 4
+              or 6 (1-D, 2-D [x, y, vx, vy] or 3-D)
+            - "constant_acceleration": state [positions, velocities,
+              accelerations], n = 3, 6 or 9 (2-D: [x, y, vx, vy, ax, ay])
+            - "orbital": Earth two-body dynamics, state [x, y, z, vx, vy, vz]
+              in m and m/s (ECI); extended Kalman filter
+            - "static": F = I (random-walk state), any n
+        dt: Default time step in seconds, used for measurements without a
+            ``time`` and for the first prediction when ``initial_time`` is
+            not given
+        initial_time: Optional time of the initial state.  When omitted the
+            initial state is taken to be ``dt`` seconds before the first
+            measurement.
 
     Returns:
         Formatted string with filtered state estimates, covariance diagonals,
@@ -94,212 +281,151 @@ def kalman_filter_state_estimation(
         No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
-        # Try to use filterpy if available
-        try:
-            from filterpy.kalman import KalmanFilter
-
-            use_filterpy = True
-        except ImportError:
-            use_filterpy = False
+        import numpy as np
 
         n = len(initial_state)
+        if not 1 <= n <= _MAX_STATE_DIM:
+            raise ValueError(f"initial_state must have 1..{_MAX_STATE_DIM} elements")
+        if len(measurements) > _MAX_MEASUREMENTS:
+            raise ValueError(f"at most {_MAX_MEASUREMENTS} measurements are supported")
+        if not (math.isfinite(dt) and dt >= 0):
+            raise ValueError("dt must be a finite, non-negative number")
 
-        # Build state transition matrix F based on dynamics model.
-        # F propagates the state forward by one time step: x_k+1 = F * x_k
-        if dynamics_model == "constant_velocity":
-            # State: [x, y, vx, vy]
-            # Kinematic equations: x_new = x + vx*dt, vx_new = vx (constant)
-            if n == 4:
-                F = [
-                    [1, 0, dt, 0],  # x = x + vx*dt
-                    [0, 1, 0, dt],  # y = y + vy*dt
-                    [0, 0, 1, 0],  # vx = vx (constant velocity)
-                    [0, 0, 0, 1],  # vy = vy (constant velocity)
-                ]
-            else:
-                # Default to identity
-                F = [[1 if i == j else 0 for j in range(n)] for i in range(n)]
-        elif dynamics_model == "constant_acceleration":
-            # State: [x, y, vx, vy, ax, ay]
-            # Kinematic equations with constant acceleration:
-            #   x_new = x + vx*dt + 0.5*ax*dt^2
-            #   vx_new = vx + ax*dt
-            #   ax_new = ax (constant)
-            if n == 6:
-                F = [
-                    [1, 0, dt, 0, 0.5 * dt**2, 0],  # x = x + vx*dt + 0.5*ax*dt^2
-                    [0, 1, 0, dt, 0, 0.5 * dt**2],  # y = y + vy*dt + 0.5*ay*dt^2
-                    [0, 0, 1, 0, dt, 0],  # vx = vx + ax*dt
-                    [0, 0, 0, 1, 0, dt],  # vy = vy + ay*dt
-                    [0, 0, 0, 0, 1, 0],  # ax = ax (constant)
-                    [0, 0, 0, 0, 0, 1],  # ay = ay (constant)
-                ]
-            else:
-                F = [[1 if i == j else 0 for j in range(n)] for i in range(n)]
-        else:
-            # Default: identity matrix (no dynamics)
-            F = [[1 if i == j else 0 for j in range(n)] for i in range(n)]
-
-        if use_filterpy:
-            # Use filterpy implementation
-            import numpy as np
-
-            kf = KalmanFilter(dim_x=n, dim_z=n)
-            kf.x = np.array(initial_state).reshape(-1, 1)
-            kf.P = np.array(initial_covariance)
-            kf.F = np.array(F)
-            kf.Q = np.array(process_noise)
-            kf.R = np.array(measurement_noise)
-            kf.H = np.eye(n)
-
-            # Process measurements
-            filtered_states = []
-            covariances = []
-            innovations = []
-
-            for i, meas in enumerate(measurements):
-                # -- PREDICT STEP --
-                # Propagate state estimate forward: x_pred = F*x, P_pred = F*P*F^T + Q
-                kf.predict()
-
-                # -- UPDATE STEP --
-                z = np.array(meas.get("z", initial_state)).reshape(-1, 1)
-
-                # Custom H matrix if provided
-                if "H" in meas:
-                    kf.H = np.array(meas["H"])
-                else:
-                    kf.H = np.eye(n)
-
-                # Innovation (measurement residual): y = z - H*x_pred
-                # Measures discrepancy between actual measurement and predicted one.
-                y = z - np.dot(kf.H, kf.x)
-                innovations.append(y.flatten().tolist())
-
-                # Update: compute Kalman gain K, then correct state and covariance.
-                # K = P_pred * H^T * (H * P_pred * H^T + R)^{-1}
-                # x = x_pred + K*y
-                # P = (I - K*H) * P_pred
-                kf.update(z)
-
-                filtered_states.append(kf.x.flatten().tolist())
-                covariances.append(np.diag(kf.P).tolist())
-
-        else:
-            # Manual implementation
-            def mat_mult(A, B):
-                """Matrix multiplication."""
-                rows_A, cols_A = len(A), len(A[0])
-                _rows_B, cols_B = len(B), len(B[0])
-                result = [[0] * cols_B for _ in range(rows_A)]
-                for i in range(rows_A):
-                    for j in range(cols_B):
-                        for k in range(cols_A):
-                            result[i][j] += A[i][k] * B[k][j]
-                return result
-
-            def mat_add(A, B):
-                """Matrix addition."""
-                return [
-                    [A[i][j] + B[i][j] for j in range(len(A[0]))] for i in range(len(A))
-                ]
-
-            def mat_sub(A, B):
-                """Matrix subtraction."""
-                return [
-                    [A[i][j] - B[i][j] for j in range(len(A[0]))] for i in range(len(A))
-                ]
-
-            def mat_transpose(A):
-                """Matrix transpose."""
-                return [[A[j][i] for j in range(len(A))] for i in range(len(A[0]))]
-
-            def mat_inverse_2x2(A):
-                """2x2 matrix inverse."""
-                det = A[0][0] * A[1][1] - A[0][1] * A[1][0]
-                if abs(det) < 1e-10:
-                    return [[1, 0], [0, 1]]  # Return identity if singular
-                return [
-                    [A[1][1] / det, -A[0][1] / det],
-                    [-A[1][0] / det, A[0][0] / det],
-                ]
-
-            # Initialize state and covariance
-            x = [[xi] for xi in initial_state]  # Column vector
-            P = [row[:] for row in initial_covariance]
-
-            filtered_states = []
-            covariances = []
-            innovations = []
-
-            H = [[1 if i == j else 0 for j in range(n)] for i in range(n)]
-            Q = process_noise
-            R = measurement_noise
-
-            for meas in measurements:
-                # -- PREDICT STEP (manual implementation) --
-                # x_pred = F * x          (state propagation)
-                # P_pred = F * P * F^T + Q (covariance propagation)
-                x_pred = mat_mult(F, x)
-                P_pred = mat_add(mat_mult(mat_mult(F, P), mat_transpose(F)), Q)
-
-                # Measurement
-                z = [[zi] for zi in meas.get("z", initial_state)]
-                if "H" in meas:
-                    H = meas["H"]
-
-                # Innovation
-                y = mat_sub(z, mat_mult(H, x_pred))
-                innovations.append([y[i][0] for i in range(len(y))])
-
-                # Innovation covariance: S = H * P_pred * H^T + R
-                S = mat_add(mat_mult(mat_mult(H, P_pred), mat_transpose(H)), R)
-
-                # Kalman gain: K = P_pred * H^T * S^{-1}
-                # Determines how much the measurement residual corrects the state.
-                if n <= 2:
-                    S_inv = mat_inverse_2x2(S) if len(S) == 2 else [[1 / S[0][0]]]
-                    K = mat_mult(mat_mult(P_pred, mat_transpose(H)), S_inv)
-                else:
-                    # Simplified: use diagonal approximation
-                    K = [
-                        [
-                            P_pred[i][i] * H[j][i] / (S[j][j] + 1e-10)
-                            for j in range(len(H))
-                        ]
-                        for i in range(n)
-                    ]
-                    K = mat_transpose(K)
-
-                # -- UPDATE STEP (manual) --
-                # x = x_pred + K * y           (state correction)
-                # P = (I - K*H) * P_pred       (covariance update, Joseph form)
-                x = mat_add(x_pred, mat_mult(K, y))
-                I_KH = mat_sub(
-                    [[1 if i == j else 0 for j in range(n)] for i in range(n)],
-                    mat_mult(K, H),
+        x = _as_matrix("initial_state", [initial_state], 1, n).ravel()
+        P = _as_matrix("initial_covariance", initial_covariance, n, n)
+        Q = _as_matrix("process_noise", process_noise, n, n)
+        R_default = _as_matrix("measurement_noise", measurement_noise)
+        if R_default.shape[0] != R_default.shape[1]:
+            raise ValueError("measurement_noise must be square")
+        if dynamics_model == "orbital":
+            if n != 6:
+                raise ValueError(
+                    f"orbital model needs the state [x, y, z, vx, vy, vz]; got n={n}"
                 )
-                P = mat_mult(I_KH, P_pred)
+        else:
+            _kinematic_transition(dynamics_model, n, dt)  # validates model and n
 
-                filtered_states.append([x[i][0] for i in range(n)])
-                covariances.append([P[i][i] for i in range(n)])
+        eye_n = np.eye(n)
+        filtered_states = []
+        covariances = []
+        innovations = []
+        nis_values = []
+        times = []
+
+        def _time_of(k, meas):
+            """Timestamp of measurement k as a float, or None if absent."""
+            t = meas.get("time")
+            if t is None:
+                return None
+            try:
+                t = float(t)
+            except (TypeError, ValueError):
+                raise ValueError(f"measurement {k} time must be a number") from None
+            if not math.isfinite(t):
+                raise ValueError(f"measurement {k} time must be finite")
+            return t
+
+        # Time of the current estimate.  Without initial_time the initial
+        # state is taken to be dt before the first measurement (t = 0 when
+        # the measurements carry no timestamps).
+        t_prev = None if initial_time is None else float(initial_time)
+        for k, meas in enumerate(measurements):
+            if not isinstance(meas, dict) or "z" not in meas:
+                raise ValueError(f"measurement {k} must be a dict with a 'z' vector")
+
+            # -- Step length from timestamps (falls back to dt) --
+            t_meas = _time_of(k, meas)
+            if t_prev is None:
+                t_prev = 0.0 if t_meas is None else t_meas - dt
+            t_k = t_prev + dt if t_meas is None else t_meas
+            step = t_k - t_prev
+            if step < 0:
+                raise ValueError(
+                    f"measurement {k} time {t_k:g} is before the previous "
+                    f"time {t_prev:g}; measurements must be in time order"
+                )
+
+            # -- PREDICT STEP (skipped when no time elapses) --
+            # x_pred = F x (or the nonlinear two-body propagation)
+            # P_pred = F P F^T + Q, with F rebuilt for this step length
+            if step > 0:
+                if dynamics_model == "orbital":
+                    x, F = _two_body_propagate(x, step)
+                else:
+                    F = _kinematic_transition(dynamics_model, n, step)
+                    x = F @ x
+                P = F @ P @ F.T + Q
+
+            # -- UPDATE STEP --
+            z = _as_matrix(f"measurements[{k}].z", [meas["z"]]).ravel()
+            m = z.size
+            if "H" in meas and meas["H"] is not None:
+                H = _as_matrix(f"measurements[{k}].H", meas["H"], m, n)
+            elif m == n:
+                H = eye_n
+            else:
+                raise ValueError(
+                    f"measurement {k} has {m} components but the state has {n}; "
+                    f"provide a measurement matrix 'H' of shape {m}x{n} "
+                    "(e.g. [[1,0,0,0],[0,1,0,0]] for position-only)"
+                )
+            if "R" in meas and meas["R"] is not None:
+                R = _as_matrix(f"measurements[{k}].R", meas["R"], m, m)
+            elif R_default.shape == (m, m):
+                R = R_default
+            else:
+                raise ValueError(
+                    f"measurement_noise is {R_default.shape[0]}x{R_default.shape[1]} "
+                    f"but measurement {k} has {m} components"
+                )
+
+            # Innovation (measurement residual): y = z - H x_pred
+            y = z - H @ x
+            # Innovation covariance: S = H P_pred H^T + R
+            S = H @ P @ H.T + R
+            # Exact gain K = P H^T S^-1, computed as solve(S, H P)^T
+            # (S and P are symmetric).
+            try:
+                K = np.linalg.solve(S, H @ P).T
+                nis = float(y @ np.linalg.solve(S, y))
+            except np.linalg.LinAlgError:
+                raise ValueError(
+                    f"innovation covariance S is singular at measurement {k}; "
+                    "check R and P"
+                ) from None
+
+            x = x + K @ y
+            # Joseph form: valid for any gain and keeps P symmetric PSD
+            I_KH = eye_n - K @ H
+            P = I_KH @ P @ I_KH.T + K @ R @ K.T
+            P = 0.5 * (P + P.T)
+
+            innovations.append(y.tolist())
+            nis_values.append(nis)
+            filtered_states.append(x.tolist())
+            covariances.append(np.diag(P).tolist())
+            times.append(t_k)
+            t_prev = t_k
 
         # Calculate statistics
         if filtered_states:
             final_state = filtered_states[-1]
             final_cov = covariances[-1]
 
-            # Innovation statistics
+            # Innovation statistics (per component, over the measurements
+            # that have that component)
             innovation_rms = []
-            for i in range(len(innovations[0]) if innovations else 0):
+            for i in range(max(len(inn) for inn in innovations)):
                 values = [inn[i] for inn in innovations if len(inn) > i]
-                if values:
-                    rms = math.sqrt(sum(v**2 for v in values) / len(values))
-                    innovation_rms.append(rms)
+                innovation_rms.append(
+                    math.sqrt(sum(v**2 for v in values) / len(values))
+                )
+            mean_nis = sum(nis_values) / len(nis_values)
         else:
-            final_state = initial_state
-            final_cov = [initial_covariance[i][i] for i in range(n)]
+            final_state = x.tolist()
+            final_cov = np.diag(P).tolist()
             innovation_rms = []
+            mean_nis = None
 
         result = _convert_to_native(
             {
@@ -313,25 +439,34 @@ def kalman_filter_state_estimation(
                     "final_state_std": [
                         round(math.sqrt(max(0, c)), 6) for c in final_cov
                     ],
+                    "final_time": times[-1] if times else initial_time,
                     "num_states_estimated": len(filtered_states),
                 },
                 "statistics": {
                     "innovation_rms": [round(r, 6) for r in innovation_rms],
+                    # Normalised innovation squared y^T S^-1 y; its mean is
+                    # ~m (measurement dimension) for a consistent filter.
+                    "mean_nis": round(mean_nis, 6) if mean_nis is not None else None,
                 },
+                "filtered_times": times[-10:],
                 "filtered_states": [
                     [round(s, 6) for s in state] for state in filtered_states[-10:]
                 ],
-                "implementation": "filterpy" if use_filterpy else "manual",
+                "implementation": "numpy",
             }
         )
 
-        state_labels = ["x", "y", "vx", "vy", "ax", "ay"][:n]
+        state_labels = _state_labels(dynamics_model, n)
         final_state_str = ", ".join(
-            f"{state_labels[i]}={final_state[i]:.4f}" for i in range(min(n, 6))
+            f"{state_labels[i]}={final_state[i]:.4f}" for i in range(n)
         )
         final_std_str = ", ".join(
             f"σ_{state_labels[i]}={math.sqrt(max(0, final_cov[i])):.4f}"
-            for i in range(min(n, 6))
+            for i in range(n)
+        )
+        last_rows = "\n".join(
+            f"  t={t:g}: {[round(s, 3) for s in state]}"
+            for t, state in zip(times[-10:], filtered_states[-10:], strict=True)
         )
 
         output = f"""
@@ -339,7 +474,7 @@ KALMAN FILTER STATE ESTIMATION
 ==============================
 Dynamics Model: {dynamics_model}
 Measurements Processed: {len(measurements)}
-Implementation: {"filterpy" if use_filterpy else "manual"}
+Implementation: numpy (exact gain, Joseph-form covariance update)
 
 Final State Estimate:
   {final_state_str}
@@ -351,7 +486,7 @@ Innovation Statistics (RMS):
   {", ".join(f"{r:.4f}" for r in innovation_rms) if innovation_rms else "N/A"}
 
 Last {min(10, len(filtered_states))} States:
-{chr(10).join(f"  t={i}: {[round(s, 3) for s in state]}" for i, state in enumerate(filtered_states[-10:]))}
+{last_rows}
 
 {json.dumps(result, indent=2)}
 """
@@ -360,6 +495,41 @@ Last {min(10, len(filtered_states))} States:
     except Exception as e:
         logger.error(f"Kalman filter error: {str(e)}", exc_info=True)
         return f"Error in Kalman filter: {str(e)}"
+
+
+def _state_labels(dynamics_model: str, n: int) -> list[str]:
+    """Human-readable state names for the text summary."""
+    axes = ["x", "y", "z"]
+    if dynamics_model == "orbital" and n == 6:
+        return ["x", "y", "z", "vx", "vy", "vz"]
+    if dynamics_model == "constant_velocity" and n in (2, 4, 6):
+        k = n // 2
+        return axes[:k] + [f"v{a}" for a in axes[:k]]
+    if dynamics_model == "constant_acceleration" and n in (3, 6, 9):
+        k = n // 3
+        return axes[:k] + [f"v{a}" for a in axes[:k]] + [f"a{a}" for a in axes[:k]]
+    return [f"s{i + 1}" for i in range(n)]
+
+
+# ===========================================================================
+# LQR
+# ===========================================================================
+
+
+def _eig_pairs(values) -> list[list[float]]:
+    """Eigenvalues as [real, imag] pairs, sorted by real then imaginary part."""
+    pairs = [[float(complex(e).real), float(complex(e).imag)] for e in values]
+    pairs.sort(key=lambda p: (p[0], p[1]))
+    # "+ 0.0" turns -0.0 into 0.0
+    return [[round(re, 6) + 0.0, round(im, 6) + 0.0] for re, im in pairs]
+
+
+def _fmt_complex(pair: list[float]) -> str:
+    """Format a [real, imag] pair for the text summary."""
+    re, im = pair
+    if abs(im) < 1e-12:
+        return f"{re:.4f}"
+    return f"{re:.4f}{im:+.4f}j"
 
 
 def lqr_controller_design(
@@ -378,167 +548,165 @@ def lqr_controller_design(
     Args:
         A_matrix: State matrix (n x n) - system dynamics
         B_matrix: Input matrix (n x m) - control influence
-        Q_matrix: State weighting matrix (n x n) - penalizes state deviation
-        R_matrix: Input weighting matrix (m x m) - penalizes control effort
+        Q_matrix: State weighting matrix (n x n, symmetric PSD) - penalizes
+            state deviation
+        R_matrix: Input weighting matrix (m x m, symmetric positive
+            definite) - penalizes control effort
         state_names: Optional names for states (for display)
         input_names: Optional names for control inputs (for display)
 
     Returns:
         Formatted string with optimal gain matrix K, closed-loop eigenvalues,
-        stability analysis, and controllability assessment.
+        stability analysis, and controllability assessment.  Eigenvalues are
+        reported as [real, imag] pairs.
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings
-        or JSON error objects (e.g., when system is not controllable).
+        or JSON error objects (e.g., when the system is not stabilizable).
     """
     try:
-        # Try to use control library if available
+        import numpy as np
+        import scipy.linalg
+
+        # Use python-control's lqr when available (it wraps the same CARE
+        # solvers); otherwise solve the CARE with SciPy directly.
         try:
             import control
-            import numpy as np
 
             use_control = True
         except ImportError:
             use_control = False
 
-        n = len(A_matrix)
-        m = len(B_matrix[0]) if B_matrix else 1
+        A = _as_matrix("A_matrix", A_matrix)
+        n = A.shape[0]
+        if A.shape != (n, n):
+            raise ValueError(f"A_matrix must be square, got {A.shape[0]}x{A.shape[1]}")
+        if n > _MAX_LQR_DIM:
+            raise ValueError(f"at most {_MAX_LQR_DIM} states are supported")
+        B = _as_matrix("B_matrix", B_matrix, rows=n)
+        m = B.shape[1]
+        Q = _as_matrix("Q_matrix", Q_matrix, n, n)
+        R = _as_matrix("R_matrix", R_matrix, m, m)
 
-        # Default names
-        if state_names is None:
-            state_names = [f"x{i + 1}" for i in range(n)]
-        if input_names is None:
-            input_names = [f"u{i + 1}" for i in range(m)]
+        if not np.allclose(Q, Q.T, atol=1e-9 * max(1.0, np.abs(Q).max())):
+            raise ValueError("Q_matrix must be symmetric")
+        if not np.allclose(R, R.T, atol=1e-9 * max(1.0, np.abs(R).max())):
+            raise ValueError("R_matrix must be symmetric")
+        if np.linalg.eigvalsh(Q).min() < -1e-9 * max(1.0, np.abs(Q).max()):
+            raise ValueError("Q_matrix must be positive semi-definite")
+        if np.linalg.eigvalsh(R).min() <= 0:
+            raise ValueError("R_matrix must be positive definite")
 
-        if use_control:
-            # Use control library
-            A = np.array(A_matrix)
-            B = np.array(B_matrix)
-            Q = np.array(Q_matrix)
-            R = np.array(R_matrix)
+        # Default names (pad short lists so every state/input has a label)
+        state_names = list(state_names or [])
+        state_names += [f"x{i + 1}" for i in range(len(state_names), n)]
+        input_names = list(input_names or [])
+        input_names += [f"u{i + 1}" for i in range(len(input_names), m)]
 
-            # Check controllability: the system (A, B) is controllable iff
-            # the controllability matrix C = [B, AB, A^2B, ..., A^{n-1}B]
-            # has full row rank (rank = n).
-            ctrb_matrix = control.ctrb(A, B)
-            ctrb_rank = np.linalg.matrix_rank(ctrb_matrix)
-            controllable = ctrb_rank == n
+        # Controllability: rank of C = [B, AB, A^2B, ..., A^{n-1}B] must be n.
+        blocks = [B]
+        for _ in range(n - 1):
+            blocks.append(A @ blocks[-1])
+        ctrb_rank = int(np.linalg.matrix_rank(np.hstack(blocks)))
+        controllable = ctrb_rank == n
 
-            if not controllable:
-                return json.dumps(
-                    {
-                        "error": f"System is not controllable (rank {ctrb_rank} < {n})",
-                        "controllability_rank": ctrb_rank,
-                        "required_rank": n,
-                        "suggestion": "Check B matrix - some states may not be reachable from inputs",
-                    },
-                    indent=2,
-                )
+        # Stabilizability (PBH test): every eigenvalue with Re >= 0 must be
+        # controllable, i.e. rank([A - lambda I, B]) = n.
+        ol_eigs = np.linalg.eigvals(A)
+        uncontrollable_unstable = [
+            lam
+            for lam in ol_eigs
+            if lam.real >= -1e-9
+            and np.linalg.matrix_rank(np.hstack([A - lam * np.eye(n), B])) < n
+        ]
+        stabilizable = not uncontrollable_unstable
 
-            # Solve LQR by finding the solution to the continuous algebraic
-            # Riccati equation (CARE): A^T S + S A - S B R^{-1} B^T S + Q = 0
-            # Returns: K (optimal gain), S (Riccati solution), E (closed-loop eigenvalues)
-            K, S, E = control.lqr(A, B, Q, R)
-
-            # Convert to lists
-            K_list = K.tolist() if hasattr(K, "tolist") else [[float(K)]]
-            S_list = S.tolist()
-            E_list = [complex(e).real for e in E]  # Real parts
-
-            # Open-loop eigenvalues
-            ol_eigenvalues = np.linalg.eigvals(A)
-            ol_eig_list = [complex(e).real for e in ol_eigenvalues]
-
-            # Analyze closed-loop poles: extract natural frequency (wn) and
-            # damping ratio (zeta) from each complex eigenvalue.
-            # For a pole at s = sigma +/- j*omega:
-            #   wn = |s|,  zeta = -sigma / wn
-            cl_poles_info = []
-            for e in E:
-                e_complex = complex(e)
-                real = e_complex.real
-                imag = e_complex.imag
-                if imag != 0:
-                    wn = abs(e_complex)  # Natural frequency
-                    zeta = -real / wn  # Damping ratio
-                    cl_poles_info.append(
-                        {
-                            "pole": f"{real:.4f} + {imag:.4f}j",
-                            "natural_freq_rad_s": round(wn, 4),
-                            "damping_ratio": round(zeta, 4),
-                        }
-                    )
-                else:
-                    cl_poles_info.append(
-                        {
-                            "pole": f"{real:.4f}",
-                            "time_constant_s": (
-                                round(-1 / real, 4) if real != 0 else float("inf")
-                            ),
-                        }
-                    )
-
-        else:
-            # Simplified manual implementation
-            # For simple 2x2 systems only
-            if n > 2 or m > 1:
-                return json.dumps(
-                    {
-                        "error": "Manual LQR only supports 2x2 systems. Install 'control' library for larger systems.",
-                        "install_command": "pip install control",
-                    },
-                    indent=2,
-                )
-
-            # Simple controllability check
-            # ctrb = [B, AB]
-            A = A_matrix
-            B = B_matrix
-            AB = [
-                [sum(A[i][k] * B[k][0] for k in range(n)) for _ in range(1)]
-                for i in range(n)
-            ]
-
-            ctrb_matrix = [[B[0][0], AB[0][0]], [B[1][0], AB[1][0]]]
-            det = (
-                ctrb_matrix[0][0] * ctrb_matrix[1][1]
-                - ctrb_matrix[0][1] * ctrb_matrix[1][0]
+        if not stabilizable:
+            return json.dumps(
+                {
+                    "error": (
+                        f"System is not stabilizable: controllability rank "
+                        f"{ctrb_rank} < {n} and the uncontrollable modes include "
+                        "eigenvalues with non-negative real part, so no "
+                        "state feedback can stabilize it"
+                    ),
+                    "is_controllable": False,
+                    "controllability_rank": ctrb_rank,
+                    "required_rank": n,
+                    "uncontrollable_unstable_eigenvalues": _eig_pairs(
+                        uncontrollable_unstable
+                    ),
+                    "suggestion": "Check B matrix - some states may not be reachable from inputs",
+                },
+                indent=2,
             )
-            controllable = abs(det) > 1e-10
 
-            if not controllable:
-                return json.dumps(
+        # Solve the CARE A^T S + S A - S B R^-1 B^T S + Q = 0, K = R^-1 B^T S.
+        try:
+            if use_control:
+                K, S, _ = control.lqr(A, B, Q, R)
+                K = np.atleast_2d(np.asarray(K, dtype=float))
+                S = np.atleast_2d(np.asarray(S, dtype=float))
+            else:
+                S = scipy.linalg.solve_continuous_are(A, B, Q, R)
+                K = np.linalg.solve(R, B.T @ S)
+        except Exception as exc:
+            return json.dumps(
+                {
+                    "error": f"Riccati equation has no stabilizing solution: {exc}",
+                    "is_controllable": controllable,
+                    "controllability_rank": ctrb_rank,
+                    "required_rank": n,
+                    "suggestion": (
+                        "(Q, A) must be detectable: every unstable or "
+                        "marginally stable mode must be penalised in Q"
+                    ),
+                },
+                indent=2,
+            )
+
+        cl_eigs = np.linalg.eigvals(A - B @ K)
+        # Closed-loop stability: all eigenvalues strictly in the LHP
+        stable = bool(np.all(cl_eigs.real < 0))
+        ol_pairs = _eig_pairs(ol_eigs)
+        cl_pairs = _eig_pairs(cl_eigs)
+
+        # Analyze closed-loop poles: for s = sigma +/- j*omega,
+        #   wn = |s|,  zeta = -sigma / wn
+        cl_poles_info = []
+        for re, im in cl_pairs:
+            if abs(im) > 1e-12:
+                wn = math.hypot(re, im)  # Natural frequency
+                cl_poles_info.append(
                     {
-                        "error": "System is not controllable",
-                        "suggestion": "Check B matrix configuration",
-                    },
-                    indent=2,
+                        "pole": [re, im],
+                        "natural_freq_rad_s": round(wn, 4),
+                        "damping_ratio": round(-re / wn, 4),
+                    }
+                )
+            else:
+                cl_poles_info.append(
+                    {
+                        "pole": [re, im],
+                        # Undefined for a pole at the origin
+                        "time_constant_s": round(-1 / re, 4) if re != 0 else None,
+                    }
                 )
 
-            # Simplified LQR for 2x2 SISO systems using pole placement
-            # This is a rough approximation
-            Q = Q_matrix
-            R = R_matrix
+        warnings = []
+        if not controllable:
+            warnings.append(
+                f"System is not controllable (rank {ctrb_rank} < {n}) but is "
+                "stabilizable: the uncontrollable modes are already stable and "
+                "keep their open-loop eigenvalues"
+            )
+        if not stable:
+            warnings.append(
+                "Closed loop is not asymptotically stable; (Q, A) is probably "
+                "not detectable"
+            )
 
-            # Desired pole locations (heuristic based on Q/R ratio)
-            q_avg = (Q[0][0] + Q[1][1]) / 2
-            r_val = R[0][0] if isinstance(R[0], list) else R[0]
-            desired_pole = -math.sqrt(q_avg / r_val) if r_val > 0 else -1
-
-            # Simple gain calculation (Ackermann's formula approximation)
-            K_list = [[round(-desired_pole * 2, 4), round(desired_pole**2 / 10, 4)]]
-            S_list = Q  # Approximate
-            E_list = [desired_pole, desired_pole * 0.5]
-            ol_eig_list = [A[0][0], A[1][1]]
-            cl_poles_info = [{"pole": str(p), "approximate": True} for p in E_list]
-
-        # Check closed-loop stability
-        stable = all(e < 0 for e in E_list)
-
-        # Convert numpy booleans to Python booleans for JSON serialization
-        controllable = bool(controllable)
-        stable = bool(stable)
-
+        K_list = K.tolist()
         result = _convert_to_native(
             {
                 "input": {
@@ -549,22 +717,25 @@ def lqr_controller_design(
                 },
                 "controllability": {
                     "is_controllable": controllable,
-                    "rank": ctrb_rank if use_control else n,
+                    "is_stabilizable": stabilizable,
+                    "rank": ctrb_rank,
                     "required_rank": n,
                 },
                 "lqr_solution": {
-                    "gain_matrix_K": [[round(k, 6) for k in row] for row in K_list],
-                    "cost_matrix_S_diagonal": [
-                        round(S_list[i][i], 6) for i in range(n)
+                    "gain_matrix_K": [
+                        [round(k, 6) + 0.0 for k in row] for row in K_list
                     ],
+                    "cost_matrix_S_diagonal": [round(S[i][i], 6) for i in range(n)],
                 },
                 "stability_analysis": {
                     "closed_loop_stable": stable,
-                    "open_loop_eigenvalues": [round(e, 6) for e in ol_eig_list],
-                    "closed_loop_eigenvalues": [round(e, 6) for e in E_list],
+                    "open_loop_eigenvalues": ol_pairs,
+                    "closed_loop_eigenvalues": cl_pairs,
+                    "eigenvalue_format": "[real, imag]",
                     "poles_info": cl_poles_info,
                 },
-                "implementation": "control" if use_control else "manual_approximation",
+                "warnings": warnings,
+                "implementation": "control" if use_control else "scipy",
             }
         )
 
@@ -573,25 +744,26 @@ def lqr_controller_design(
             f"{input_names[i]}: [{', '.join(f'{K_list[i][j]:+.4f}·{state_names[j]}' for j in range(n))}]"
             for i in range(m)
         )
+        warn_str = "".join(f"\nWarning: {w}" for w in warnings)
 
         output = f"""
 LQR CONTROLLER DESIGN
 =====================
 System: {n} states, {m} inputs
 
-Controllability: {"✓ Controllable" if controllable else "✗ Not Controllable"}
+Controllability: {"✓ Controllable" if controllable else f"✗ Not Controllable (rank {ctrb_rank} < {n}), stabilizable"}
 
 Optimal Gain Matrix K:
     {K_str}
 
-Open-Loop Eigenvalues: {[round(e, 4) for e in ol_eig_list]}
-Closed-Loop Eigenvalues: {[round(e, 4) for e in E_list]}
+Open-Loop Eigenvalues: [{", ".join(_fmt_complex(p) for p in ol_pairs)}]
+Closed-Loop Eigenvalues: [{", ".join(_fmt_complex(p) for p in cl_pairs)}]
 
 Stability: {"✓ Stable (all eigenvalues in LHP)" if stable else "✗ Unstable"}
-
+{warn_str}
 Control Law: u = -Kx
 
-Implementation: {"control library" if use_control else "manual approximation"}
+Implementation: {"python-control" if use_control else "SciPy solve_continuous_are"}
 
 {json.dumps(result, indent=2)}
 """
