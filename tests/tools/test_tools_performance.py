@@ -339,8 +339,12 @@ class TestFuelReserveCalculator:
         assert data["reserves"]["final_reserve_kg"] > 0
         assert data["total_required_fuel_kg"] > data["trip_fuel_kg"]
 
-    def test_far121_includes_contingency(self):
-        """Test FAR 121 includes 10% contingency."""
+    def test_far121_alias_is_domestic(self):
+        """FAR_121 is an alias for 14 CFR 121.639 (domestic).
+
+        Previously FAR_121 added a 10% *trip-fuel* contingency, which is
+        neither 121.639 (no contingency) nor 121.645 (10% of flight time).
+        """
         result = fuel_reserve_calculator(
             regulation="FAR_121",
             trip_fuel_kg=10000,
@@ -348,8 +352,10 @@ class TestFuelReserveCalculator:
             flight_time_min=180,
         )
         data = extract_json(result)
-        # FAR 121 requires 10% contingency
-        assert data["reserves"]["contingency_kg"] == 1000  # 10% of 10000
+        assert data["rule_applied"] == "FAR_121_DOMESTIC"
+        assert data["reserves"]["contingency_kg"] == 0
+        # 45 min at normal cruise fuel flow: 5000 kg/h * 0.75 h
+        assert data["reserves"]["final_reserve_kg"] == 3750
 
     def test_icao_reserves(self):
         """Test ICAO reserve calculation."""

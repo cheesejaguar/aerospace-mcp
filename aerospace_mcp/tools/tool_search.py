@@ -92,7 +92,7 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         parameters={
             "departure": "Departure airport info (city, country, iata)",
             "arrival": "Arrival airport info (city, country, iata)",
-            "aircraft": "Aircraft config (ac_type, cruise_alt_ft, mass_kg)",
+            "aircraft": "Aircraft config (ac_type, cruise_alt_ft, mass_kg, route_step_km)",
             "route_options": "Route options (step_km)",
         },
         keywords=[
@@ -904,7 +904,11 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         description="Calculate required fuel reserves per aviation regulations (FAR/JAR/ICAO)",
         category="performance",
         parameters={
-            "regulation": "Regulatory framework: FAR_91, FAR_121, JAR_OPS, or ICAO",
+            "regulation": (
+                "Regulatory framework: FAR_91_IFR, FAR_91_VFR_DAY, FAR_91_VFR_NIGHT, "
+                "FAR_121_DOMESTIC, FAR_121_FLAG, JAR_OPS, or ICAO "
+                "(FAR_91 = FAR_91_IFR, FAR_121 = FAR_121_DOMESTIC)"
+            ),
             "trip_fuel_kg": "Planned trip fuel in kg",
             "cruise_fuel_flow_kg_hr": "Cruise fuel flow rate in kg/hr",
             "flight_time_min": "Planned flight time in minutes",
