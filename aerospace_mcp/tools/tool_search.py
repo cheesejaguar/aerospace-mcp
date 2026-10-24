@@ -217,8 +217,8 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         description="Calculate atmospheric conditions at various altitudes using ISA model",
         category="atmosphere",
         parameters={
-            "altitudes_m": "List of altitudes in meters",
-            "model_type": "Atmospheric model type - 'isa' or 'enhanced'",
+            "altitudes_m": "List of geometric altitudes in meters (0-86000)",
+            "model_type": "Atmospheric model type - 'ISA' or 'COESA' (US Standard Atmosphere 1976)",
         },
         keywords=[
             "atmosphere",
