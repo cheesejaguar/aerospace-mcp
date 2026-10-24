@@ -17,26 +17,76 @@ that are not certified for operational use.
 
 from __future__ import annotations
 
+import copy
+import functools
+import importlib.util
 import logging
 import math
-from typing import Literal
+import re
+import unicodedata
+from typing import Any, Literal, NamedTuple
 
 import airportsdata
 from geographiclib.geodesic import Geodesic
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 # ---------------------------------------------------------------------------
-# Optional / graceful import for OpenAP (perf + fuel)
+# Optional / lazy import for OpenAP (perf + fuel)
 # ---------------------------------------------------------------------------
 # OpenAP may not be installed in every deployment (e.g. lightweight containers
-# or serverless runtimes).  We attempt the import and set a module-level flag
-# so that callers can check availability before invoking performance functions.
-OPENAP_AVAILABLE = True
-try:
-    from openap import FuelFlow, prop
-    from openap.gen import FlightGenerator
-except Exception:
-    OPENAP_AVAILABLE = False
+# or serverless runtimes).  Importing it costs ~1.2 s (pandas + YAML model
+# files), so it is deferred until the first performance estimate.  The
+# availability flag is derived from the import system without importing the
+# package; if a later import fails anyway, ``_load_openap`` flips it to False.
+OPENAP_AVAILABLE = importlib.util.find_spec("openap") is not None
+
+# Names published as module attributes once OpenAP has been imported.  They
+# stay reachable as ``aerospace_mcp.core.FlightGenerator`` etc. (resolved on
+# first access by the module ``__getattr__`` below), so ``unittest.mock.patch``
+# targets such as ``"aerospace_mcp.core.FuelFlow"`` keep working.
+_OPENAP_EXPORTS = ("FuelFlow", "FlightGenerator", "prop")
+
+
+def _load_openap() -> None:
+    """Import OpenAP and publish its entry points as module globals.
+
+    Names that already exist in the module namespace (e.g. a test double
+    installed with ``mock.patch``) are left untouched.
+
+    Raises:
+        ImportError: If OpenAP is not installed or fails to import; the
+            ``OPENAP_AVAILABLE`` flag is cleared before re-raising.
+    """
+    global OPENAP_AVAILABLE
+    try:
+        from openap import FuelFlow, prop
+        from openap.gen import FlightGenerator
+    except Exception:
+        OPENAP_AVAILABLE = False
+        raise
+    namespace = globals()
+    namespace.setdefault("FuelFlow", FuelFlow)
+    namespace.setdefault("FlightGenerator", FlightGenerator)
+    namespace.setdefault("prop", prop)
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve the lazily imported OpenAP names on first attribute access."""
+    if name in _OPENAP_EXPORTS:
+        try:
+            _load_openap()
+        except Exception as e:
+            raise AttributeError(f"OpenAP is not available: {e}") from e
+        return globals()[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def _openap(name: str) -> Any:
+    """Return an OpenAP entry point by name, importing OpenAP on first use."""
+    if name not in globals():
+        _load_openap()
+    return globals()[name]
+
 
 # ---------------------------------------------------------------------------
 # Unit-conversion constants
@@ -121,7 +171,7 @@ class PlanRequest(BaseModel):
     ac_type: str = Field(..., description="ICAO aircraft type (e.g., 'A320', 'B738')")
     cruise_alt_ft: int = Field(35000, ge=8000, le=45000)
     mass_kg: float | None = Field(
-        None, description="If not set, defaults to 85% MTOW when available"
+        None, gt=0, description="If not set, defaults to 85% MTOW when available"
     )
     route_step_km: float = Field(
         25.0, gt=1.0, le=1000.0, description="Sampling step for polyline points"
@@ -208,6 +258,94 @@ def _airport_from_iata(iata: str) -> AirportOut | None:
     ap = _AIRPORTS_IATA.get(iata.upper())
     if not ap:
         return None
+    return _airport_out(iata, ap)
+
+
+# ---------------------------------------------------------------------------
+# City search index and ranking
+# ---------------------------------------------------------------------------
+# Precomputed structures for fast city lookups, built lazily on first search
+# and rebuilt automatically whenever ``_AIRPORTS_IATA`` is swapped out (tests
+# patch it with fixture data).  The identity check makes patching transparent:
+# a patched dict is a different object, so the index is rebuilt from it.
+_CITY_INDEX: dict[str, list[str]] | None = None  # folded city -> [iata, ...]
+_NAME_LIST: list[tuple[str, str]] | None = None  # (iata, folded name)
+_INDEX_SOURCE: object | None = None
+
+# Busy passenger airports, ordered by approximate annual passenger traffic
+# (ACI World rankings, 2019/2023, rounded).  Only used as a ranking signal
+# between airports that already match the same query, so the order matters
+# mostly *within* a metro area (LHR > LGW > STN > LTN > LCY, HND > NRT,
+# CDG > ORY, ...) and between same-named cities in different countries
+# (FCO for "Rome", not Rome NY).  The list is deliberately coarse.
+_MAJOR_AIRPORTS_BY_TRAFFIC: tuple[str, ...] = tuple(
+    """
+    ATL DXB DFW LHR HND DEN IST LAX ORD DEL CDG JFK
+    CAN AMS FRA PVG SIN ICN PEK MAD BKK CGK SFO LAS
+    SEA MCO MIA CLT PHX EWR BCN HKG BOM SZX CTU KUL
+    IAH YYZ FCO DOH MEX SYD MUC LGW MNL BOS MSP SVO
+    SAW GRU NRT LGA DTW PHL FLL BLR SLC BWI IAD DCA
+    ZRH LIS TPE KMG SHA PKX MEL DUB VIE CPH MXP YVR
+    CUN BOG JED RUH AUH MAN ORY SAN KIX STN OSL ARN
+    ATH PMI HEL BRU DME GMP SGN HAN DPS BNE AKL PER
+    LIM SCL EZE GIG JNB CAI YUL BER WAW PRG LTN TLV
+    ITM DMK HYD MAA CCU MDW HOU DAL VKO CGH NCE LCY
+    """.split()
+)
+_TRAFFIC_RANK: dict[str, int] = {
+    code: rank for rank, code in enumerate(_MAJOR_AIRPORTS_BY_TRAFFIC)
+}
+
+# Main airports whose ``city`` field in the airport database differs from
+# the metro name people search for (e.g. YYZ is listed under Mississauga,
+# EWR under Newark, DFW under "Dallas-Fort Worth").  They are treated as
+# exact-city matches for the metro name.
+_METRO_AIRPORTS: dict[str, tuple[str, ...]] = {
+    "new york": ("EWR",),
+    "toronto": ("YYZ",),
+    "dallas": ("DFW",),
+    "fort worth": ("DFW",),
+    "buenos aires": ("EZE",),
+    "rome": ("CIA",),
+    "taipei": ("TSA",),
+}
+
+
+def _fold(text: str) -> str:
+    """Normalise text for matching: strip accents, lower-case, squash spaces.
+
+    ``"Malé"`` and ``"male"`` fold to the same key, so accented city names
+    in the database match plain-ASCII queries.
+    """
+    decomposed = unicodedata.normalize("NFKD", text)
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return " ".join(stripped.lower().split())
+
+
+def _get_city_indexes() -> tuple[dict[str, list[str]], list[tuple[str, str]]]:
+    """Return (city index, folded name list), rebuilding if the DB changed.
+
+    Both structures skip entries without a valid IATA code (heliports,
+    closed fields, etc.) so search never has to re-filter them.
+    """
+    global _CITY_INDEX, _NAME_LIST, _INDEX_SOURCE
+    if _INDEX_SOURCE is not _AIRPORTS_IATA:
+        city_index: dict[str, list[str]] = {}
+        name_list: list[tuple[str, str]] = []
+        for iata, ap in _AIRPORTS_IATA.items():
+            if not iata or not ap.get("iata"):
+                continue
+            city_index.setdefault(_fold(ap.get("city", "")), []).append(iata)
+            name_list.append((iata, _fold(ap.get("name", ""))))
+        _CITY_INDEX = city_index
+        _NAME_LIST = name_list
+        _INDEX_SOURCE = _AIRPORTS_IATA
+    assert _CITY_INDEX is not None and _NAME_LIST is not None
+    return _CITY_INDEX, _NAME_LIST
+
+
+def _airport_out(iata: str, ap: dict) -> AirportOut:
+    """Build an ``AirportOut`` from a raw ``airportsdata`` record."""
     return AirportOut(
         iata=iata.upper(),
         icao=ap.get("icao", ""),
@@ -220,54 +358,37 @@ def _airport_from_iata(iata: str) -> AirportOut | None:
     )
 
 
-# ---------------------------------------------------------------------------
-# City search index
-# ---------------------------------------------------------------------------
-# Precomputed structures for fast city lookups, built lazily on first search
-# and rebuilt automatically whenever ``_AIRPORTS_IATA`` is swapped out (tests
-# patch it with fixture data).  The identity check makes patching transparent:
-# a patched dict is a different object, so the index is rebuilt from it.
-_CITY_INDEX: dict[str, list[str]] | None = None  # city_lower -> [iata, ...]
-_NAME_LIST: list[tuple[str, str]] | None = None  # (iata, name_lower)
-_INDEX_SOURCE: object | None = None
-
-
-def _get_city_indexes() -> tuple[dict[str, list[str]], list[tuple[str, str]]]:
-    """Return (city index, lowercase name list), rebuilding if the DB changed.
-
-    Both structures skip entries without a valid IATA code (heliports,
-    closed fields, etc.) so search never has to re-filter them.
-    """
-    global _CITY_INDEX, _NAME_LIST, _INDEX_SOURCE
-    if _INDEX_SOURCE is not _AIRPORTS_IATA:
-        city_index: dict[str, list[str]] = {}
-        name_list: list[tuple[str, str]] = []
-        for iata, ap in _AIRPORTS_IATA.items():
-            if not iata or not ap.get("iata"):
-                continue
-            city_index.setdefault(ap.get("city", "").strip().lower(), []).append(iata)
-            name_list.append((iata, ap.get("name", "").lower()))
-        _CITY_INDEX = city_index
-        _NAME_LIST = name_list
-        _INDEX_SOURCE = _AIRPORTS_IATA
-    assert _CITY_INDEX is not None and _NAME_LIST is not None
-    return _CITY_INDEX, _NAME_LIST
-
-
 def _find_city_airports(city: str, country: str | None = None) -> list[AirportOut]:
     """Search airports by city name with optional country filter.
 
-    An airport matches if its ``city`` field equals the query exactly,
-    **or** the query appears as a substring of the airport ``name``
-    (useful for names like "San Jose International").  Exact-city matches
-    are resolved through a precomputed index (O(1)); name-substring
-    matches scan a precomputed lowercase name list without re-lowering
-    each row per query.
+    Matching is case- and accent-insensitive and works in tiers; a lower
+    tier is consulted only when every higher tier is empty (after the
+    country filter):
 
-    Results are sorted with a preference heuristic: airports whose name
-    contains the word "International" are ranked first, followed by
-    alphabetical ordering.  This helps callers pick the most likely
-    commercial airport when multiple matches exist for a city.
+    1. **Exact city** -- the airport's ``city`` field equals the query, or
+       the airport is a known main airport of that metro area even though
+       the database files it under a suburb (``_METRO_AIRPORTS``, e.g.
+       YYZ for "Toronto", EWR for "New York").
+    2. **City word match** -- the query appears as whole words inside the
+       city field ("Delhi" -> "New Delhi"), followed by **name word
+       match** -- the query appears as whole words in the airport name
+       ("Heathrow" -> "London Heathrow Airport").  Substrings inside a
+       word never match, so "Nice" no longer finds "Eunice".
+
+    Within a tier, airports are ranked deterministically by:
+
+    a. approximate passenger traffic for busy airports
+       (``_MAJOR_AIRPORTS_BY_TRAFFIC``; others rank after all of them),
+    b. "International" in the name,
+    c. the query appearing in the airport name (the city's namesake field,
+       e.g. "Norman Y Mineta San Jose International" for "San Jose"),
+    d. airport name, then IATA code, alphabetically.
+
+    Example: "San Jose" without a country matches SJC (US), SJO and SYQ
+    (CR) and RHV (US) exactly; none is in the traffic list and the first
+    three are all "International", so SJC wins on rule (c).  SJC also has
+    the most passenger traffic of the three.  Pass ``country="CR"`` to get
+    SJO.
 
     Args:
         city: City name to search for (e.g. ``"Tokyo"``).
@@ -275,44 +396,62 @@ def _find_city_airports(city: str, country: str | None = None) -> list[AirportOu
             results.  When ``None``, all countries are searched.
 
     Returns:
-        A list of ``AirportOut`` instances matching the query, sorted by
-        international-preference heuristic.  May be empty if no matches
-        are found.
+        A list of ``AirportOut`` instances matching the query, best match
+        first.  May be empty if no matches are found.
     """
-    city_l = city.strip().lower()
-    if not city_l:  # Return empty list for empty city names
+    query = _fold(city)
+    if not query:  # Return empty list for empty city names
         return []
 
     city_index, name_list = _get_city_indexes()
+    country_u = country.strip().upper() if country else None
 
-    # Exact-city hits from the index, then name-substring hits; preserve
-    # first-seen order while de-duplicating.
-    matched: dict[str, None] = dict.fromkeys(city_index.get(city_l, []))
-    for iata, name_l in name_list:
-        if city_l in name_l:
-            matched.setdefault(iata, None)
+    def keep(iata: str) -> bool:
+        ap = _AIRPORTS_IATA.get(iata)
+        if not ap:
+            return False
+        return country_u is None or ap.get("country", "").upper() == country_u
 
-    out = []
-    for iata in matched:
+    # Tier 1: exact city (plus metro-area main airports).
+    exact = dict.fromkeys([*city_index.get(query, []), *_METRO_AIRPORTS.get(query, ())])
+    tiers: list[list[str]] = [[iata for iata in exact if keep(iata)]]
+
+    if not tiers[0]:
+        # Tier 2: whole-word matches in the city field, then in the name.
+        word = re.compile(rf"(?<!\w){re.escape(query)}(?!\w)")
+        city_words = [
+            iata
+            for city_key, codes in city_index.items()
+            if query in city_key and word.search(city_key)
+            for iata in codes
+            if keep(iata)
+        ]
+        seen = set(city_words)
+        name_words = [
+            iata
+            for iata, name_f in name_list
+            if iata not in seen and query in name_f and word.search(name_f)
+            if keep(iata)
+        ]
+        tiers = [city_words, name_words]
+
+    no_rank = len(_MAJOR_AIRPORTS_BY_TRAFFIC)
+
+    def rank(iata: str) -> tuple:
         ap = _AIRPORTS_IATA[iata]
-        # Optionally restrict to a specific country
-        if country is not None and ap.get("country", "").upper() != country.upper():
-            continue
-        out.append(
-            AirportOut(
-                iata=iata.upper(),
-                icao=ap.get("icao", ""),
-                name=ap.get("name", ""),
-                city=ap.get("city", ""),
-                country=ap.get("country", ""),
-                lat=float(ap["lat"]),
-                lon=float(ap["lon"]),
-                tz=ap.get("tz"),
-            )
+        name_f = _fold(ap.get("name", ""))
+        return (
+            _TRAFFIC_RANK.get(iata.upper(), no_rank),
+            "international" not in name_f,
+            query not in name_f,
+            ap.get("name", ""),
+            iata,
         )
-    # Heuristic sort: airports with "International" in the name float to the
-    # top (False < True, so we negate the test).  Ties broken alphabetically.
-    out.sort(key=lambda a: ("international" not in a.name.lower(), a.name))
+
+    out: list[AirportOut] = []
+    for tier in tiers:
+        for iata in sorted(dict.fromkeys(tier), key=rank):
+            out.append(_airport_out(iata, _AIRPORTS_IATA[iata]))
     return out
 
 
@@ -440,9 +579,211 @@ class OpenAPError(Exception):
     Common causes include the OpenAP package not being installed, an
     unrecognised aircraft type, or an internal modelling error within the
     OpenAP library.
+
+    Attributes:
+        kind: Machine-readable failure category so interface layers can map
+            it to a status code without parsing the message:
+            ``"unavailable"`` (OpenAP not installed / not importable),
+            ``"unsupported_aircraft"`` (type not covered by OpenAP's
+            models), or ``"model_error"`` (a model evaluation failed).
     """
 
-    pass
+    def __init__(self, message: str, kind: str = "model_error") -> None:
+        super().__init__(message)
+        self.kind = kind
+
+
+# Simulation time step for OpenAP's trajectory generator, in seconds.
+_SIM_DT_S = 10
+# Lowest top-of-climb used when a short route forces a capped profile.
+_MIN_TOP_OF_CLIMB_FT = 1000.0
+
+# ---------------------------------------------------------------------------
+# OpenAP object / profile caches
+# ---------------------------------------------------------------------------
+# Constructing OpenAP models re-parses their YAML data files on every call
+# (FuelFlow ~15 ms, FlightGenerator ~5 ms, prop.aircraft ~3 ms each), and the
+# climb/descent simulations take ~5-6 ms each.  None of that depends on the
+# route, so it is computed once per aircraft type (and cruise altitude) and
+# cached.  The factory / lookup callable is part of every cache key, so a
+# patched ``FlightGenerator``, ``FuelFlow`` or ``prop.aircraft`` (tests) never
+# receives objects cached from the real one.  Cached values are treated as
+# read-only: profiles are stored as non-writeable numpy arrays and aircraft
+# property dicts are deep-copied before being handed out.
+
+
+class _Profile(NamedTuple):
+    """Read-only time histories extracted from an OpenAP flight phase.
+
+    Attributes:
+        t: Elapsed time in seconds (starts at 0).
+        s: Ground distance in metres (starts at 0).
+        alt: Altitude in feet.
+        gs: Ground speed (= TAS, zero wind) in knots.
+        vs: Vertical rate in feet per minute.
+    """
+
+    t: Any
+    s: Any
+    alt: Any
+    gs: Any
+    vs: Any
+
+    @classmethod
+    def from_frame(cls, df: Any) -> _Profile:
+        """Copy the relevant DataFrame columns into non-writeable arrays."""
+        import numpy as np
+
+        arrays = []
+        for col in ("t", "s", "altitude", "groundspeed", "vertical_rate"):
+            arr = np.array(df[col], dtype=float)
+            arr.setflags(write=False)
+            arrays.append(arr)
+        return cls(*arrays)
+
+    def summary(self) -> tuple[float, float, float, float, float]:
+        """Return (time_s, distance_km, mean_alt_ft, mean_gs_kts, mean_vs_fpm).
+
+        Reads the last sample for cumulative time and distance and averages
+        altitude, ground speed and vertical rate across the phase.
+        """
+        return (
+            float(self.t[-1]),
+            float(self.s[-1]) / 1000.0,  # 's' is in metres
+            float(self.alt.mean()),
+            float(self.gs.mean()),
+            float(self.vs.mean()),
+        )
+
+
+@functools.lru_cache(maxsize=64)
+def _cached_model(factory: Any, ac_type: str) -> Any:
+    """Build an OpenAP model (``FlightGenerator`` / ``FuelFlow``) once per type.
+
+    ``use_synonym=True`` lets OpenAP substitute the closest modelled type for
+    aircraft it has property data for but no kinematic/fuel model (A20N ->
+    A320, B38M -> B737, A359 -> B789, ...).  Exceptions are not cached.
+    """
+    return factory(ac=ac_type, use_synonym=True)
+
+
+@functools.lru_cache(maxsize=64)
+def _cached_aircraft_props(lookup: Any, ac_type: str) -> dict:
+    """Return ``prop.aircraft(ac_type, use_synonym=True)``, parsed once."""
+    return lookup(ac_type, use_synonym=True)
+
+
+def _aircraft_props(ac_type: str) -> dict:
+    """Return a private copy of OpenAP's property dict for ``ac_type``."""
+    return copy.deepcopy(_cached_aircraft_props(_openap("prop").aircraft, ac_type))
+
+
+@functools.lru_cache(maxsize=256)
+def _cached_profile(fgen: Any, phase: str, alt_cr_ft: int, dt: int) -> _Profile:
+    """Simulate a climb or descent once per (generator, altitude, step).
+
+    Some OpenAP versions do not accept the ``alt_cr`` keyword; fall back to
+    the default altitude if a TypeError is raised.
+    """
+    method = getattr(fgen, phase)
+    try:
+        frame = method(dt=dt, alt_cr=alt_cr_ft)
+    except TypeError:
+        frame = method(dt=dt)
+    return _Profile.from_frame(frame)
+
+
+@functools.lru_cache(maxsize=64)
+def _cached_cruise_mach(fgen: Any) -> float | None:
+    """Default cruise Mach from OpenAP's WRAP model, or None if unavailable."""
+    try:
+        return float(fgen.wrap.cruise_mach()["default"])
+    except Exception:
+        return None
+
+
+def _cruise_tas_kts(fgen: Any, cruise_alt_ft: float, dt: int) -> float:
+    """True airspeed in knots at the WRAP default cruise Mach and altitude.
+
+    TAS = M * a(h), with the ISA speed of sound at the *requested* cruise
+    altitude (OpenAP's own ``cruise()`` generator would fly its default
+    altitude instead).
+    """
+    mach = _cached_cruise_mach(fgen)
+    if mach is not None:
+        from openap.extra import aero
+
+        return float(aero.mach2tas(mach, cruise_alt_ft * aero.ft) / aero.kts)
+    # Fallback for generators without a WRAP cruise-Mach accessor: simulate
+    # a level segment at the requested altitude and average its speed.
+    frame = fgen.cruise(dt=dt, alt_cr=cruise_alt_ft)
+    return float(frame["groundspeed"].mean())
+
+
+def _fit_profiles_to_route(
+    climb: _Profile, descent: _Profile, route_km: float
+) -> tuple[_Profile, _Profile, float | None, float | None, float]:
+    """Cap the climb/descent profiles so they fit inside a short route.
+
+    When the full climb to and descent from cruise altitude cover more
+    ground than the route itself, the profile is cut at the highest
+    top-of-climb altitude whose climb distance plus the descent distance
+    from that same altitude still fits.  The climb is truncated at that
+    altitude and the descent starts there, so the leftover distance (if
+    any) is flown level at the top-of-climb altitude and speed.  If even a
+    ``_MIN_TOP_OF_CLIMB_FT`` profile is too long (or the route has zero
+    length), that lowest profile is scaled (distance and time alike, so
+    speeds are preserved) to exactly the route length.
+
+    Args:
+        climb: Full climb profile to the requested cruise altitude.
+        descent: Full descent profile from the requested cruise altitude.
+        route_km: Route distance in kilometres.
+
+    Returns:
+        ``(climb, descent, top_alt_ft, level_gs_kts, scale)``.
+        ``top_alt_ft`` / ``level_gs_kts`` are None when no capping was
+        needed; ``scale`` is 1.0 unless the scaling fallback was used.
+    """
+    import numpy as np
+
+    route_m = route_km * 1000.0
+    if climb.s[-1] + descent.s[-1] <= route_m:
+        return climb, descent, None, None, 1.0
+
+    # j[i]: first descent sample at or below the altitude of climb sample i
+    # (descent altitude is non-increasing, so search the negated array).
+    j = np.searchsorted(-descent.alt, -climb.alt, side="left")
+    j = np.minimum(j, len(descent.s) - 1)
+    ground_m = climb.s + (descent.s[-1] - descent.s[j])
+
+    feasible = np.flatnonzero(
+        (ground_m <= route_m) & (climb.alt >= _MIN_TOP_OF_CLIMB_FT)
+    )
+    scale = 1.0
+    if feasible.size:
+        i = int(feasible[-1])
+    else:
+        airborne = np.flatnonzero(climb.alt >= _MIN_TOP_OF_CLIMB_FT)
+        i = int(airborne[0]) if airborne.size else len(climb.s) - 1
+        scale = route_m / ground_m[i] if ground_m[i] > 0 else 0.0
+    k = int(j[i])
+
+    capped_climb = _Profile(
+        climb.t[: i + 1] * scale,
+        climb.s[: i + 1] * scale,
+        climb.alt[: i + 1],
+        climb.gs[: i + 1],
+        climb.vs[: i + 1],
+    )
+    capped_descent = _Profile(
+        (descent.t[k:] - descent.t[k]) * scale,
+        (descent.s[k:] - descent.s[k]) * scale,
+        descent.alt[k:],
+        descent.gs[k:],
+        descent.vs[k:],
+    )
+    return capped_climb, capped_descent, float(climb.alt[i]), float(climb.gs[i]), scale
 
 
 def estimates_openap(
@@ -461,16 +802,24 @@ def estimates_openap(
     cruise headwind component can be supplied to adjust cruise ground
     speed, time, and fuel.
 
+    Cruise is flown at OpenAP's default cruise Mach for the type at the
+    requested ``cruise_alt_ft`` (TAS = M * a(h)).  Routes shorter than the
+    full climb + descent are flown with a capped top of climb (see
+    ``_fit_profiles_to_route``) so the three segments always add up to the
+    route distance; ``assumptions.top_of_climb_ft`` and
+    ``assumptions.profile_note`` report the cap.
+
     Args:
         ac_type: ICAO aircraft type designator (e.g. ``"A320"``, ``"B738"``).
-            OpenAP synonym resolution is attempted automatically.
+            OpenAP synonym resolution is used, so types without their own
+            kinematic/fuel model (``"A20N"``, ``"B38M"``, ...) are modelled
+            with OpenAP's closest equivalent.
         cruise_alt_ft: Target cruise altitude in feet.
-        mass_kg: Aircraft mass in kilograms.  When ``None``, the function
-            applies a three-level fallback chain:
+        mass_kg: Aircraft mass in kilograms (must be > 0).  When ``None``,
+            the function applies a fallback chain:
             1. 85 % of the aircraft's MTOW from OpenAP property tables.
-            2. If MTOW is unavailable, a generic narrow-body default of
-               60 000 kg.
-            3. If the property lookup itself fails, 60 000 kg.
+            2. If MTOW or the property lookup is unavailable, a generic
+               narrow-body default of 60 000 kg.
         route_dist_km: Total great-circle route distance in kilometres, used
             to derive the cruise segment length after subtracting climb and
             descent distances.
@@ -489,12 +838,26 @@ def estimates_openap(
             - A string identifying the engine backend (``"openap"``).
 
     Raises:
+        ValueError: If ``mass_kg`` is given and not positive.
         OpenAPError: If the OpenAP package is not available, the aircraft
             type is not supported by OpenAP's models, or the fuel-flow
             model fails.
     """
     if not OPENAP_AVAILABLE:
-        raise OpenAPError("OpenAP backend unavailable. Please `pip install openap`.")
+        raise OpenAPError(
+            "OpenAP backend unavailable. Please `pip install openap`.",
+            kind="unavailable",
+        )
+    if mass_kg is not None and not mass_kg > 0:
+        raise ValueError(f"mass_kg must be > 0 (got {mass_kg})")
+    try:
+        flight_generator_cls = _openap("FlightGenerator")
+        fuel_flow_cls = _openap("FuelFlow")
+    except Exception as e:
+        raise OpenAPError(
+            f"OpenAP backend unavailable ({e}). Please `pip install openap`.",
+            kind="unavailable",
+        ) from e
 
     # ------------------------------------------------------------------
     # Mass resolution fallback chain
@@ -502,23 +865,22 @@ def estimates_openap(
     # Priority 1: Use the caller-supplied mass_kg if provided.
     # Priority 2: Look up the aircraft's MTOW from OpenAP property tables
     #             and use 85 % of MTOW as a conservative operating mass.
-    # Priority 3: If MTOW is not listed, fall back to 60 000 kg -- a
-    #             rough generic narrow-body estimate.
-    # Priority 4: If the property lookup itself throws, use 60 000 kg.
+    # Priority 3: If MTOW is not listed or the lookup fails, fall back to
+    #             60 000 kg -- a rough generic narrow-body estimate.
     mass = mass_kg
     mass_source = "user" if mass_kg is not None else "default_60t"
     engine_note = "openap"
     try:
-        ac_props = prop.aircraft(ac_type, use_synonym=True)
+        ac_props = _aircraft_props(ac_type)
         mtow = (ac_props.get("limits") or {}).get("MTOW") or ac_props.get("mtow")
         if mass is None and mtow:
             mass = 0.85 * float(mtow)  # 85 % MTOW -- conservative default
             mass_source = "mtow_85pct"
-        elif mass is None:
-            mass = 60_000.0  # generic narrow-body fallback
     except Exception:
         # Aircraft type not recognised or property tables unavailable.
-        mass = mass or 60_000.0
+        pass
+    if mass is None:
+        mass = 60_000.0  # generic narrow-body fallback
     if mass_source == "default_60t":
         logger.warning(
             "No MTOW available for aircraft type %r; using generic 60t mass default",
@@ -528,53 +890,33 @@ def estimates_openap(
     # OpenAP raises plain ValueError for aircraft its kinematic/fuel models
     # don't cover; surface that as a clean domain error instead of a 500.
     try:
-        fgen = FlightGenerator(ac=ac_type)
+        fgen = _cached_model(flight_generator_cls, ac_type)
     except Exception as e:
         raise OpenAPError(
-            f"Aircraft type '{ac_type}' not supported by OpenAP: {e}"
+            f"Aircraft type '{ac_type}' not supported by OpenAP: {e}",
+            kind="unsupported_aircraft",
         ) from e
-    dt = 10  # simulation time-step in seconds
-
-    # Generate climb & descent DataFrames at the requested cruise altitude.
-    # Some OpenAP versions do not accept the ``alt_cr`` keyword; fall back
-    # to default altitude if a TypeError is raised.
-    try:
-        climb = fgen.climb(dt=dt, alt_cr=cruise_alt_ft)
-    except TypeError:
-        climb = fgen.climb(dt=dt)
+    dt = _SIM_DT_S
 
     try:
-        descent = fgen.descent(dt=dt, alt_cr=cruise_alt_ft)
-    except TypeError:
-        descent = fgen.descent(dt=dt)
+        climb = _cached_profile(fgen, "climb", cruise_alt_ft, dt)
+        descent = _cached_profile(fgen, "descent", cruise_alt_ft, dt)
+        gs_cru = _cruise_tas_kts(fgen, cruise_alt_ft, dt)
+    except Exception as e:
+        raise OpenAPError(
+            f"OpenAP trajectory generation failed for {ac_type}: {e}"
+        ) from e
 
-    # Cruise segment baseline (used for average speed extraction)
-    cruise_seg = fgen.cruise(dt=dt)
+    # Short routes: cap the top of climb so the profile fits the route.
+    climb, descent, top_alt_ft, level_gs_kts, scale = _fit_profiles_to_route(
+        climb, descent, route_dist_km
+    )
+    cruise_level_ft = float(cruise_alt_ft) if top_alt_ft is None else top_alt_ft
+    if level_gs_kts is not None:
+        gs_cru = level_gs_kts
 
-    def seg(df):
-        """Extract summary statistics from an OpenAP flight-phase DataFrame.
-
-        Reads the last row for cumulative time (``t``) and distance (``s``),
-        and computes mean altitude, ground speed, and vertical rate across
-        the entire phase.
-
-        Args:
-            df: A pandas DataFrame produced by ``FlightGenerator`` methods.
-
-        Returns:
-            A tuple of (time_seconds, distance_km, mean_alt_ft,
-            mean_groundspeed_kts, mean_vertical_rate_fpm).
-        """
-        t_s = float(df["t"].iloc[-1])
-        dist_km = float(df["s"].iloc[-1]) / 1000.0  # 's' column is in metres
-        alt_ft = float(df["altitude"].mean())
-        gs_kts = float(df["groundspeed"].mean())
-        vs_fpm = float(df["vertical_rate"].mean())
-        return t_s, dist_km, alt_ft, gs_kts, vs_fpm
-
-    t_climb, d_climb, a_climb, gs_climb, vs_climb = seg(climb)
-    t_des, d_des, a_des, gs_des, vs_des = seg(descent)
-    _, _, a_cru, gs_cru, _ = seg(cruise_seg)
+    t_climb, d_climb, a_climb, gs_climb, vs_climb = climb.summary()
+    t_des, d_des, a_des, gs_des, vs_des = descent.summary()
 
     # ------------------------------------------------------------------
     # Cruise time calculation
@@ -593,10 +935,11 @@ def estimates_openap(
     )
 
     try:
-        fuelflow = FuelFlow(ac=ac_type)
+        fuelflow = _cached_model(fuel_flow_cls, ac_type)
     except Exception as e:
         raise OpenAPError(
-            f"Aircraft type '{ac_type}' not supported by OpenAP fuel model: {e}"
+            f"Aircraft type '{ac_type}' not supported by OpenAP fuel model: {e}",
+            kind="unsupported_aircraft",
         ) from e
 
     def fuel_from(
@@ -631,7 +974,7 @@ def estimates_openap(
 
     fuel_climb = fuel_from(gs_climb, a_climb, vs_climb, t_climb)
     fuel_des = fuel_from(gs_des, a_des, vs_des, t_des)
-    fuel_cru = fuel_from(gs_cru, cruise_alt_ft, 0.0, cruise_time_s)
+    fuel_cru = fuel_from(gs_cru, cruise_level_ft, 0.0, cruise_time_s)
 
     # Build per-segment result models
     climb_out = SegmentEst(
@@ -654,18 +997,37 @@ def estimates_openap(
     block_time_min = climb_out.time_min + cruise_out.time_min + des_out.time_min
     block_fuel_kg = climb_out.fuel_kg + cruise_out.fuel_kg + des_out.fuel_kg
 
+    assumptions: dict[str, Any] = {
+        "zero_wind": headwind_kts == 0.0,
+        "headwind_kts": headwind_kts,
+        "mass_kg": mass,
+        "mass_source": mass_source,
+        "cruise_alt_ft": cruise_alt_ft,
+        "top_of_climb_ft": cruise_level_ft,
+    }
+    if top_alt_ft is not None:
+        full_km = (
+            _cached_profile(fgen, "climb", cruise_alt_ft, dt).s[-1]
+            + _cached_profile(fgen, "descent", cruise_alt_ft, dt).s[-1]
+        ) / 1000.0
+        note = (
+            f"Route ({route_dist_km:.1f} km) is shorter than a full climb to and "
+            f"descent from {cruise_alt_ft} ft ({full_km:.1f} km); top of climb "
+            f"capped at {top_alt_ft:.0f} ft."
+        )
+        if scale != 1.0:
+            note += (
+                f" Even that profile is too long, so climb and descent distances"
+                f" and times were scaled by {scale:.3f} to fit the route."
+            )
+        assumptions["profile_note"] = note
+
     estimates = {
         "block": {"time_min": block_time_min, "fuel_kg": block_fuel_kg},
         "climb": climb_out.model_dump(),
         "cruise": cruise_out.model_dump(),
         "descent": des_out.model_dump(),
-        "assumptions": {
-            "zero_wind": headwind_kts == 0.0,
-            "headwind_kts": headwind_kts,
-            "mass_kg": mass,
-            "mass_source": mass_source,
-            "cruise_alt_ft": cruise_alt_ft,
-        },
+        "assumptions": assumptions,
     }
     return estimates, engine_note
 
@@ -728,57 +1090,10 @@ def plan_flight(payload: dict) -> dict:
             error occurs.
     """
     try:
-        # Validate the request using PlanRequest model
+        # Validate the request, then run the shared single-leg pipeline.
         req = PlanRequest(**payload)
-
-        # Check for identical departure and arrival
-        if (
-            req.depart_city.strip().lower() == req.arrive_city.strip().lower()
-            and not req.prefer_arrive_iata
-            and not req.prefer_depart_iata
-        ):
-            raise ValueError(
-                "Departure and arrival look identical—please specify airports explicitly."
-            )
-
-        # Resolve departure and arrival airports
-        dep = _resolve_endpoint(
-            req.depart_city,
-            req.depart_country,
-            req.prefer_depart_iata,
-            role="departure",
-        )
-        arr = _resolve_endpoint(
-            req.arrive_city, req.arrive_country, req.prefer_arrive_iata, role="arrival"
-        )
-
-        # Calculate great-circle route
-        poly, dist_km = great_circle_points(
-            dep.lat, dep.lon, arr.lat, arr.lon, req.route_step_km
-        )
-
-        # Generate estimates
-        if req.backend == "openap":
-            est, engine_name = estimates_openap(
-                req.ac_type, req.cruise_alt_ft, req.mass_kg, dist_km
-            )
-        else:
-            raise ValueError(f"Unknown backend: {req.backend}")
-
-        # Build response
-        response = PlanResponse(
-            engine=engine_name,
-            depart=dep,
-            arrive=arr,
-            distance_km=dist_km,
-            distance_nm=dist_km * NM_PER_KM,
-            polyline=poly,
-            estimates=est,
-        )
-
-        return response.model_dump()
-
-    except (ValueError, AirportResolutionError) as e:
+        return _plan_single_leg(req).model_dump()
+    except (ValueError, AirportResolutionError, FlightPlanError) as e:
         raise ValueError(str(e)) from e
     except OpenAPError as e:
         raise RuntimeError(str(e)) from e
@@ -863,15 +1178,23 @@ def create_flight_plan(req: PlanRequest) -> PlanResponse:
         AirportResolutionError: If either endpoint cannot be resolved.
         OpenAPError: If the performance backend is unavailable or fails.
     """
-    if (
-        req.depart_city.strip().lower() == req.arrive_city.strip().lower()
-        and not req.prefer_arrive_iata
-        and not req.prefer_depart_iata
-    ):
-        raise FlightPlanError(
-            "Departure and arrival look identical—please specify airports explicitly."
-        )
+    return _plan_single_leg(req)
 
+
+def _plan_single_leg(req: PlanRequest) -> PlanResponse:
+    """Resolve, route and estimate one leg (shared by the public planners).
+
+    Identical endpoints are detected on the *resolved* airports, so the
+    same city name in two countries ("San Jose" CR -> "San Jose" US) is a
+    valid request, while two inputs that land on the same airport (same
+    city twice, or the same IATA code twice) are rejected.
+
+    Raises:
+        FlightPlanError: If both endpoints resolve to the same airport or
+            the backend is unknown.
+        AirportResolutionError: If either endpoint cannot be resolved.
+        OpenAPError: If the performance backend is unavailable or fails.
+    """
     dep = _resolve_endpoint(
         req.depart_city,
         req.depart_country,
@@ -881,6 +1204,11 @@ def create_flight_plan(req: PlanRequest) -> PlanResponse:
     arr = _resolve_endpoint(
         req.arrive_city, req.arrive_country, req.prefer_arrive_iata, role="arrival"
     )
+    if dep.iata == arr.iata:
+        raise FlightPlanError(
+            f"Departure and arrival are identical: both resolve to {dep.iata} "
+            f"({dep.name}). Please specify different airports."
+        )
 
     # Great-circle route
     poly, dist_km = great_circle_points(
@@ -939,10 +1267,33 @@ def plan_multi_leg(
         distance, time, and fuel).
 
     Raises:
-        FlightPlanError: If the waypoint list is invalid.
+        FlightPlanError: If the waypoint list or an aircraft parameter is
+            invalid (the same bounds as ``PlanRequest`` apply).
         AirportResolutionError: If any waypoint cannot be resolved.
         OpenAPError: If the performance backend is unavailable or fails.
     """
+    # Validate the aircraft knobs against the single-leg PlanRequest bounds
+    # (cruise 8000-45000 ft, 1 < step <= 1000 km, mass > 0) so both planners
+    # accept exactly the same inputs.
+    try:
+        knobs = PlanRequest(
+            depart_city="-",
+            arrive_city="-",
+            ac_type=ac_type,
+            cruise_alt_ft=cruise_alt_ft,
+            mass_kg=mass_kg,
+            route_step_km=route_step_km,
+        )
+    except ValidationError as e:
+        problems = "; ".join(
+            f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}"
+            for err in e.errors()
+        )
+        raise FlightPlanError(f"invalid aircraft parameters: {problems}") from e
+    # Continue with the validated (type-coerced) values.
+    ac_type, cruise_alt_ft = knobs.ac_type, knobs.cruise_alt_ft
+    mass_kg, route_step_km = knobs.mass_kg, knobs.route_step_km
+
     if not isinstance(waypoints, list) or len(waypoints) < 2:
         raise FlightPlanError("waypoints must be a list of at least 2 entries")
     if len(waypoints) > MAX_MULTI_LEG_WAYPOINTS:

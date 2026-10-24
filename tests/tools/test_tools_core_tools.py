@@ -191,8 +191,11 @@ def test_plan_openap_error_and_unavailable(monkeypatch):
             self.lon = 0.0
             self.tz = None
 
+    # Distinct airports per role: the same airport twice is now rejected.
     monkeypatch.setattr(
-        core_tools, "_resolve_endpoint", lambda *a, role=None, **k: A("SJC")
+        core_tools,
+        "_resolve_endpoint",
+        lambda *a, role=None, **k: A("SJC" if role == "departure" else "NRT"),
     )
     # great_circle_points returns tuple (points, distance_km)
     monkeypatch.setattr(
@@ -227,9 +230,7 @@ def test_plan_and_distance_exception(monkeypatch):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(core_tools, "great_circle_points", boom)
-    out = core_tools.plan_flight(
-        {"city": "City"}, {"city": "City"}, {"ac_type": "A320"}
-    )
+    out = core_tools.plan_flight({"iata": "SJC"}, {"iata": "NRT"}, {"ac_type": "A320"})
     assert "Flight planning error" in out
     out2 = core_tools.calculate_distance(0, 0, 0, 0)
     assert "Distance calculation error" in out2

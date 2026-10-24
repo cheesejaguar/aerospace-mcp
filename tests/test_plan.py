@@ -16,6 +16,19 @@ from aerospace_mcp.core import (
 )
 
 
+def _set_cruise_tas(mock_gen, tas_kts: float = 450.0, alt_ft: float = 35000.0):
+    """Give a mocked FlightGenerator a WRAP cruise Mach worth ``tas_kts``.
+
+    estimates_openap derives cruise TAS as M * a(h) at the requested cruise
+    altitude from ``fgen.wrap.cruise_mach()``, so the mock needs a Mach
+    number rather than a canned cruise DataFrame.
+    """
+    from openap.extra import aero
+
+    mach = tas_kts * aero.kts / aero.vsound(alt_ft * aero.ft)
+    mock_gen.wrap.cruise_mach.return_value = {"default": mach}
+
+
 class TestGreatCirclePoints:
     """Tests for great circle route calculation."""
 
@@ -183,10 +196,11 @@ class TestOpenAPEstimates:
                     "aerospace_mcp.core.prop.aircraft", return_value=mock_openap_props
                 ):
                     route_km = 9000.0
+                    _set_cruise_tas(mock_openap_flight_generator, 450.0)
                     estimates, _ = estimates_openap("A359", 35000, None, route_km)
 
                     # Mock fixtures: climb covers 10 km, descent 12 km,
-                    # cruise groundspeed 450 kts.
+                    # cruise TAS 450 kts (M * a at FL350).
                     d_remaining = route_km - (10.0 + 12.0)
                     expected_min = d_remaining / (450 * KM_PER_NM) * 60.0
                     assert estimates["cruise"]["time_min"] == pytest.approx(
@@ -212,6 +226,7 @@ class TestOpenAPEstimates:
                 with patch(
                     "aerospace_mcp.core.prop.aircraft", return_value=mock_openap_props
                 ):
+                    _set_cruise_tas(mock_openap_flight_generator, 450.0)
                     calm, _ = estimates_openap("A359", 35000, None, 9000.0)
                     head, _ = estimates_openap(
                         "A359", 35000, None, 9000.0, headwind_kts=50.0
@@ -350,55 +365,139 @@ class TestOpenAPEstimates:
     @pytest.mark.unit
     @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
     def test_openap_short_route(self, mock_openap_fuel_flow):
-        """Test OpenAP estimates for very short routes."""
-        # Create a mock generator with long climb/descent distances
-        mock_gen = MagicMock()
+        """Short routes cap the top of climb so segments sum to the route.
 
+        Previously a route shorter than climb + descent was billed the full
+        climb and descent anyway (segments summed to more than the route).
+        """
         import pandas as pd
 
-        # Mock segments where climb + descent > total route distance
-        climb_data = pd.DataFrame(
+        mock_gen = MagicMock()
+        _set_cruise_tas(mock_gen, 450.0)
+        # Climb: 0 -> 30,000 ft over 150 km; descent: 30,000 -> 0 ft, 150 km.
+        mock_gen.climb.return_value = pd.DataFrame(
             {
-                "t": [60],
-                "s": [100000],
-                "altitude": [25000],
-                "groundspeed": [300],
-                "vertical_rate": [1500],
+                "t": [0, 100, 200, 300, 400],
+                "s": [0, 20000, 60000, 100000, 150000],
+                "altitude": [0, 5000, 15000, 22000, 30000],
+                "groundspeed": [150, 250, 300, 350, 420],
+                "vertical_rate": [2000, 2000, 1800, 1500, 1200],
             }
         )
-        cruise_data = pd.DataFrame(
+        mock_gen.descent.return_value = pd.DataFrame(
             {
-                "t": [30],
-                "s": [15000],
-                "altitude": [35000],
-                "groundspeed": [450],
-                "vertical_rate": [0],
+                "t": [0, 100, 200, 300, 400],
+                "s": [0, 50000, 90000, 130000, 150000],
+                "altitude": [30000, 22000, 15000, 5000, 0],
+                "groundspeed": [420, 350, 300, 250, 140],
+                "vertical_rate": [-1500, -1500, -1500, -1000, -700],
             }
         )
-        descent_data = pd.DataFrame(
-            {
-                "t": [60],
-                "s": [120000],
-                "altitude": [15000],
-                "groundspeed": [350],
-                "vertical_rate": [-1200],
-            }
-        )
-
-        mock_gen.climb.return_value = climb_data
-        mock_gen.cruise.return_value = cruise_data
-        mock_gen.descent.return_value = descent_data
 
         with patch("aerospace_mcp.core.FlightGenerator", return_value=mock_gen):
             with patch(
                 "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
             ):
-                # Very short route - 200km, but climb+descent = 220km
-                estimates, _ = estimates_openap("A320", 35000, None, 200.0)
+                # 190 km route, but climb + descent need 300 km.
+                estimates, _ = estimates_openap("A320", 35000, None, 190.0)
 
-                # Cruise distance should be 0
-                assert estimates["cruise"]["distance_km"] == 0.0
-                assert estimates["cruise"]["time_min"] == 0.0
+        seg_km = sum(
+            estimates[k]["distance_km"] for k in ("climb", "cruise", "descent")
+        )
+        assert seg_km == pytest.approx(190.0)
+        a = estimates["assumptions"]
+        # Highest climb sample whose climb + matching descent fits: 15,000 ft
+        # (60 km climb + 60 km descent from 15,000 ft; 22,000 ft would need
+        # 100 + 100 km), leaving 70 km flown level.
+        assert a["top_of_climb_ft"] == 15000
+        assert estimates["climb"]["distance_km"] == pytest.approx(60.0)
+        assert estimates["descent"]["distance_km"] == pytest.approx(60.0)
+        assert estimates["cruise"]["distance_km"] == pytest.approx(70.0)
+        assert estimates["cruise"]["avg_gs_kts"] == pytest.approx(300.0)
+        assert "capped" in a["profile_note"]
+        assert a["cruise_alt_ft"] == 35000  # requested altitude is echoed
+
+    @pytest.mark.unit
+    @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
+    def test_openap_tiny_route_scales_profile(self, mock_openap_fuel_flow):
+        """A route shorter than even the lowest profile is scaled to fit."""
+        import pandas as pd
+
+        mock_gen = MagicMock()
+        _set_cruise_tas(mock_gen, 450.0)
+        mock_gen.climb.return_value = pd.DataFrame(
+            {
+                "t": [0, 100, 200],
+                "s": [0, 10000, 40000],
+                "altitude": [0, 2000, 30000],
+                "groundspeed": [150, 250, 420],
+                "vertical_rate": [2000, 2000, 1200],
+            }
+        )
+        mock_gen.descent.return_value = pd.DataFrame(
+            {
+                "t": [0, 100, 200],
+                "s": [0, 30000, 40000],
+                "altitude": [30000, 2000, 0],
+                "groundspeed": [420, 250, 140],
+                "vertical_rate": [-1500, -1000, -700],
+            }
+        )
+        with patch("aerospace_mcp.core.FlightGenerator", return_value=mock_gen):
+            with patch(
+                "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+            ):
+                # Lowest airborne profile (2,000 ft) needs 10 + 10 = 20 km.
+                estimates, _ = estimates_openap("A320", 35000, None, 5.0)
+
+        seg_km = sum(
+            estimates[k]["distance_km"] for k in ("climb", "cruise", "descent")
+        )
+        assert seg_km == pytest.approx(5.0)
+        assert estimates["cruise"]["distance_km"] == pytest.approx(0.0)
+        assert "scaled" in estimates["assumptions"]["profile_note"]
+
+    @pytest.mark.unit
+    @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
+    def test_cruise_tas_follows_requested_altitude(
+        self, mock_openap_flight_generator, mock_openap_fuel_flow, mock_openap_props
+    ):
+        """Cruise TAS = M * a(h) at the *requested* altitude, not FL358.
+
+        Regression: the cruise speed came from OpenAP's default-altitude
+        cruise() segment, so every cruise altitude reported ~447 kt.
+        """
+        from openap.extra import aero
+
+        mock_openap_flight_generator.wrap.cruise_mach.return_value = {"default": 0.78}
+        with patch(
+            "aerospace_mcp.core.FlightGenerator",
+            return_value=mock_openap_flight_generator,
+        ):
+            with patch(
+                "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
+            ):
+                with patch(
+                    "aerospace_mcp.core.prop.aircraft", return_value=mock_openap_props
+                ):
+                    low, _ = estimates_openap("A359", 25000, None, 9000.0)
+                    high, _ = estimates_openap("A359", 35000, None, 9000.0)
+
+        for est, alt_ft in ((low, 25000), (high, 35000)):
+            expected = 0.78 * aero.vsound(alt_ft * aero.ft) / aero.kts
+            assert est["cruise"]["avg_gs_kts"] == pytest.approx(expected, rel=1e-9)
+        # Speed of sound falls with altitude in the troposphere.
+        assert low["cruise"]["avg_gs_kts"] > high["cruise"]["avg_gs_kts"]
+        mock_openap_flight_generator.cruise.assert_not_called()
+
+    @pytest.mark.unit
+    @patch("aerospace_mcp.core.OPENAP_AVAILABLE", True)
+    def test_non_positive_mass_rejected(self):
+        """mass_kg <= 0 is an input error (0 used to mean 'missing')."""
+        with pytest.raises(ValueError, match="mass_kg"):
+            estimates_openap("A320", 35000, 0.0, 1000.0)
+        with pytest.raises(ValueError, match="mass_kg"):
+            estimates_openap("A320", 35000, -5.0, 1000.0)
 
 
 class TestSegmentEst:
@@ -522,6 +621,20 @@ class TestPlanRequestValidation:
             cruise_alt_ft=45000,
         )
         assert request_max.cruise_alt_ft == 45000
+
+    @pytest.mark.unit
+    def test_plan_request_mass_must_be_positive(self):
+        """mass_kg must be > 0 when given."""
+        from pydantic import ValidationError
+
+        for bad in (0, -5):
+            with pytest.raises(ValidationError):
+                PlanRequest(
+                    depart_city="San Jose",
+                    arrive_city="Tokyo",
+                    ac_type="A320",
+                    mass_kg=bad,
+                )
 
     @pytest.mark.unit
     def test_plan_request_step_validation(self):
