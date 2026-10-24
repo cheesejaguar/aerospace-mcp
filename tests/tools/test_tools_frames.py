@@ -132,8 +132,14 @@ def test_ecef_to_geodetic_end_to_end():
     assert abs(pole["altitude_m"]) < 1e-6
 
 
-def test_transform_frames_end_to_end_dict_and_list_inputs():
+def test_transform_frames_end_to_end_dict_and_list_inputs(monkeypatch):
     tools = _real_frames_tools()
+    import aerospace_mcp.integrations.frames as frames_integration
+
+    # The ECI known answer below is the manual GMST + precession path; with
+    # astropy installed the full IAU model (nutation, polar motion) differs
+    # by ~200 m, so pin the manual path.
+    monkeypatch.setattr(frames_integration, "ASTROPY_AVAILABLE", False)
 
     geo = json.loads(
         tools.transform_frames(

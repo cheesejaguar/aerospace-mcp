@@ -412,8 +412,11 @@ class TestIntegration:
 
         end_time = time.time()
 
-        # Should complete quickly (less than 2 seconds for basic analysis)
-        assert (end_time - start_time) < 2.0
+        # The built-in model is near-instant; AeroSandbox runs one VLM solve
+        # per angle (~25 ms each, ~0.5 s here when idle), so allow headroom
+        # for a loaded parallel CI runner.
+        limit_s = 10.0 if wing_results[0].method == "aerosandbox_vlm" else 2.0
+        assert (end_time - start_time) < limit_s
 
         # Should get reasonable number of results
         assert len(wing_results) == 21
