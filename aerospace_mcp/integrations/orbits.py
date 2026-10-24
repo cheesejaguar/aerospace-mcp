@@ -451,29 +451,131 @@ def propagate_orbit_j2(
         ValueError: If the time step or span is out of bounds, or the
             resulting step count exceeds the safety cap.
     """
+    samples, epoch = _propagate_samples(initial_state, time_span_s, time_step_s)
+    return [initial_state] + [
+        _sample_state(sample, epoch, initial_state.frame) for sample in samples[1:]
+    ]
+
+
+def _propagate_samples(
+    initial_state: StateVector, time_span_s: float, time_step_s: float
+) -> tuple[list[tuple[float, list[float], list[float]]], datetime]:
+    """Native ``(t_s, position, velocity)`` samples and the parsed start epoch."""
     samples = _native.propagate_j2(
         initial_state.position_m,
         initial_state.velocity_ms,
         time_span_s,
         time_step_s,
     )
-
     try:
         epoch = datetime.fromisoformat(initial_state.epoch_utc.replace("Z", "+00:00"))
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
         epoch = datetime.now(UTC)
+    return samples, epoch
 
-    states = [initial_state]
-    for t, position, velocity in samples[1:]:
-        states.append(
-            StateVector(
-                position_m=position,
-                velocity_ms=velocity,
-                epoch_utc=(epoch + timedelta(seconds=t)).isoformat(),
-                frame=initial_state.frame,
-            )
+
+def _sample_state(
+    sample: tuple[float, list[float], list[float]], epoch: datetime, frame: str
+) -> StateVector:
+    t, position, velocity = sample
+    return StateVector(
+        position_m=position,
+        velocity_ms=velocity,
+        epoch_utc=(epoch + timedelta(seconds=t)).isoformat(),
+        frame=frame,
+    )
+
+
+def evenly_spaced_indices(n: int, max_points: int) -> list[int]:
+    """At most ``max_points`` indices spread evenly over ``range(n)``.
+
+    The first and last index are always included; all of ``range(n)`` is
+    returned when it already fits.
+    """
+    if max_points < 2:
+        raise ValueError("max_points must be >= 2")
+    if n <= max_points:
+        return list(range(n))
+    return [round(k * (n - 1) / (max_points - 1)) for k in range(max_points)]
+
+
+def propagate_orbit_j2_sampled(
+    initial_state: StateVector,
+    time_span_s: float,
+    time_step_s: float = 60.0,
+    max_points: int = 200,
+) -> tuple[int, list[tuple[float, StateVector]]]:
+    """Like :func:`propagate_orbit_j2`, keeping only evenly spaced states.
+
+    Propagation uses every step; only the returned states are thinned
+    (first and last always kept), so long, fine-step runs don't build
+    hundreds of thousands of objects.
+
+    Returns:
+        ``(num_states, samples)``: the number of states the full propagation
+        produced, and up to ``max_points`` ``(elapsed_s, state)`` pairs.
+
+    Raises:
+        ValueError: As :func:`propagate_orbit_j2`, or if ``max_points < 2``.
+    """
+    samples, epoch = _propagate_samples(initial_state, time_span_s, time_step_s)
+    picked = []
+    for i in evenly_spaced_indices(len(samples), max_points):
+        state = (
+            initial_state
+            if i == 0
+            else _sample_state(samples[i], epoch, initial_state.frame)
         )
-    return states
+        picked.append((samples[i][0], state))
+    return len(samples), picked
+
+
+def ground_track_sampled(
+    initial_state: StateVector,
+    duration_s: float,
+    time_step_s: float = 60.0,
+    max_points: int = 200,
+) -> tuple[int, dict[str, dict[str, float]], list[tuple[float, GroundTrack]]]:
+    """Propagate with J2 and return a thinned ground track with its extents.
+
+    Equivalent to :func:`calculate_ground_track` on the states of
+    :func:`propagate_orbit_j2` (times since the first state come from the
+    propagator), but the latitude/longitude/altitude extents are taken over
+    every point while only up to ``max_points`` evenly spaced points
+    (first and last always kept) are returned.
+
+    Returns:
+        ``(num_points, extents, samples)``: the full point count;
+        ``{"latitude_deg" | "longitude_deg" | "altitude_m": {"min", "max"}}``;
+        and ``(elapsed_s, GroundTrack)`` pairs.
+
+    Raises:
+        ValueError: As :func:`propagate_orbit_j2` and
+            :func:`calculate_ground_track`, or if ``max_points < 2``.
+    """
+    if time_step_s < 0.1:
+        raise ValueError("time_step_s must be >= 0.1 s")
+    samples, epoch = _propagate_samples(initial_state, duration_s, time_step_s)
+    if len(samples) > 100_001:
+        raise ValueError("too many orbit states (max 100001)")
+    elapsed = [s[0] for s in samples]
+    track = _native.ground_track([s[1] for s in samples], elapsed)
+
+    extents = {}
+    for k, key in enumerate(("latitude_deg", "longitude_deg", "altitude_m")):
+        values = [p[k] for p in track]
+        extents[key] = {"min": min(values), "max": max(values)}
+
+    picked = []
+    for i in evenly_spaced_indices(len(track), max_points):
+        lat, lon, alt = track[i]
+        time_utc = (
+            initial_state.epoch_utc
+            if i == 0
+            else (epoch + timedelta(seconds=elapsed[i])).isoformat()
+        )
+        picked.append((elapsed[i], GroundTrack(lat, lon, alt, time_utc)))
+    return len(track), extents, picked
 
 
 # ===========================================================================

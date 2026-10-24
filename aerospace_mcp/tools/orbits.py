@@ -44,6 +44,13 @@ MU_BODIES = {
     "jupiter": 1.26686534e17,  # m^3/s^2 -- Jupiter
 }
 
+# Sampling limits for propagate_orbit_j2 / calculate_ground_track output:
+# a week at 10 s steps is 60k states (17 MB of JSON, millions of tokens), so
+# these tools return evenly spaced samples instead of every state.
+DEFAULT_MAX_POINTS = 200
+MIN_POINTS = 2
+MAX_POINTS = 5000
+
 
 def _vector(value) -> list[float]:
     """Accept ``[x, y, z]`` or ``{"x": ..., "y": ..., "z": ...}``."""
@@ -352,8 +359,31 @@ def state_vector_to_elements(state_vector: dict) -> str:
         return f"State vector to elements error: {str(e)}"
 
 
+def _check_max_points(max_points: int) -> None:
+    """Validate the ``max_points`` sampling limit of the trajectory tools."""
+    if (
+        isinstance(max_points, bool)
+        or not isinstance(max_points, int)
+        or not MIN_POINTS <= max_points <= MAX_POINTS
+    ):
+        raise ValueError(
+            f"max_points must be an integer between {MIN_POINTS} and {MAX_POINTS}"
+        )
+
+
+def _state_json(state) -> dict:
+    return {
+        "epoch_utc": state.epoch_utc,
+        "position_m": state.position_m,
+        "velocity_ms": state.velocity_ms,
+    }
+
+
 def propagate_orbit_j2(
-    initial_state: dict, propagation_time_s: float, time_step_s: float = 60.0
+    initial_state: dict,
+    propagation_time_s: float,
+    time_step_s: float = 60.0,
+    max_points: int = DEFAULT_MAX_POINTS,
 ) -> str:
     """Propagate orbit with J2 perturbations using numerical integration.
 
@@ -362,36 +392,46 @@ def propagate_orbit_j2(
             ``velocity_ms``, optional ``epoch_utc``) or classical elements
         propagation_time_s: Propagation time in seconds
         time_step_s: Integration time step in seconds
+        max_points: Maximum number of states to return (2-5000, default
+            200), evenly spaced and always including the first and last.
+            Integration always uses every step; this only thins the output.
 
     Returns:
-        JSON string with propagated state vectors at each time step.
+        Compact JSON with the initial and final states, the number of
+        integration states, and up to ``max_points`` sampled states (each
+        with ``elapsed_s`` since the start).
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
-        from ..integrations.orbits import propagate_orbit_j2 as _propagate
+        from ..integrations.orbits import propagate_orbit_j2_sampled as _propagate
 
-        states = _propagate(
-            _initial_state(initial_state), propagation_time_s, time_step_s
+        _check_max_points(max_points)
+        num_states, samples = _propagate(
+            _initial_state(initial_state),
+            propagation_time_s,
+            time_step_s,
+            max_points,
         )
 
+        # Compact separators: these outputs can hold thousands of states.
         return json.dumps(
             {
-                "num_states": len(states),
+                "num_states": num_states,
                 "time_step_s": time_step_s,
                 "propagation_time_s": propagation_time_s,
-                "reference_frame": states[0].frame,
+                "reference_frame": samples[0][1].frame,
+                "initial_state": _state_json(samples[0][1]),
+                "final_state": _state_json(samples[-1][1]),
+                "max_points": max_points,
+                "num_samples": len(samples),
                 "states": [
-                    {
-                        "epoch_utc": s.epoch_utc,
-                        "position_m": s.position_m,
-                        "velocity_ms": s.velocity_ms,
-                    }
-                    for s in states
+                    {"elapsed_s": t, **_state_json(state)} for t, state in samples
                 ],
             },
-            indent=2,
+            separators=(",", ":"),
+            allow_nan=False,
         )
 
     except ImportError:
@@ -402,7 +442,10 @@ def propagate_orbit_j2(
 
 
 def calculate_ground_track(
-    orbital_state: dict, duration_s: float, time_step_s: float = 60.0
+    orbital_state: dict,
+    duration_s: float,
+    time_step_s: float = 60.0,
+    max_points: int = DEFAULT_MAX_POINTS,
 ) -> str:
     """Calculate ground track from orbital state vectors.
 
@@ -411,36 +454,46 @@ def calculate_ground_track(
             ``velocity_ms``, optional ``epoch_utc``) or classical elements
         duration_s: Duration for ground track calculation in seconds
         time_step_s: Time step for ground track points in seconds
+        max_points: Maximum number of ground track points to return (2-5000,
+            default 200), evenly spaced and always including the first and
+            last. The extents are computed over every point.
 
     Returns:
-        JSON string with ground track latitude/longitude coordinates.
+        Compact JSON with the total number of points, latitude / longitude /
+        altitude extents, and up to ``max_points`` sampled points.
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
-        from ..integrations.orbits import calculate_ground_track as _ground_track
-        from ..integrations.orbits import propagate_orbit_j2 as _propagate
+        from ..integrations.orbits import ground_track_sampled as _ground_track
 
-        states = _propagate(_initial_state(orbital_state), duration_s, time_step_s)
-        track = _ground_track(states, time_step_s)
+        _check_max_points(max_points)
+        num_points, extents, samples = _ground_track(
+            _initial_state(orbital_state), duration_s, time_step_s, max_points
+        )
 
         return json.dumps(
             {
-                "num_points": len(track),
+                "num_points": num_points,
                 "time_step_s": time_step_s,
                 "duration_s": duration_s,
+                "extents": extents,
+                "max_points": max_points,
+                "num_samples": len(samples),
                 "ground_track": [
                     {
+                        "elapsed_s": t,
                         "time_utc": p.time_utc,
                         "latitude_deg": p.latitude_deg,
                         "longitude_deg": p.longitude_deg,
                         "altitude_m": p.altitude_m,
                     }
-                    for p in track
+                    for t, p in samples
                 ],
             },
-            indent=2,
+            separators=(",", ":"),
+            allow_nan=False,
         )
 
     except ImportError:
