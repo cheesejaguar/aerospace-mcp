@@ -358,12 +358,16 @@ class TestIntegration:
 
         results = wing_vlm_analysis(geometry, [0, 4, 8])
 
-        # Should get results from AeroSandbox VLM
+        # Should get results from AeroSandbox VLM (this path used to fail
+        # silently with a TypeError and fall back)
         assert len(results) == 3
         for result in results:
-            # AeroSandbox should provide more accurate results
+            assert result.method == "aerosandbox_vlm"
             assert isinstance(result.CL, float)
             assert isinstance(result.CD, float)
+        # AR 6 rectangular wing: VLM lift slope close to Helmbold (4.4 / rad)
+        cl_alpha = (results[1].CL - results[0].CL) / math.radians(4)
+        assert 4.0 < cl_alpha < 4.8
 
     def test_error_handling(self):
         """Test error handling for invalid inputs."""
@@ -382,9 +386,16 @@ class TestIntegration:
         results = wing_vlm_analysis(geometry, [], mach=0.2)
         assert len(results) == 0
 
-        # Test unknown airfoil (should fall back to default)
-        results_unknown = airfoil_polar_analysis("UNKNOWN_AIRFOIL", [0, 5])
-        assert len(results_unknown) == 2  # Should still return results
+        # Unknown airfoils are an error (they used to silently become NACA2412)
+        with pytest.raises(ValueError, match="Unknown airfoil"):
+            airfoil_polar_analysis("UNKNOWN_AIRFOIL", [0, 5])
+        with pytest.raises(ValueError, match="Unknown airfoil"):
+            wing_vlm_analysis(
+                WingGeometry(
+                    span_m=5.0, chord_root_m=1.0, chord_tip_m=1.0, airfoil_root="XYZ"
+                ),
+                [0.0],
+            )
 
     def test_performance_characteristics(self):
         """Test that calculations complete in reasonable time."""
