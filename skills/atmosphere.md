@@ -20,8 +20,8 @@ Tools for atmospheric modeling including ISA standard atmosphere profiles and wi
 # Get ISA atmosphere profile at multiple altitudes
 aerospace-mcp-cli run get_atmosphere_profile --altitudes_m '[0,1000,5000,10000,15000]'
 
-# Get enhanced atmosphere profile
-aerospace-mcp-cli run get_atmosphere_profile --altitudes_m '[0,5000,10000]' --model_type enhanced
+# COESA model name (same US Standard Atmosphere 1976, valid to 86 km)
+aerospace-mcp-cli run get_atmosphere_profile --altitudes_m '[0,20000,50000,80000]' --model_type COESA
 
 # Simple wind profile with default surface conditions
 aerospace-mcp-cli run wind_model_simple --altitudes_m '[10,50,100,500,1000]'
@@ -56,7 +56,7 @@ print(result)
 
 ### get_atmosphere_profile
 - `--altitudes_m` (list[float]/JSON, required): List of altitudes in meters, e.g. `[0,5000,10000]`
-- `--model_type` (one of: ISA, enhanced; default: ISA): Atmospheric model type
+- `--model_type` (one of: ISA, COESA; default: ISA): Atmospheric model type (both are US Standard Atmosphere 1976, geometric altitudes 0-86 km)
 
 ### wind_model_simple
 - `--altitudes_m` (list[float]/JSON, required): List of altitudes in meters

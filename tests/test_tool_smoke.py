@@ -279,7 +279,11 @@ def test_every_tool_has_a_smoke_case():
 
 
 @pytest.mark.parametrize("name", sorted(CASES))
-def test_tool_runs_against_real_integrations(name):
+def test_tool_runs_against_real_integrations(name, monkeypatch):
+    if name in LLM_TOOLS:
+        # No LLM in CI: pin the documented default rather than inherit
+        # whatever an earlier test left in the module.
+        monkeypatch.setattr("aerospace_mcp.tools.agents.LLM_TOOLS_ENABLED", False)
     out = _run(name)
     assert isinstance(out, str) and out.strip()
     head = out.strip().splitlines()[0].lower()

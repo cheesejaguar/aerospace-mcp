@@ -86,25 +86,27 @@ AEROSPACE_TOOLS = [
         parameters={
             "departure": "dict - Airport info with city, iata (optional), country (optional)",
             "arrival": "dict - Airport info with city, iata (optional), country (optional)",
-            "aircraft": "dict - Aircraft config with type, cruise_alt_ft, mass_kg (optional)",
+            "aircraft": "dict - Aircraft config with ac_type, cruise_alt_ft, mass_kg (all optional)",
             "route_options": "dict - Route config with step_km (optional, default 25.0)",
+            "wind": "dict - Optional cruise wind {wind_speed_kts, wind_direction_deg}",
         },
         examples=[
-            'plan_flight({"city": "San Francisco"}, {"city": "New York"}, {"type": "A320", "cruise_alt_ft": 37000}, {})',
-            'plan_flight({"city": "London", "iata": "LHR"}, {"city": "Dubai", "iata": "DXB"}, {"type": "B777", "cruise_alt_ft": 39000, "mass_kg": 220000}, {"step_km": 50.0})',
+            'plan_flight({"city": "San Francisco"}, {"city": "New York"}, {"ac_type": "A320", "cruise_alt_ft": 37000}, {})',
+            'plan_flight({"city": "London", "iata": "LHR"}, {"city": "Dubai", "iata": "DXB"}, {"ac_type": "B77W", "cruise_alt_ft": 39000, "mass_kg": 220000}, {"step_km": 50.0})',
         ],
     ),
     ToolReference(
         name="calculate_distance",
-        description="Calculate great-circle distance between airports",
+        description="Calculate great-circle (WGS-84 geodesic) distance between two points",
         parameters={
-            "origin": "dict - Origin airport with city and optional iata/country",
-            "destination": "dict - Destination airport with city and optional iata/country",
-            "step_km": "float - Optional step size for route polyline generation (default 25.0)",
+            "lat1": "float - Start latitude in degrees",
+            "lon1": "float - Start longitude in degrees",
+            "lat2": "float - End latitude in degrees",
+            "lon2": "float - End longitude in degrees",
         },
         examples=[
-            'calculate_distance({"city": "New York"}, {"city": "Los Angeles"})',
-            'calculate_distance({"city": "Paris", "iata": "CDG"}, {"city": "Tokyo", "iata": "NRT"}, 100.0)',
+            "calculate_distance(40.6413, -73.7781, 33.9416, -118.4085)",  # JFK-LAX
+            "calculate_distance(49.0097, 2.5479, 35.7647, 140.3864)",  # CDG-NRT
         ],
     ),
     ToolReference(
@@ -114,11 +116,10 @@ AEROSPACE_TOOLS = [
             "aircraft_type": "str - Aircraft type code (e.g., 'A320', 'B737', 'B777')",
             "distance_km": "float - Flight distance in kilometers",
             "cruise_altitude_ft": "float - Cruise altitude in feet (optional, default 35000)",
-            "mass_kg": "float - Aircraft mass in kg (optional, uses 85% MTOW if not provided)",
         },
         examples=[
             'get_aircraft_performance("A320", 2500.0, 37000)',
-            'get_aircraft_performance("B777", 5500.0, 39000, 250000)',
+            'get_aircraft_performance("B77W", 5500.0, 39000)',
         ],
     ),
     ToolReference(
@@ -126,32 +127,33 @@ AEROSPACE_TOOLS = [
         description="Calculate atmospheric conditions at various altitudes",
         parameters={
             "altitudes_m": "List[float] - List of altitudes in meters",
-            "model_type": "Literal['isa', 'enhanced'] - Atmospheric model type (default 'isa')",
+            "model_type": "Literal['ISA', 'COESA'] - Atmospheric model (default 'ISA'; both are US Standard Atmosphere 1976)",
         },
         examples=[
             "get_atmosphere_profile([0, 1000, 5000, 10000])",
-            'get_atmosphere_profile([0, 2000, 4000, 6000, 8000, 10000], "enhanced")',
+            'get_atmosphere_profile([0, 20000, 50000, 80000], "COESA")',
         ],
     ),
     ToolReference(
         name="wind_model_simple",
         description="Calculate wind profiles at various altitudes",
         parameters={
-            "altitudes_m": "List[float] - List of altitudes in meters",
-            "surface_wind_mps": "float - Surface wind speed in m/s",
-            "model": "Literal['logarithmic', 'power_law'] - Wind profile model (default 'logarithmic')",
-            "surface_roughness_m": "float - Surface roughness in meters (default 0.1)",
+            "altitudes_m": "List[float] - List of altitudes in meters above ground",
+            "surface_wind_speed_ms": "float - Wind speed at the 10 m reference height in m/s (default 5.0)",
+            "surface_wind_direction_deg": "float - Wind direction in degrees (default 270)",
+            "model_type": "Literal['logarithmic', 'power_law'] - Wind profile model (default 'logarithmic')",
+            "roughness_length_m": "float - Surface roughness length in meters (default 0.03)",
         },
         examples=[
-            "wind_model_simple([0, 100, 500, 1000], 10.0)",
-            'wind_model_simple([0, 200, 1000, 3000], 15.0, "power_law", 0.05)',
+            "wind_model_simple([10, 100, 500, 1000], 10.0)",
+            'wind_model_simple([10, 200, 1000, 3000], 15.0, 270.0, "power_law", 0.05)',
         ],
     ),
     ToolReference(
         name="elements_to_state_vector",
         description="Convert orbital elements to state vector",
         parameters={
-            "elements": "dict - Orbital elements with semi_major_axis_m, eccentricity, inclination_deg, raan_deg, arg_periapsis_deg, true_anomaly_deg, epoch_utc"
+            "orbital_elements": "dict - Orbital elements with semi_major_axis_m, eccentricity, inclination_deg, raan_deg, arg_periapsis_deg, true_anomaly_deg, epoch_utc"
         },
         examples=[
             'elements_to_state_vector({"semi_major_axis_m": 6793000, "eccentricity": 0.001, "inclination_deg": 51.6, "raan_deg": 0.0, "arg_periapsis_deg": 0.0, "true_anomaly_deg": 0.0, "epoch_utc": "2024-01-01T12:00:00"})'
@@ -161,9 +163,10 @@ AEROSPACE_TOOLS = [
         name="propagate_orbit_j2",
         description="Propagate satellite orbit with J2 perturbations",
         parameters={
-            "initial_state": "dict - Initial orbital elements or state vector",
-            "time_span_s": "float - Propagation time span in seconds",
-            "time_step_s": "float - Time step for propagation in seconds (default 300)",
+            "initial_state": "dict - Initial orbital elements or state vector (position_m, velocity_ms)",
+            "propagation_time_s": "float - Propagation time span in seconds",
+            "time_step_s": "float - Time step for propagation in seconds (default 60)",
+            "max_points": "int - Maximum sampled states returned (default 200)",
         },
         examples=[
             'propagate_orbit_j2({"semi_major_axis_m": 6793000, "eccentricity": 0.001, "inclination_deg": 51.6, "raan_deg": 0.0, "arg_periapsis_deg": 0.0, "true_anomaly_deg": 0.0, "epoch_utc": "2024-01-01T12:00:00"}, 86400, 600)'
@@ -185,13 +188,12 @@ AEROSPACE_TOOLS = [
         name="rocket_3dof_trajectory",
         description="Simulate 3DOF rocket trajectory with atmospheric effects",
         parameters={
-            "geometry": "dict - Rocket geometry with mass_kg, thrust_n, burn_time_s, drag_coeff, reference_area_m2",
-            "dt_s": "float - Time step in seconds (default 0.1)",
-            "max_time_s": "float - Maximum simulation time in seconds (default 300)",
-            "launch_angle_deg": "float - Launch angle in degrees from vertical (default 0)",
+            "rocket_geometry": "dict - dry_mass_kg, propellant_mass_kg, diameter_m, length_m, cd (optional), thrust_curve [[time_s, thrust_n], ...]",
+            "launch_conditions": "dict - launch_angle_deg from horizontal (default 90 = vertical)",
+            "simulation_options": "dict - Optional dt_s (default 0.1) and max_time_s (default 300)",
         },
         examples=[
-            'rocket_3dof_trajectory({"mass_kg": 500, "thrust_n": 8000, "burn_time_s": 60, "drag_coeff": 0.3, "reference_area_m2": 0.5}, 0.1, 300, 15)'
+            'rocket_3dof_trajectory({"dry_mass_kg": 20, "propellant_mass_kg": 80, "diameter_m": 0.2, "length_m": 3.0, "cd": 0.4, "thrust_curve": [[0, 4000], [8, 4000], [8.1, 0]]}, {"launch_angle_deg": 85}, {"dt_s": 0.05})'
         ],
     ),
 ]

@@ -81,7 +81,6 @@ trajopt = [
     # "casadi>=3.6.0",
 ]
 gnc = [
-    "filterpy>=1.4.5",
     "control>=0.9.0",
 ]
 all = [
@@ -97,7 +96,6 @@ all = [
     # "openmdao>=3.0",
     # "dymos>=1.0",
     # "casadi>=3.6.0",
-    "filterpy>=1.4.5",
     "control>=0.9.0",
 ]
 

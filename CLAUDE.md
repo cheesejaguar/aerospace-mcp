@@ -105,7 +105,7 @@ The system follows a layered architecture with shared business logic:
 - `rocket.rs` (3-DOF Euler ascent + performance analysis), `optimize.rs` (golden-section, projected gradient descent, launch-angle / thrust-profile optimizers that simulate natively), `orbit.rs` (Kepler, elements <-> state, J2 RK4 propagation, ground track, Hohmann), `lambert.rs` (Izzo 2015, replaces poliastro)
 - `python.rs` holds the only PyO3 code; the math modules are pure Rust and testable with `cargo test --no-default-features`
 - Python `integrations/rockets.py`, `trajopt.py`, `orbits.py` keep the dataclasses and orchestration and delegate math to `_native`; the atmosphere table is built in Python and passed in
-- `tests/test_native_parity.py` checks results against `tests/data/legacy_python_reference.json`, recorded from the original pure-Python implementation
+- `tests/test_native_parity.py` checks results against `tests/data/legacy_python_reference.json`, recorded from the original pure-Python implementation. Parity is partial by design: model bugs fixed after the port (J2 sign, thrust-proportional mass flow, atmosphere above the table) are checked against corrected references and invariants instead; the module docstring lists each one
 
 **Tool Discovery** (`aerospace_mcp/tools/tool_search.py`):
 - `search_aerospace_tools`: Search tools by name, description, or functionality
@@ -146,7 +146,7 @@ The legacy low-level MCP server (`aerospace_mcp/server.py`) was removed; `fastmc
 
 **Error Handling**: Custom exceptions (`FlightPlanError`, `AirportResolutionError`, `OpenAPError`) with proper HTTP status codes and MCP error messages.
 
-**Testing Strategy**: Comprehensive mocking of external dependencies (OpenAP, airport data) to ensure deterministic tests. Separate test files for each interface layer.
+**Testing Strategy**: Comprehensive mocking of external dependencies (OpenAP, airport data) to ensure deterministic tests. Separate test files for each interface layer. Many `tests/tools/` tests stub the integration modules, so `tests/test_tool_smoke.py` also calls every registered tool against the real integrations with known-answer checks; add a case there for every new tool (a coverage test enforces it). Agent tool descriptions in `tools/agents.py` are checked against the real signatures by `tests/test_tool_schema_contracts.py`.
 
 **Configuration**: Environment variable-driven configuration with sensible defaults. Production configs use container environment variables.
 
@@ -161,7 +161,8 @@ The legacy low-level MCP server (`aerospace_mcp/server.py`) was removed; `fastmc
 - **fastmcp**: High-level Model Context Protocol framework for simplified tool development
 - **pydantic**: Data validation and serialization
 - **pyo3/maturin**: Rust bindings and build backend for the native core
-- **Optional packages**: ambiance (atmosphere), astropy/spiceypy/skyfield (space), aerosandbox (aerodynamics), rocketpy (rockets), filterpy/control (GNC)
+- **numpy/scipy**: vectorised numerics; `scipy.linalg` for the Kalman filter and LQR (Riccati) solutions
+- **Optional packages**: ambiance (atmosphere), astropy/spiceypy/skyfield (space), aerosandbox (aerodynamics), rocketpy (rockets), control (GNC)
 
 ### Safety Considerations
 

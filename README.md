@@ -501,7 +501,7 @@ class OrbitalMechanicsClient:
         """Propagate satellite orbit with J2 perturbations."""
         response = requests.post(f"{self.base_url}/propagate_orbit_j2", json={
             "initial_state": elements,
-            "time_span_s": duration_hours * 3600,
+            "propagation_time_s": duration_hours * 3600,
             "time_step_s": 300  # 5-minute steps
         })
         return response.json()
@@ -983,48 +983,48 @@ Error responses include detailed messages:
 | `plan_multi_leg_flight` | Multi-leg journeys through 2-10 waypoints with aggregated totals | `waypoints`, `aircraft` |
 | `get_aircraft_database` | Browse/search available OpenAP aircraft types | `search` |
 | `convert_units` | Length/speed/mass/pressure/temperature/angle conversions | `value`, `from_unit`, `to_unit` |
-| `calculate_distance` | Great-circle distance | `origin`, `destination`, `step_km` |
-| `get_aircraft_performance` | Performance estimates | `aircraft_type`, `distance_km`, `cruise_altitude` |
+| `calculate_distance` | Great-circle distance | `lat1`, `lon1`, `lat2`, `lon2` |
+| `get_aircraft_performance` | Performance estimates | `aircraft_type`, `distance_km`, `cruise_altitude_ft` |
 | `get_atmosphere_profile` | ISA atmosphere conditions | `altitudes_m`, `model_type` |
-| `wind_model_simple` | Wind profile calculation | `altitudes_m`, `surface_wind_mps`, `model` |
-| `transform_frames` | Coordinate transformations | `xyz`, `from_frame`, `to_frame`, `epoch_iso` |
+| `wind_model_simple` | Wind profile calculation | `altitudes_m`, `surface_wind_speed_ms`, `surface_wind_direction_deg`, `model_type`, `roughness_length_m` |
+| `transform_frames` | Coordinate transformations | `coordinates`, `from_frame`, `to_frame`, `epoch_utc` |
 | `geodetic_to_ecef` | Lat/lon to ECEF conversion | `latitude_deg`, `longitude_deg`, `altitude_m` |
-| `ecef_to_geodetic` | ECEF to lat/lon conversion | `x`, `y`, `z` |
-| `wing_vlm_analysis` | Wing aerodynamics analysis (VLM) | `geometry`, `alpha_deg_list`, `mach` |
-| `airfoil_polar_analysis` | Airfoil polar generation | `airfoil_name`, `alpha_deg_list`, `reynolds`, `mach` |
-| `calculate_stability_derivatives` | Stability derivatives calculation | `geometry`, `alpha_deg`, `mach` |
-| `propeller_bemt_analysis` | Propeller performance (BEMT) | `geometry`, `rpm_list`, `velocity_ms`, `altitude_m` |
+| `ecef_to_geodetic` | ECEF to lat/lon conversion | `x_m`, `y_m`, `z_m` |
+| `wing_vlm_analysis` | Wing aerodynamics analysis (VLM) | `wing_config`, `flight_conditions`, `analysis_options` |
+| `airfoil_polar_analysis` | Airfoil polar generation | `airfoil_name`, `reynolds_number`, `mach_number`, `alpha_range_deg` |
+| `calculate_stability_derivatives` | Stability derivatives calculation | `wing_config`, `flight_conditions` |
+| `propeller_bemt_analysis` | Propeller performance (BEMT) | `propeller_geometry`, `operating_conditions`, `analysis_options` |
 | `uav_energy_estimate` | UAV endurance and energy analysis | `uav_config`, `battery_config`, `mission_profile` |
 | `get_airfoil_database` | Available airfoil coefficients | None |
 | `get_propeller_database` | Available propeller data | None |
-| `rocket_3dof_trajectory` | 3DOF rocket trajectory simulation | `geometry`, `dt_s`, `max_time_s`, `launch_angle_deg` |
-| `estimate_rocket_sizing` | Rocket sizing for mission requirements | `target_altitude_m`, `payload_mass_kg`, `propellant_type` |
-| `optimize_launch_angle` | Launch angle optimization | `geometry`, `objective`, `angle_bounds` |
-| `optimize_thrust_profile` | Thrust profile optimization | `geometry`, `burn_time_s`, `total_impulse_target`, `n_segments`, `objective` |
-| `trajectory_sensitivity_analysis` | Parameter sensitivity analysis | `base_geometry`, `parameter_variations`, `objective` |
+| `rocket_3dof_trajectory` | 3DOF rocket trajectory simulation | `rocket_geometry`, `launch_conditions`, `simulation_options` |
+| `estimate_rocket_sizing` | Rocket sizing for mission requirements | `target_altitude_m`, `payload_mass_kg`, `propellant_type`, `design_margin` |
+| `optimize_launch_angle` | Launch angle optimization | `rocket_geometry`, `target_range_m`, `optimize_for`, `angle_bounds_deg` |
+| `optimize_thrust_profile` | Thrust profile optimization | `rocket_geometry`, `burn_time_s`, `total_impulse_target`, `n_segments`, `objective` |
+| `trajectory_sensitivity_analysis` | Parameter sensitivity analysis | `rocket_geometry`, `parameter_variations`, `analysis_options` |
 | `get_system_status` | System health and capabilities | None |
-| `elements_to_state_vector` | Convert orbital elements to state vector | `elements` |
+| `elements_to_state_vector` | Convert orbital elements to state vector | `orbital_elements` |
 | `state_vector_to_elements` | Convert state vector to orbital elements | `state_vector` |
-| `propagate_orbit_j2` | Propagate orbit with J2 perturbations | `initial_state`, `time_span_s`, `time_step_s` |
-| `calculate_ground_track` | Calculate satellite ground track | `orbit_states`, `time_step_s` |
+| `propagate_orbit_j2` | Propagate orbit with J2 perturbations | `initial_state`, `propagation_time_s`, `time_step_s`, `max_points` |
+| `calculate_ground_track` | Calculate satellite ground track | `orbital_state`, `duration_s`, `time_step_s`, `max_points` |
 | `hohmann_transfer` | Calculate Hohmann transfer orbit | `r1_m`, `r2_m` |
-| `orbital_rendezvous_planning` | Plan orbital rendezvous maneuvers | `chaser_elements`, `target_elements` |
-| `genetic_algorithm_optimization` | Trajectory optimization using GA | `initial_trajectory`, `objective`, `constraints` |
-| `particle_swarm_optimization` | Trajectory optimization using PSO | `initial_trajectory`, `objective`, `constraints` |
-| `monte_carlo_uncertainty_analysis` | Monte Carlo trajectory uncertainty analysis | `trajectory`, `uncertainty_params`, `num_samples` |
-| `porkchop_plot_analysis` | Generate porkchop plot for interplanetary transfers | `departure_body`, `arrival_body`, `departure_dates`, `arrival_dates`, `min_tof_days`, `max_tof_days` |
+| `orbital_rendezvous_planning` | Plan orbital rendezvous maneuvers | `chaser_elements`, `target_elements`, `rendezvous_options` |
+| `genetic_algorithm_optimization` | Trajectory optimization using GA | `optimization_problem`, `ga_parameters` |
+| `particle_swarm_optimization` | Trajectory optimization using PSO | `optimization_problem`, `pso_parameters` |
+| `monte_carlo_uncertainty_analysis` | Monte Carlo trajectory uncertainty analysis | `nominal_trajectory`, `uncertainty_parameters`, `n_samples`, `analysis_options` |
+| `porkchop_plot_analysis` | Generate porkchop plot for interplanetary transfers | `departure_body`, `arrival_body`, `departure_date_range`, `arrival_date_range`, `analysis_options` |
 | `search_aerospace_tools` | Search for tools by name, description, or functionality | `query`, `search_type`, `max_results`, `category` |
 | `list_tool_categories` | List all available tool categories with counts | None |
-| `lambert_problem_solver` | Solve Lambert's problem for orbital transfers | `r1_m`, `r2_m`, `tof_s`, `direction`, `central_body` |
-| `density_altitude_calculator` | Calculate density altitude from pressure altitude and temperature | `pressure_altitude_ft`, `temperature_c` |
-| `true_airspeed_converter` | Convert between IAS/CAS/EAS/TAS/Mach | `speed_value`, `speed_type`, `altitude_ft`, `temperature_c` |
-| `stall_speed_calculator` | Calculate stall speeds for different configurations | `weight_kg`, `wing_area_m2`, `cl_max_clean`, `cl_max_landing` |
-| `weight_and_balance` | Calculate aircraft weight and CG position | `basic_empty_weight_kg`, `fuel_kg`, `payload_items` |
-| `takeoff_performance` | Calculate takeoff distances and V-speeds | `weight_kg`, `pressure_altitude_ft`, `temperature_c`, `wind_kts` |
-| `landing_performance` | Calculate landing distances and approach speeds | `weight_kg`, `pressure_altitude_ft`, `temperature_c`, `runway_condition` |
-| `fuel_reserve_calculator` | Calculate required fuel reserves per regulations | `regulation`, `trip_fuel_kg`, `cruise_fuel_flow_kg_hr` |
-| `kalman_filter_state_estimation` | State estimation using Kalman filter | `initial_state`, `measurements`, `process_noise` |
-| `lqr_controller_design` | Design LQR optimal controller | `A_matrix`, `B_matrix`, `Q_matrix`, `R_matrix` |
+| `lambert_problem_solver` | Solve Lambert's problem for orbital transfers | `r1_m`, `r2_m`, `tof_s`, `direction`, `num_revolutions`, `central_body` |
+| `density_altitude_calculator` | Calculate density altitude from pressure altitude and temperature | `pressure_altitude_ft`, `temperature_c`, `dewpoint_c` |
+| `true_airspeed_converter` | Convert between IAS/CAS/EAS/TAS/Mach | `speed_value`, `speed_type`, `altitude_ft`, `temperature_c`, `position_error_kts` |
+| `stall_speed_calculator` | Calculate stall speeds for different configurations | `weight_kg`, `wing_area_m2`, `cl_max_clean`, `cl_max_takeoff`, `cl_max_landing`, `altitude_ft`, `load_factor` |
+| `weight_and_balance` | Calculate aircraft weight and CG position | `basic_empty_weight_kg`, `basic_empty_arm_m`, `fuel_kg`, `fuel_arm_m`, `payload_items`, `forward_cg_limit_m`, `aft_cg_limit_m`, `max_takeoff_weight_kg`, `mac_m`, `lemac_m` |
+| `takeoff_performance` | Calculate takeoff distances and V-speeds | `weight_kg`, `pressure_altitude_ft`, `temperature_c`, `wind_kts`, `runway_slope_pct`, `runway_condition`, `thrust_to_weight`, `cl_max_takeoff`, `wing_area_m2`, `cd0`, `oswald_e`, `aspect_ratio` |
+| `landing_performance` | Calculate landing distances and approach speeds | `weight_kg`, `pressure_altitude_ft`, `temperature_c`, `wind_kts`, `runway_slope_pct`, `runway_condition`, `cl_max_landing`, `wing_area_m2`, `vref_factor`, `approach_angle_deg` |
+| `fuel_reserve_calculator` | Calculate required fuel reserves per regulations | `regulation`, `trip_fuel_kg`, `cruise_fuel_flow_kg_hr`, `flight_time_min`, `alternate_fuel_kg`, `holding_altitude_ft` |
+| `kalman_filter_state_estimation` | State estimation using Kalman filter | `initial_state`, `initial_covariance`, `process_noise`, `measurement_noise`, `measurements`, `dynamics_model`, `dt`, `initial_time` |
+| `lqr_controller_design` | Design LQR optimal controller | `A_matrix`, `B_matrix`, `Q_matrix`, `R_matrix`, `state_names`, `input_names` |
 
 ### Claude Desktop Setup
 

@@ -63,9 +63,9 @@ aerospace-mcp-cli run landing_performance \
   --temperature_c 15 \
   --runway_condition wet
 
-# Fuel reserves for FAR 121 operations
+# Fuel reserves for FAR 121 flag operations (14 CFR 121.645)
 aerospace-mcp-cli run fuel_reserve_calculator \
-  --regulation FAR_121 \
+  --regulation FAR_121_FLAG \
   --trip_fuel_kg 15000 \
   --cruise_fuel_flow_kg_hr 2500 \
   --flight_time_min 360 \
@@ -154,7 +154,7 @@ print(result)
 - `--runway_condition` (one of: dry, wet, contaminated; default: dry)
 
 ### fuel_reserve_calculator
-- `--regulation` (one of: FAR_91, FAR_121, JAR_OPS, ICAO; required)
+- `--regulation` (required): one of `FAR_91_IFR`, `FAR_91_VFR_DAY`, `FAR_91_VFR_NIGHT`, `FAR_121_DOMESTIC` (14 CFR 121.639), `FAR_121_FLAG` (121.645), `JAR_OPS`, `ICAO`; `FAR_91` and `FAR_121` are aliases for `FAR_91_IFR` and `FAR_121_DOMESTIC`
 - `--trip_fuel_kg` (float, required): Planned trip fuel in kg
 - `--cruise_fuel_flow_kg_hr` (float, required): Cruise fuel flow rate
 - `--flight_time_min` (float, required): Planned flight time in minutes

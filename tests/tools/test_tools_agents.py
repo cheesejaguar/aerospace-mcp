@@ -1,5 +1,25 @@
 from __future__ import annotations
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _restore_agents_module_flags():
+    """These tests reload ``agents`` under a patched environment.
+
+    ``monkeypatch`` restores the environment but not the module constants the
+    reload computed from it, and the registry holds the same module's
+    functions, so restore the flags or later tests see LLM tools enabled.
+    """
+    import aerospace_mcp.tools.agents as agents
+
+    saved = {
+        name: getattr(agents, name) for name in ("LLM_TOOLS_ENABLED", "_AGENT_MODEL")
+    }
+    yield
+    for name, value in saved.items():
+        setattr(agents, name, value)
+
 
 def test_agents_errors(monkeypatch):
     import importlib

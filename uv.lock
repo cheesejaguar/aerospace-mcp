@@ -56,7 +56,6 @@ all = [
     { name = "ambiance" },
     { name = "astropy" },
     { name = "control" },
-    { name = "filterpy" },
     { name = "rocketpy" },
     { name = "skyfield" },
     { name = "spiceypy" },
@@ -76,7 +75,6 @@ dev = [
 ]
 gnc = [
     { name = "control" },
-    { name = "filterpy" },
 ]
 rockets = [
     { name = "rocketpy" },
@@ -116,8 +114,6 @@ requires-dist = [
     { name = "control", marker = "extra == 'gnc'", specifier = ">=0.9.0" },
     { name = "fastapi", specifier = ">=0.104.0" },
     { name = "fastmcp", specifier = ">=2.11.3" },
-    { name = "filterpy", marker = "extra == 'all'", specifier = ">=1.4.5" },
-    { name = "filterpy", marker = "extra == 'gnc'", specifier = ">=1.4.5" },
     { name = "geographiclib", specifier = ">=2.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.25.0" },
     { name = "litellm", specifier = ">=1.76.1" },
@@ -958,17 +954,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/1d/65/ce7f1b70157833bf3
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b5/36/7fb70f04bf00bc646cd5bb45aa9eddb15e19437a28b8fb2b4a5249fac770/filelock-3.20.3-py3-none-any.whl", hash = "sha256:4b0dda527ee31078689fc205ec4f1c1bf7d56cf88b6dc9426c4f230e46c2dce1", size = 16701, upload-time = "2026-01-09T17:55:04.334Z" },
 ]
-
-[[package]]
-name = "filterpy"
-version = "1.4.5"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "matplotlib" },
-    { name = "numpy" },
-    { name = "scipy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f6/1d/ac8914360460fafa1990890259b7fa5ef7ba4cd59014e782e4ab3ab144d8/filterpy-1.4.5.zip", hash = "sha256:4f2a4d39e4ea601b9ab42b2db08b5918a9538c168cff1c6895ae26646f3d73b1", size = 177985, upload-time = "2018-10-10T22:38:24.63Z" }
 
 [[package]]
 name = "fonttools"
