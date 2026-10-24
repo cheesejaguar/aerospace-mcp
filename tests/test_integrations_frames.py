@@ -467,5 +467,126 @@ class TestBatchTransformations:
         assert results == []
 
 
+class TestPolarAxisGeodetic:
+    """ECEF -> geodetic on and near the polar axis (formerly divided by cos(lat))."""
+
+    POLAR_RADIUS = 6356752.314245  # WGS-84 b (NIMA TR8350.2, Table 3.1)
+
+    def test_pole_on_ellipsoid(self):
+        lat, lon, alt = _manual_ecef_to_geodetic(0.0, 0.0, self.POLAR_RADIUS)
+        assert lat == 90.0
+        assert abs(alt) < 1e-6
+
+    def test_pole_above_ellipsoid_and_south_pole(self):
+        _, _, alt = _manual_ecef_to_geodetic(0.0, 0.0, self.POLAR_RADIUS + 1000.0)
+        assert abs(alt - 1000.0) < 1e-6
+        lat, _, alt = _manual_ecef_to_geodetic(0.0, 0.0, -self.POLAR_RADIUS)
+        assert lat == -90.0
+        assert abs(alt) < 1e-6
+
+    def test_one_millimetre_off_axis(self):
+        # Old algorithm: alt = -1.36 m here (p / cos(lat) cancellation).
+        _, _, alt = _manual_ecef_to_geodetic(1e-3, 0.0, self.POLAR_RADIUS)
+        assert abs(alt) < 1e-6
+
+    def test_near_pole_round_trip(self):
+        x, y, z = _manual_geodetic_to_ecef(89.9999, 10.0, 1000.0)
+        lat, lon, alt = _manual_ecef_to_geodetic(x, y, z)
+        assert abs(lat - 89.9999) < 1e-10
+        assert abs(lon - 10.0) < 1e-10
+        assert abs(alt - 1000.0) < 1e-6  # old algorithm: 999.954 m
+
+    def test_origin_does_not_crash(self):
+        lat, lon, alt = _manual_ecef_to_geodetic(0.0, 0.0, 0.0)
+        assert math.isfinite(lat) and math.isfinite(alt)
+
+    def test_vectorized_matches_scalar_at_pole(self):
+        pts = [(0.0, 0.0, self.POLAR_RADIUS), (1e-3, 0.0, -self.POLAR_RADIUS)]
+        lat, _, alt = _manual_ecef_to_geodetic_vectorized(*zip(*pts, strict=True))
+        for i, p in enumerate(pts):
+            s_lat, _, s_alt = _manual_ecef_to_geodetic(*p)
+            assert abs(float(lat[i]) - s_lat) < 1e-12
+            assert abs(float(alt[i]) - s_alt) < 1e-6
+
+
+class TestFrameAliasesAndChaining:
+    """Frames documented as supported must not raise NotImplementedError."""
+
+    EPOCH = "2024-03-20T12:00:00Z"
+
+    def test_identity_aliases(self):
+        xyz = [7e6, 1e6, 2e6]
+        for src, dst in [("ECI", "GCRS"), ("ITRF", "ECEF"), ("ECEF", "ITRF")]:
+            r = transform_frames(xyz, src, dst, self.EPOCH)
+            if not ASTROPY_AVAILABLE:
+                assert [r.x, r.y, r.z] == xyz
+            assert r.frame == dst
+
+    def test_itrf_geodetic(self):
+        r = transform_frames([6378137.0, 0.0, 0.0], "ITRF", "GEODETIC")
+        assert (r.x, r.y) == (0.0, 0.0) and abs(r.z) < 1e-9
+        back = transform_frames([0.0, 0.0, 0.0], "GEODETIC", "ITRF")
+        assert abs(back.x - 6378137.0) < 1e-9 and back.frame == "ITRF"
+
+    def test_geodetic_eci_round_trip(self):
+        geo = {"latitude_deg": 10.0, "longitude_deg": 20.0, "altitude_m": 500e3}
+        eci = transform_frames(geo, "GEODETIC", "ECI", self.EPOCH)
+        # Earth rotation preserves the radius and the z component
+        ecef = transform_frames(geo, "GEODETIC", "ECEF")
+        assert (
+            abs(
+                math.dist([eci.x, eci.y, eci.z], [0, 0, 0])
+                - math.dist([ecef.x, ecef.y, ecef.z], [0, 0, 0])
+            )
+            < 1e-6
+        )
+        back = transform_frames([eci.x, eci.y, eci.z], "ECI", "GEODETIC", self.EPOCH)
+        assert abs(back.x - 10.0) < 1e-9
+        assert abs(back.y - 20.0) < 1e-9
+        assert abs(back.z - 500e3) < 1e-6
+
+    def test_dict_inputs(self):
+        a = transform_frames({"x": 1.0, "y": 2.0, "z": 3.0}, "ECEF", "ECEF")
+        b = transform_frames({"x_m": 1.0, "y_m": 2.0, "z_m": 3.0}, "ECEF", "ECEF")
+        assert (a.x, a.y, a.z) == (b.x, b.y, b.z) == (1.0, 2.0, 3.0)
+        with pytest.raises(ValueError, match="coordinates dict must contain"):
+            transform_frames({"lat": 1}, "GEODETIC", "ECEF")
+        with pytest.raises(ValueError, match="finite"):
+            transform_frames([float("nan"), 0, 0], "ECEF", "GEODETIC")
+        with pytest.raises(ValueError, match="Latitude"):
+            transform_frames([91.0, 0, 0], "GEODETIC", "ECI")
+
+    def test_none_epoch_means_j2000(self):
+        a = transform_frames([7e6, 0, 0], "ECI", "ECEF", None)
+        b = transform_frames([7e6, 0, 0], "ECI", "ECEF", "2000-01-01T12:00:00")
+        assert (a.x, a.y, a.z) == (b.x, b.y, b.z)
+        assert a.epoch == "2000-01-01T12:00:00"
+
+    def test_invalid_epoch(self):
+        with pytest.raises(ValueError, match="Invalid epoch"):
+            transform_frames([7e6, 0, 0], "ECI", "ECEF", "yesterday")
+
+    def test_vallado_example_3_15(self):
+        """Vallado (2013) Example 3-15 IAU-76/FK5 reduction, 2004-04-06 07:51:28.386 UTC.
+
+        r_ITRF = (-1033.4793830, 7901.2952754, 6380.3565958) km and
+        r_GCRF = (5102.508958, 6123.011401, 6378.136928) km.  The manual path
+        neglects nutation, UT1-UTC and polar motion (~140 m here); without the
+        precession term the error would be ~10 km.
+        """
+        epoch = "2004-04-06T07:51:28.386009"
+        r_itrf = [-1033.4793830e3, 7901.2952754e3, 6380.3565958e3]
+        r_gcrf = [5102.508958e3, 6123.011401e3, 6378.136928e3]
+        out = transform_frames(r_itrf, "ITRF", "GCRS", epoch)
+        assert math.dist([out.x, out.y, out.z], r_gcrf) < 300.0
+        back = transform_frames(r_gcrf, "GCRS", "ITRF", epoch)
+        assert math.dist([back.x, back.y, back.z], r_itrf) < 300.0
+
+    def test_frame_info_notes_are_current(self):
+        notes = " ".join(get_frame_info()["notes"])
+        assert "ignore Earth rotation" not in notes
+        assert "GMST" in notes
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
