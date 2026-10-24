@@ -308,11 +308,16 @@ class TestUAVEnergyAnalysis:
 
         # Check basic results
         assert result.flight_time_min > 0
-        assert result.range_km is None  # No range calculation for multirotor
+        assert result.aircraft_type == "multirotor"
+        # Range at the 8 m/s cruise speed (previously None for multirotors)
+        assert result.range_km == pytest.approx(
+            8.0 * result.flight_time_min * 60 / 1000, rel=1e-9
+        )
         assert result.hover_time_min > 0  # Should have hover time
-        assert (
-            result.hover_time_min == result.flight_time_min
-        )  # Should be equal for multirotor
+        # Hover time is computed in hover, not at the cruise speed (it used
+        # to equal the flight time). Induced power drops in forward flight
+        # (Glauert), so hovering endurance is shorter than at 8 m/s.
+        assert result.hover_time_min < result.flight_time_min
 
         # Multirotor typically has shorter flight times than fixed-wing
         assert 5 < result.flight_time_min < 60  # Typical multirotor endurance
@@ -371,12 +376,14 @@ class TestUAVEnergyAnalysis:
 
         # Larger battery should provide longer flight time
         assert large_result.flight_time_min > small_result.flight_time_min
-        # Should be roughly proportional to capacity (accounting for increased mass)
         capacity_ratio = large_battery.capacity_ah / small_battery.capacity_ah
         time_ratio = large_result.flight_time_min / small_result.flight_time_min
 
-        # Time ratio should be less than capacity ratio due to increased battery mass
-        assert 1.5 < time_ratio < capacity_ratio
+        # UAVConfiguration.mass_kg is the total mass (battery included), so
+        # with the same configuration the flight time is proportional to the
+        # capacity. (The old assertion time_ratio < capacity_ratio relied on
+        # floating-point noise: the model never added battery mass.)
+        assert time_ratio == pytest.approx(capacity_ratio, rel=1e-9)
 
     def test_velocity_effects(self):
         """Test velocity effects on energy consumption."""
@@ -590,18 +597,18 @@ class TestIntegration:
         assert energy_result.battery_energy_wh > energy_result.energy_consumed_wh
         assert energy_result.efficiency_overall > 0.7  # Should be reasonably efficient
 
-    @pytest.mark.skipif(not AEROSANDBOX_AVAILABLE, reason="AeroSandbox not available")
-    def test_aerosandbox_propeller_integration(self):
-        """Test AeroSandbox propeller integration if available."""
+    def test_no_optional_propeller_backend(self):
+        """The built-in BEMT is the only propeller model.
+
+        AeroSandbox 4.x has no ``Propeller`` class, so the former AeroSandbox
+        path always failed and silently fell back; it was removed.
+        """
+        assert AEROSANDBOX_AVAILABLE is False
         geometry = PropellerGeometry(diameter_m=0.254, pitch_m=0.178, num_blades=2)
-
         results = propeller_bemt_analysis(geometry, [3000, 4000], 10.0)
-
-        # Should get more accurate results from AeroSandbox
         assert len(results) == 2
         for result in results:
-            assert isinstance(result.efficiency, float)
-            assert 0 <= result.efficiency <= 1.0
+            assert 0 <= result.efficiency <= 0.9
 
     def test_error_handling_propellers(self):
         """Test error handling for invalid inputs."""
