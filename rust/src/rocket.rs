@@ -1,16 +1,31 @@
 //! 3-DOF rocket ascent simulation and performance analysis.
 //!
-//! Ported from the original pure-Python `aerospace_mcp.integrations.rockets`
-//! with the same model and operation order, so results match the Python
-//! implementation to rounding:
+//! Ported from the original pure-Python `aerospace_mcp.integrations.rockets`;
+//! the integrator and force model are unchanged from that implementation:
 //!
 //! - Forward Euler integration, flat Earth, constant gravity.
 //! - Thrust along the launch angle for the first 5 s, vertical afterwards.
 //! - Drag `D = Cd * A_ref * q` opposing the velocity, `q = 0.5 * rho * V^2`.
-//! - Constant mass flow `m_prop / t_burn` while thrust is non-zero.
 //! - Density and speed of sound interpolated from an atmosphere table built
-//!   on the Python side (so the ISA / ambiance model stays single-sourced),
-//!   with an exponential fallback above the table.
+//!   on the Python side (so the ISA / ambiance model stays single-sourced).
+//!
+//! Three parts of the model were corrected after the port, so results no
+//! longer match the Python original for thrusted flights (see
+//! `tests/test_native_parity.py`):
+//!
+//! - Thrust and propellant flow come from the exact integral of the
+//!   interpolated thrust curve over each step ([`ThrustProfile`]), so the
+//!   impulse delivered equals the curve's impulse however its knots fall on
+//!   the time grid.
+//! - Mass flow is proportional to thrust, `mdot = F * m_prop / I_total`
+//!   (constant effective exhaust velocity), so exactly the propellant mass
+//!   is consumed by the end of the burn. The original used a constant
+//!   `m_prop / t_burn` with `t_burn` the last sample with positive thrust,
+//!   which emptied the tank after 1 s for curves like `[[0, F], [6, 0]]`.
+//! - Above the atmosphere table, density decays exponentially from the top
+//!   row and the speed of sound stays at the top row's value. The original
+//!   restarted from sea-level formulas there, so density and Mach number
+//!   jumped by a factor of ~3 at the table top.
 
 use std::f64::consts::PI;
 use std::fmt;
@@ -34,12 +49,27 @@ pub struct Geometry {
     pub thrust_curve: Vec<(f64, f64)>,
 }
 
+/// Density scale height (m) used above the atmosphere table when the table's
+/// top interval cannot provide one (a single row, or density not decreasing
+/// there). 7 km is typical of the 50-80 km layer where such tables end.
+pub const FALLBACK_SCALE_HEIGHT_M: f64 = 7000.0;
+
 /// Tabulated atmosphere used for density / speed-of-sound lookups.
+///
+/// Inside the table, values are interpolated linearly. Above it, density
+/// continues from the top row as `rho_top * exp(-(h - h_top) / H)` with `H`
+/// the local density scale height of the table's top interval,
+/// `(h_n - h_{n-1}) / ln(rho_{n-1} / rho_n)` (about 6 km for an ISA table
+/// ending at 80 km), and the speed of sound stays at the top row's value.
+/// Both are continuous at the table top, so max-Q and max-Mach do not jump
+/// when a trajectory leaves the table. Below the first row the first row's
+/// values are used.
 #[derive(Debug, Clone)]
 pub struct AtmosphereTable {
     altitudes_m: Vec<f64>,
     densities_kg_m3: Vec<f64>,
     speeds_of_sound_ms: Vec<f64>,
+    scale_height_m: f64,
 }
 
 impl AtmosphereTable {
@@ -56,37 +86,60 @@ impl AtmosphereTable {
         {
             return Err("atmosphere table columns must have equal length".into());
         }
+        if altitudes_m.iter().any(|h| !h.is_finite()) {
+            return Err("atmosphere table altitudes must be finite".into());
+        }
         if altitudes_m.windows(2).any(|w| !(w[0] < w[1])) {
             return Err("atmosphere table altitudes must be strictly increasing".into());
         }
+        if densities_kg_m3
+            .iter()
+            .chain(&speeds_of_sound_ms)
+            .any(|v| !(v.is_finite() && *v > 0.0))
+        {
+            return Err("atmosphere table densities and speeds of sound must be > 0".into());
+        }
+
+        let n = altitudes_m.len();
+        let scale_height_m = if n >= 2 && densities_kg_m3[n - 2] > densities_kg_m3[n - 1] {
+            (altitudes_m[n - 1] - altitudes_m[n - 2])
+                / (densities_kg_m3[n - 2] / densities_kg_m3[n - 1]).ln()
+        } else {
+            FALLBACK_SCALE_HEIGHT_M
+        };
         Ok(Self {
             altitudes_m,
             densities_kg_m3,
             speeds_of_sound_ms,
+            scale_height_m,
         })
     }
 
-    fn max_altitude_m(&self) -> f64 {
-        self.altitudes_m[self.altitudes_m.len() - 1]
+    fn top(&self) -> usize {
+        self.altitudes_m.len() - 1
     }
 
     /// `(density, speed_of_sound)` at `altitude_m`.
-    fn lookup(&self, altitude_m: f64) -> (f64, f64) {
-        if (0.0..=self.max_altitude_m()).contains(&altitude_m) {
+    pub fn lookup(&self, altitude_m: f64) -> (f64, f64) {
+        let top = self.top();
+        let h_top = self.altitudes_m[top];
+        if altitude_m <= h_top {
             (
                 interp(altitude_m, &self.altitudes_m, &self.densities_kg_m3),
                 interp(altitude_m, &self.altitudes_m, &self.speeds_of_sound_ms),
             )
         } else {
-            // Fallback for altitudes beyond the table.
-            let rho = 1.225 * (-altitude_m / 8400.0).exp();
-            let a = 343.0 * ((288.15 - 0.0065 * altitude_m) / 288.15).max(0.1).sqrt();
-            (rho, a)
+            let rho =
+                self.densities_kg_m3[top] * (-(altitude_m - h_top) / self.scale_height_m).exp();
+            (rho, self.speeds_of_sound_ms[top])
         }
     }
 }
 
 /// One sample of the trajectory time history.
+///
+/// State (time, altitude, velocity, mass) is at the start of a step; the
+/// forces and the acceleration are the ones applied over that step.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TrajectoryPoint {
     pub time_s: f64,
@@ -94,6 +147,7 @@ pub struct TrajectoryPoint {
     pub velocity_ms: f64,
     pub acceleration_ms2: f64,
     pub mass_kg: f64,
+    /// Mean thrust of the curve over the step starting at `time_s`.
     pub thrust_n: f64,
     pub drag_n: f64,
     pub mach: f64,
@@ -111,7 +165,11 @@ pub struct Performance {
     pub burnout_altitude_m: f64,
     pub burnout_velocity_ms: f64,
     pub burnout_time_s: f64,
+    /// Impulse the integrator applied: each sample's thrust held until the
+    /// next sample.
     pub total_impulse_ns: f64,
+    /// `total_impulse / (propellant consumed * g0)`, both over the whole
+    /// trajectory.
     pub specific_impulse_s: f64,
 }
 
@@ -139,6 +197,7 @@ pub enum SimError {
     TimeStep,
     Duration,
     TooManySteps,
+    LaunchAngle,
     Geometry(&'static str),
 }
 
@@ -148,6 +207,7 @@ impl fmt::Display for SimError {
             SimError::TimeStep => "dt_s must be between 0.001 and 10 s",
             SimError::Duration => "max_time_s must be > 0 and <= 3600 s",
             SimError::TooManySteps => "too many integration steps (max 500000); increase dt_s",
+            SimError::LaunchAngle => "launch_angle_deg must be finite",
             SimError::Geometry(msg) => msg,
         })
     }
@@ -175,6 +235,80 @@ pub fn thrust_at_time(curve: &[(f64, f64)], time_s: f64) -> f64 {
                 return 0.0;
             }
             interp_pairs(time_s, curve)
+        }
+    }
+}
+
+/// Cumulative impulse of a thrust curve, `I(t)` = integral of
+/// [`thrust_at_time`] from 0 to `t`.
+///
+/// Thrust before `t = 0` is never simulated, so it is not counted. Curve
+/// times must be non-decreasing (as [`Geometry::validate`] requires);
+/// duplicate times are steps, as in [`thrust_at_time`].
+#[derive(Debug, Clone)]
+pub struct ThrustProfile<'a> {
+    curve: &'a [(f64, f64)],
+    /// Integral of the curve from its first sample to each sample.
+    prefix: Vec<f64>,
+    /// The same integral up to `t = 0`, subtracted so `I(0) = 0`.
+    before_zero: f64,
+}
+
+impl<'a> ThrustProfile<'a> {
+    pub fn new(curve: &'a [(f64, f64)]) -> Self {
+        let mut prefix = Vec::with_capacity(curve.len());
+        let mut total = 0.0;
+        for (i, &(t, f)) in curve.iter().enumerate() {
+            if i > 0 {
+                let (t0, f0) = curve[i - 1];
+                total += 0.5 * (f0 + f) * (t - t0);
+            }
+            prefix.push(total);
+        }
+        let mut profile = Self {
+            curve,
+            prefix,
+            before_zero: 0.0,
+        };
+        if curve.len() >= 2 {
+            profile.before_zero = profile.integral_since_first_sample(0.0);
+        }
+        profile
+    }
+
+    /// Integral from the first sample to `t`, for curves of 2+ samples.
+    fn integral_since_first_sample(&self, t: f64) -> f64 {
+        let n = self.curve.len();
+        if t <= self.curve[0].0 {
+            return 0.0;
+        }
+        if t >= self.curve[n - 1].0 {
+            return self.prefix[n - 1];
+        }
+        // t lies strictly inside segment j (so t1 > t0).
+        let j = self.curve.partition_point(|&(ti, _)| ti <= t) - 1;
+        let (t0, f0) = self.curve[j];
+        let (t1, f1) = self.curve[j + 1];
+        let f = f0 + (f1 - f0) * ((t - t0) / (t1 - t0));
+        self.prefix[j] + 0.5 * (f0 + f) * (t - t0)
+    }
+
+    /// Impulse delivered from `t = 0` to `t` (N s); `t` must be >= 0.
+    pub fn impulse_to(&self, t: f64) -> f64 {
+        match self.curve {
+            [] => 0.0,
+            // Constant thrust up to the sample time.
+            [(t0, f0)] => f0 * t.min(*t0).max(0.0),
+            _ => self.integral_since_first_sample(t) - self.before_zero,
+        }
+    }
+
+    /// Total impulse of the curve over `t >= 0` (N s).
+    pub fn total_impulse(&self) -> f64 {
+        match self.curve {
+            [] => 0.0,
+            [(t0, f0)] => f0 * t0.max(0.0),
+            _ => self.prefix[self.curve.len() - 1] - self.before_zero,
         }
     }
 }
@@ -207,6 +341,16 @@ impl Geometry {
         if self.cd < 0.0 {
             return Err(SimError::Geometry("cd must be >= 0"));
         }
+        if self.thrust_curve.iter().any(|(_, f)| *f < 0.0) {
+            return Err(SimError::Geometry(
+                "thrust_curve thrust values must be >= 0",
+            ));
+        }
+        if self.thrust_curve.windows(2).any(|w| w[1].0 < w[0].0) {
+            return Err(SimError::Geometry(
+                "thrust_curve times must be non-decreasing",
+            ));
+        }
         Ok(())
     }
 }
@@ -221,6 +365,9 @@ pub fn validate(opts: &SimOptions) -> Result<(), SimError> {
     }
     if opts.max_time_s / opts.dt_s > 500_000.0 {
         return Err(SimError::TooManySteps);
+    }
+    if !opts.launch_angle_deg.is_finite() {
+        return Err(SimError::LaunchAngle);
     }
     Ok(())
 }
@@ -262,23 +409,21 @@ pub fn simulate_into(
 
     let drag_area = PI * (geometry.diameter_m / 2.0).powi(2);
 
-    // Constant mass flow over the burn; the burn time is the last time with
-    // positive thrust, but never less than 1 s.
-    let mut mass_flow_rate = 0.0;
-    if !geometry.thrust_curve.is_empty() {
-        let burn_time_total = geometry
-            .thrust_curve
-            .iter()
-            .filter(|(_, f)| *f > 0.0)
-            .map(|(t, _)| *t)
-            .fold(1.0_f64, f64::max);
-        if burn_time_total > 0.0 {
-            mass_flow_rate = geometry.propellant_mass_kg / burn_time_total;
-        }
-    }
+    // Each step applies the curve's mean thrust over the step, so the impulse
+    // delivered telescopes to exactly I(t). Propellant flows in proportion to
+    // thrust (mdot = F * m_prop / I_total, a constant effective exhaust
+    // velocity), so the mass after impulse I is
+    // m_dry + m_prop * (1 - I / I_total): the tank is empty exactly when the
+    // curve ends.
+    let profile = ThrustProfile::new(&geometry.thrust_curve);
+    let total_impulse = profile.total_impulse();
+    let mut impulse = 0.0_f64;
 
     while time <= opts.max_time_s && altitude >= 0.0 {
-        let thrust = thrust_at_time(&geometry.thrust_curve, time);
+        let next_time = time + dt;
+        let next_impulse = profile.impulse_to(next_time);
+        // (Clamped: rounding in I(t) can leave -1e-12 N where the curve is 0.)
+        let thrust = ((next_impulse - impulse) / dt).max(0.0);
         let (rho, speed_of_sound) = atmosphere.lookup(altitude);
 
         let velocity_total = (velocity_vertical.powi(2) + velocity_horizontal.powi(2)).sqrt();
@@ -325,11 +470,13 @@ pub fn simulate_into(
         velocity_horizontal += accel_horizontal * dt;
         altitude += velocity_vertical * dt;
 
-        if thrust > 0.0 && mass_flow_rate > 0.0 {
-            mass = geometry.dry_mass_kg.max(mass - mass_flow_rate * dt);
+        if total_impulse > 0.0 {
+            let remaining = (1.0 - next_impulse / total_impulse).max(0.0);
+            mass = geometry.dry_mass_kg + geometry.propellant_mass_kg * remaining;
         }
 
-        time += dt;
+        impulse = next_impulse;
+        time = next_time;
 
         // Past apogee and descending.
         if altitude > 0.0 && velocity_vertical < -1.0 {
@@ -363,9 +510,11 @@ pub fn analyze(trajectory: &[TrajectoryPoint]) -> Performance {
         if p.thrust_n > 100.0 {
             last_thrust_idx = Some(i);
         }
+        // A sample's thrust acts until the next sample, as in the Euler
+        // update, so this is the impulse the integrator applied.
         if i > 0 {
             let prev = &trajectory[i - 1];
-            total_impulse += (prev.thrust_n + p.thrust_n) / 2.0 * (p.time_s - prev.time_s);
+            total_impulse += prev.thrust_n * (p.time_s - prev.time_s);
         }
     }
 
@@ -376,7 +525,8 @@ pub fn analyze(trajectory: &[TrajectoryPoint]) -> Performance {
     };
     let burnout = &trajectory[burnout_idx];
 
-    let propellant_used = first.mass_kg - burnout.mass_kg;
+    // Propellant consumed over the same samples as the impulse.
+    let propellant_used = first.mass_kg - trajectory[n - 1].mass_kg;
     let specific_impulse = if propellant_used > 0.0 {
         total_impulse / (propellant_used * G0)
     } else {
@@ -460,10 +610,104 @@ pub(crate) mod tests {
         let perf = analyze(&traj);
         assert!(perf.max_altitude_m > 1000.0);
         assert!(perf.apogee_time_s > perf.burnout_time_s);
-        // 1800 N for ~6 s plus the 0.1 s ramp-down sampled at 0.1 s.
-        assert!((perf.total_impulse_ns - 1800.0 * 6.05).abs() < 1800.0 * 0.11);
+        // 1800 N for 6 s plus the 0.1 s ramp-down, delivered exactly.
+        assert!((perf.total_impulse_ns - 1800.0 * 6.05).abs() < 1e-6);
         // Mass never drops below dry mass.
         assert!(traj.iter().all(|p| p.mass_kg >= 15.0));
+    }
+
+    #[test]
+    fn thrust_profile_integrates_the_interpolated_curve() {
+        let curve = [(0.0, 1000.0), (2.0, 3000.0), (4.0, 0.0)];
+        let p = ThrustProfile::new(&curve);
+        assert_eq!(p.total_impulse(), 4000.0 + 3000.0);
+        assert_eq!(p.impulse_to(0.0), 0.0);
+        assert_eq!(p.impulse_to(1.0), 1500.0);
+        assert_eq!(p.impulse_to(2.0), 4000.0);
+        assert_eq!(p.impulse_to(10.0), 7000.0);
+
+        // Duplicate knots are a step; samples before t = 0 don't count.
+        let step = [(-1.0, 500.0), (1.0, 500.0), (1.0, 100.0), (3.0, 100.0)];
+        let p = ThrustProfile::new(&step);
+        assert_eq!(p.total_impulse(), 500.0 + 200.0);
+        assert_eq!(p.impulse_to(2.0), 600.0);
+
+        // One sample: constant thrust up to its time.
+        assert_eq!(ThrustProfile::new(&[(4.0, 250.0)]).total_impulse(), 1000.0);
+        assert_eq!(ThrustProfile::new(&[(4.0, 250.0)]).impulse_to(2.0), 500.0);
+        assert_eq!(ThrustProfile::new(&[]).total_impulse(), 0.0);
+
+        // Matches a fine midpoint sum of thrust_at_time.
+        let curve = [(0.3, 40000.0), (2.0, 38000.0), (20.0, 30000.0), (25.0, 0.0)];
+        let n = 250_000;
+        let h = 25.0 / f64::from(n);
+        let sum: f64 = (0..n)
+            .map(|k| thrust_at_time(&curve, (f64::from(k) + 0.5) * h) * h)
+            .sum();
+        let total = ThrustProfile::new(&curve).total_impulse();
+        assert!((sum - total).abs() < 1e-6 * total, "{sum} vs {total}");
+    }
+
+    /// Mass flow proportional to thrust: the tank is empty exactly at the
+    /// end of the curve, whatever its shape, and Isp = I / (m_prop * g0).
+    #[test]
+    fn propellant_is_consumed_over_the_whole_burn() {
+        let atm = test_atmosphere();
+        for (curve, burn_end) in [
+            (vec![(0.0, 10800.0), (6.0, 0.0)], 6.0),
+            (vec![(0.0, 4000.0), (5.0, 0.0)], 5.0),
+            (vec![(0.0, 1800.0), (6.0, 1800.0), (6.1, 0.0)], 6.1),
+            (
+                vec![(0.0, 900.0), (3.0, 2500.0), (3.0, 1000.0), (7.25, 0.0)],
+                7.25,
+            ),
+        ] {
+            let mut g = test_rocket();
+            g.thrust_curve = curve;
+            let i_total = ThrustProfile::new(&g.thrust_curve).total_impulse();
+            for dt_s in [0.1, 0.03] {
+                let opts = SimOptions {
+                    dt_s,
+                    ..SimOptions::default()
+                };
+                let traj = simulate(&g, &atm, &opts).unwrap();
+                for p in &traj {
+                    if p.time_s < burn_end - 1e-9 {
+                        assert!(
+                            p.mass_kg > 15.0,
+                            "{:?} empty at {}",
+                            g.thrust_curve,
+                            p.time_s
+                        );
+                    } else {
+                        assert!((p.mass_kg - 15.0).abs() < 1e-9, "{p:?}");
+                    }
+                }
+                let perf = analyze(&traj);
+                assert!((perf.total_impulse_ns - i_total).abs() < 1e-6 * i_total);
+                let isp = i_total / (60.0 * G0);
+                assert!((perf.specific_impulse_s - isp).abs() < 1e-9 * isp);
+            }
+        }
+    }
+
+    #[test]
+    fn atmosphere_is_continuous_at_the_table_top() {
+        let atm = test_atmosphere();
+        let (rho_top, a_top) = atm.lookup(50_000.0);
+        let (rho_above, a_above) = atm.lookup(50_000.0 + 1e-6);
+        assert!((rho_above / rho_top - 1.0).abs() < 1e-9);
+        assert_eq!(a_above, a_top);
+        // The test table is exactly exponential with H = 8500 m, so the
+        // extrapolation reproduces it.
+        let (rho, _) = atm.lookup(70_000.0);
+        assert!((rho / (1.225 * (-70_000.0_f64 / 8500.0).exp()) - 1.0).abs() < 1e-9);
+        // A one-row table falls back to the documented scale height.
+        let flat = AtmosphereTable::new(vec![0.0], vec![1.0], vec![300.0]).unwrap();
+        let (rho, a) = flat.lookup(FALLBACK_SCALE_HEIGHT_M);
+        assert!((rho - (-1.0_f64).exp()).abs() < 1e-12);
+        assert_eq!(a, 300.0);
+        assert!(AtmosphereTable::new(vec![0.0], vec![0.0], vec![300.0]).is_err());
     }
 
     #[test]
@@ -493,5 +737,19 @@ pub(crate) mod tests {
         let mut g = test_rocket();
         g.thrust_curve.push((7.0, f64::INFINITY));
         assert!(simulate(&g, &atm, &opts).is_err());
+        let mut g = test_rocket();
+        g.thrust_curve[1].1 = -1.0;
+        assert!(simulate(&g, &atm, &opts).is_err());
+        let mut g = test_rocket();
+        g.thrust_curve.swap(0, 1);
+        assert!(simulate(&g, &atm, &opts).is_err());
+        let nan_angle = SimOptions {
+            launch_angle_deg: f64::NAN,
+            ..opts
+        };
+        assert_eq!(
+            simulate(&test_rocket(), &atm, &nan_angle),
+            Err(SimError::LaunchAngle)
+        );
     }
 }

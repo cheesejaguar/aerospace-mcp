@@ -441,7 +441,8 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         parameters={
             "target_altitude_m": "Target altitude in meters",
             "payload_mass_kg": "Payload mass in kg",
-            "propellant_type": "Type of propellant",
+            "propellant_type": "Type of propellant ('solid' or 'liquid')",
+            "design_margin": "Multiplier (>= 1) on the delta-V requirement, default 1.2",
         },
         keywords=[
             "rocket",
@@ -515,8 +516,9 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         category="orbits",
         parameters={
             "initial_state": "Initial orbital elements or state vector",
-            "time_span_s": "Propagation time span in seconds",
+            "propagation_time_s": "Propagation time span in seconds",
             "time_step_s": "Time step for propagation in seconds",
+            "max_points": "Maximum states returned (2-5000, default 200), evenly spaced",
         },
         keywords=[
             "orbit",
@@ -535,7 +537,8 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         parameters={
             "orbital_state": "Orbital state (elements or state vector)",
             "duration_s": "Duration for ground track calculation",
-            "step_s": "Time step for ground track points",
+            "time_step_s": "Time step for ground track points",
+            "max_points": "Maximum points returned (2-5000, default 200), evenly spaced",
         },
         keywords=[
             "ground",

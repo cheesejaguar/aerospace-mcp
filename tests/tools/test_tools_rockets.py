@@ -89,8 +89,10 @@ def test_rockets_exception_branches():
 
     sys.modules["aerospace_mcp.integrations.rockets"] = make_module(
         RocketGeometry=RocketGeometry,
+        RocketTrajectoryPoint=object,
         analyze_rocket_performance=_boom,
         rocket_3dof_trajectory=_boom,
+        simulate_rocket=_boom,
         estimate_rocket_sizing=_boom,
     )
     sys.modules["aerospace_mcp.integrations.trajopt"] = make_module(

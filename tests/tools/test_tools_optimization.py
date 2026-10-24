@@ -21,6 +21,7 @@ def test_optimization_success(monkeypatch):
         iterations = 3
         converged = True
         optimal_objective = 1.0
+        initial_objective = 2.0
         optimal_parameters = {"a": 1}
         performance = StubPerf()
 
@@ -136,6 +137,8 @@ def test_thrust_profile_and_porkchop_end_to_end():
     """Real native-backed run through the tool layer (no stubs)."""
     import json
 
+    import pytest
+
     from aerospace_mcp.tools.optimization import (
         optimize_thrust_profile,
         porkchop_plot_analysis,
@@ -157,7 +160,11 @@ def test_thrust_profile_and_porkchop_end_to_end():
         )
     )
     assert out["iterations"] >= 1
-    assert len(out["optimal_parameters"]["thrust_curve"]) == 4
+    # A step profile: start and end sample per segment.
+    assert len(out["optimal_parameters"]["thrust_curve"]) == 6
+    # Never worse than the constant-thrust start; the impulse target is met.
+    assert out["optimal_objective"] <= out["initial_objective"]
+    assert out["performance"]["total_impulse_ns"] == pytest.approx(10000.0)
 
     grid = json.loads(
         porkchop_plot_analysis(

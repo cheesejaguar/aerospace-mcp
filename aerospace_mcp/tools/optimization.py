@@ -64,15 +64,21 @@ def optimize_thrust_profile(
                 "iterations": result.iterations,
                 "converged": result.converged,
                 "optimal_objective": result.optimal_objective,
+                # Same objective for constant thrust (the starting profile);
+                # the optimum is never worse.
+                "initial_objective": result.initial_objective,
                 "optimal_parameters": result.optimal_parameters,
                 "performance": {
                     "max_altitude_m": result.performance.max_altitude_m,
                     "max_velocity_ms": result.performance.max_velocity_ms,
+                    "max_q_pa": result.performance.max_q_pa,
                     "total_impulse_ns": result.performance.total_impulse_ns,
                     "apogee_time_s": result.performance.apogee_time_s,
+                    "burnout_time_s": result.performance.burnout_time_s,
                 },
             },
             indent=2,
+            allow_nan=False,
         )
 
     except ImportError:
@@ -116,7 +122,7 @@ def trajectory_sensitivity_analysis(
         objective = (analysis_options or {}).get("objective", "max_altitude")
         result = _sensitivity(geometry, parameter_variations, objective=objective)
 
-        return json.dumps(result, indent=2)
+        return json.dumps(result, indent=2, allow_nan=False)
 
     except ImportError:
         return "Sensitivity analysis not available - install optimization packages"
@@ -286,7 +292,7 @@ def porkchop_plot_analysis(
             max_tof_days=options.get("max_tof_days", 400),
         )
 
-        return json.dumps(result, indent=2)
+        return json.dumps(result, indent=2, allow_nan=False)
 
     except ImportError:
         return (

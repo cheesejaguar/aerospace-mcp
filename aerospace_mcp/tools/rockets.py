@@ -50,29 +50,29 @@ def rocket_3dof_trajectory(
         where T is thrust (along the launch angle for the first 5 s, then
         vertical), D = 0.5 * rho(h) * v^2 * Cd * A_ref is aerodynamic drag
         opposing the velocity with altitude-dependent density, and m is the
-        instantaneous mass (constant mass flow during the burn). The run
-        ends at apogee, ground impact, or max_time_s.
+        instantaneous mass (mass flow proportional to thrust, so the
+        propellant runs out when the thrust curve ends). The run ends at
+        apogee, ground impact, or max_time_s.
     """
     try:
         from ..integrations.rockets import (
             RocketGeometry,
-            analyze_rocket_performance,
-        )
-        from ..integrations.rockets import (
-            rocket_3dof_trajectory as _simulate,
+            RocketTrajectoryPoint,
+            simulate_rocket,
         )
 
         # Create geometry object
         geometry = RocketGeometry(**rocket_geometry)
         options = simulation_options or {}
 
-        trajectory = _simulate(
+        # Performance and the few sample points printed below come straight
+        # from the native trajectory, without a Python object per step.
+        performance, trajectory = simulate_rocket(
             geometry,
             dt_s=options.get("dt_s", 0.1),
             max_time_s=options.get("max_time_s", 300.0),
             launch_angle_deg=launch_conditions.get("launch_angle_deg", 90.0),
         )
-        performance = analyze_rocket_performance(trajectory)
 
         # Format response
         result_lines = [
@@ -93,7 +93,7 @@ def rocket_3dof_trajectory(
         ]
 
         # Add trajectory points summary
-        if trajectory:
+        if len(trajectory):
             result_lines.extend(
                 [
                     "",
@@ -114,7 +114,7 @@ def rocket_3dof_trajectory(
 
             for i in sample_indices:
                 if i < len(trajectory):
-                    point = trajectory[i]
+                    point = RocketTrajectoryPoint(*trajectory[i])
                     result_lines.append(
                         f"{point.time_s:8.1f} {point.altitude_m:8.0f} {point.velocity_ms:10.1f} "
                         f"{point.acceleration_ms2:12.1f}"
@@ -134,6 +134,7 @@ def rocket_3dof_trajectory(
                 }
             },
             indent=2,
+            allow_nan=False,
         )
         result_lines.extend(["", "JSON Performance Data:", json_data])
 
@@ -158,11 +159,15 @@ def estimate_rocket_sizing(
         target_altitude_m: Target altitude in meters
         payload_mass_kg: Payload mass in kg
         propellant_type: Propellant type ('solid' or 'liquid')
-        design_margin: Design margin factor
+        design_margin: Multiplier (>= 1) on the delta-V requirement; the
+            default 1.2 sizes for 20% more delta-V than the loss-corrected
+            estimate
 
     Returns:
         JSON string with sizing estimates including propellant mass, dry mass,
-        total mass, and structural dimensions.
+        total mass, structural dimensions, the delta-V budget with and
+        without margin, and a feasibility flag (an infeasible single stage
+        reports null masses and the reason).
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings.
@@ -178,10 +183,13 @@ def estimate_rocket_sizing(
         from ..integrations.rockets import estimate_rocket_sizing as _sizing
 
         result = _sizing(
-            target_altitude_m, payload_mass_kg, propellant_type, design_margin
+            target_altitude_m,
+            payload_mass_kg,
+            propellant_type,
+            design_margin=design_margin,
         )
 
-        return json.dumps(result, indent=2)
+        return json.dumps(result, indent=2, allow_nan=False)
 
     except ImportError:
         return "Rocket sizing not available - install rocketry packages"
@@ -240,7 +248,7 @@ def optimize_launch_angle(
                 "range optimization cannot distinguish launch angles."
             )
 
-        return json.dumps(output, indent=2)
+        return json.dumps(output, indent=2, allow_nan=False)
 
     except ImportError:
         return "Launch optimization not available - install optimization packages"

@@ -5,7 +5,7 @@
 //! `RuntimeError`. Python-facing data models (dataclasses, JSON shaping)
 //! stay in `aerospace_mcp.integrations`.
 
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 
 use crate::lambert::{self, LambertError, LambertOptions};
@@ -88,7 +88,7 @@ struct PointArg {
 
 type PointTuple = (f64, f64, f64, f64, f64, f64, f64, f64, f64);
 type PerformanceTuple = (f64, f64, f64, f64, f64, f64, f64, f64, f64, f64);
-type ThrustProfileTuple = (Vec<f64>, f64, usize, bool, Vec<(f64, f64)>);
+type ThrustProfileTuple = (Vec<f64>, f64, f64, usize, bool, Vec<(f64, f64)>);
 
 fn point_tuple(p: &TrajectoryPoint) -> PointTuple {
     (
@@ -126,6 +126,70 @@ fn thrust_at_time(thrust_curve: Option<Vec<Vec<f64>>>, time_s: f64) -> PyResult<
         &self::thrust_curve(thrust_curve)?,
         time_s,
     ))
+}
+
+/// A simulated trajectory kept on the Rust side, so callers that only need
+/// the performance and a few samples don't convert every point to Python.
+#[pyclass(name = "RocketTrajectory", module = "aerospace_mcp._native", frozen)]
+struct PyRocketTrajectory {
+    points: Vec<TrajectoryPoint>,
+    performance: Performance,
+}
+
+#[pymethods]
+impl PyRocketTrajectory {
+    fn __len__(&self) -> usize {
+        self.points.len()
+    }
+
+    /// Sample `index` (negative counts from the end) as a 9-tuple in
+    /// `RocketTrajectoryPoint` field order.
+    fn __getitem__(&self, index: isize) -> PyResult<PointTuple> {
+        let n = self.points.len() as isize;
+        let i = if index < 0 { index + n } else { index };
+        if !(0..n).contains(&i) {
+            return Err(PyIndexError::new_err("trajectory index out of range"));
+        }
+        Ok(point_tuple(&self.points[i as usize]))
+    }
+
+    /// Performance metrics in `RocketPerformance` field order.
+    fn performance(&self) -> PerformanceTuple {
+        performance_tuple(&self.performance)
+    }
+
+    /// Every sample as 9-tuples in `RocketTrajectoryPoint` field order.
+    fn points(&self) -> Vec<PointTuple> {
+        self.points.iter().map(point_tuple).collect()
+    }
+}
+
+/// Simulate a 3-DOF ascent and analyze it in one call; returns a
+/// `RocketTrajectory`.
+#[pyfunction]
+#[pyo3(signature = (geometry, atmosphere, dt_s=0.1, max_time_s=300.0, launch_angle_deg=90.0))]
+fn simulate_rocket(
+    py: Python<'_>,
+    geometry: GeometryArg,
+    atmosphere: &PyAtmosphereTable,
+    dt_s: f64,
+    max_time_s: f64,
+    launch_angle_deg: f64,
+) -> PyResult<PyRocketTrajectory> {
+    let geometry = Geometry::try_from(geometry)?;
+    let atm = &atmosphere.0;
+    let opts = SimOptions {
+        dt_s,
+        max_time_s,
+        launch_angle_deg,
+    };
+    py.detach(|| {
+        rocket::simulate(&geometry, atm, &opts).map(|points| PyRocketTrajectory {
+            performance: rocket::analyze(&points),
+            points,
+        })
+    })
+    .map_err(value_error)
 }
 
 /// Simulate a 3-DOF ascent; returns one 9-tuple per sample, in
@@ -223,6 +287,8 @@ fn gradient_descent(
 
 /// Golden-section launch-angle optimization run entirely natively;
 /// returns `(angle_deg, minimized_objective)`.
+///
+/// Raises `ValueError` for invalid geometry, bounds or objective.
 #[pyfunction]
 fn optimize_launch_angle(
     py: Python<'_>,
@@ -234,13 +300,13 @@ fn optimize_launch_angle(
 ) -> PyResult<(f64, f64)> {
     let geometry = Geometry::try_from(geometry)?;
     let atm = &atmosphere.0;
-    Ok(py.detach(|| {
-        optimize::optimize_launch_angle(&geometry, atm, objective, lower_deg, upper_deg)
-    }))
+    py.detach(|| optimize::optimize_launch_angle(&geometry, atm, objective, lower_deg, upper_deg))
+        .map_err(value_error)
 }
 
 /// Thrust-profile optimization run entirely natively; returns
-/// `(multipliers, minimized_objective, iterations, converged, thrust_curve)`.
+/// `(multipliers, minimized_objective, initial_objective, iterations,
+/// converged, thrust_curve)`.
 #[pyfunction]
 fn optimize_thrust_profile(
     py: Python<'_>,
@@ -268,6 +334,7 @@ fn optimize_thrust_profile(
     Ok((
         r.multipliers,
         r.value,
+        r.initial_value,
         r.iterations,
         r.converged,
         r.thrust_curve,
@@ -436,7 +503,9 @@ fn lambert_izzo(
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAtmosphereTable>()?;
+    m.add_class::<PyRocketTrajectory>()?;
     m.add_function(wrap_pyfunction!(thrust_at_time, m)?)?;
+    m.add_function(wrap_pyfunction!(simulate_rocket, m)?)?;
     m.add_function(wrap_pyfunction!(rocket_trajectory, m)?)?;
     m.add_function(wrap_pyfunction!(analyze_performance, m)?)?;
     m.add_function(wrap_pyfunction!(golden_section_search, m)?)?;

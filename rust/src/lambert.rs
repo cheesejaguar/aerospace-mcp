@@ -8,11 +8,15 @@
 //! single-revolution initial guess (poliastro issue #1362). One deliberate
 //! difference: the Halley iteration that locates the minimum time of flight
 //! for multi-revolution transfers re-evaluates T(x) at every iterate, as in
-//! pykep, rather than reusing the starting value.
+//! pykep, rather than reusing the starting value. When the Householder
+//! iteration does not converge within `max_iterations` (near-0 degree
+//! transfers with |r1| ~ |r2| need hundreds of iterations), the time-of-flight
+//! equation is solved by bracketed bisection instead.
 //!
 //! Supports single- and multi-revolution transfers, prograde or retrograde
 //! motion, and both solution branches for multi-revolution cases.
 
+use std::convert::Infallible;
 use std::f64::consts::PI;
 use std::fmt;
 
@@ -205,7 +209,14 @@ fn find_xy(ll: f64, t: f64, opts: LambertOptions) -> Result<(f64, f64), LambertE
     }
 
     let x0 = initial_guess(t, ll, m, opts.low_path);
-    let x = householder(x0, t, ll, m, opts)?;
+    // Householder converges in a handful of iterations almost everywhere,
+    // but needs hundreds for near-0 degree transfers with |r1| ~ |r2|
+    // (lambda -> 1); fall back to bracketed bisection there.
+    let x = match householder(x0, t, ll, m, opts) {
+        Ok(x) => x,
+        Err(LambertError::NoConvergence) => bisect_tof(x0, t, ll, m)?,
+        Err(e) => return Err(e),
+    };
     Ok((x, compute_y(x, ll)))
 }
 
@@ -362,6 +373,90 @@ fn householder(
         x = next;
     }
     Err(LambertError::NoConvergence)
+}
+
+/// Safeguarded solve of T(x) = t0 by bisection, used when [`householder`]
+/// does not converge.
+///
+/// T(x) is monotonic on each solution branch (Izzo 2015, Sec. 2-3): for
+/// `m == 0` it decreases from +inf at x = -1 towards 0 as x grows; for
+/// `m >= 1` it decreases on (-1, x_min] and increases on [x_min, 1), going
+/// to +inf at both ends. The branch searched is the one holding the initial
+/// guess `x0`, i.e. the solution Householder was converging to. Bisection
+/// runs until the bracket cannot be split any further in f64.
+fn bisect_tof(x0: f64, t0: f64, ll: f64, m: u32) -> Result<f64, LambertError> {
+    let f = |x: f64| tof_equation(x, t0, ll, m);
+
+    // (neg, pos) with f(neg) < 0 < f(pos).
+    let (mut neg, mut pos) = if m == 0 {
+        let pos = approach(x0.min(0.0), -1.0, |x| f(x) > 0.0)?;
+        let mut neg = x0.max(0.0) + 1.0;
+        while !(f(neg) < 0.0) {
+            neg *= 2.0;
+            if !neg.is_finite() {
+                return Err(LambertError::NoConvergence);
+            }
+        }
+        (neg, pos)
+    } else {
+        let (x_min, f_min) = match crate::optimize::golden_section_search(
+            |x| Ok::<f64, Infallible>(f(x)),
+            -1.0,
+            1.0,
+            1e-12,
+            200,
+        ) {
+            Ok(r) => r,
+            Err(never) => match never {},
+        };
+        if f_min == 0.0 {
+            return Ok(x_min);
+        }
+        if !(f_min < 0.0) {
+            return Err(LambertError::NoConvergence);
+        }
+        let end = if x0 >= x_min { 1.0 } else { -1.0 };
+        (x_min, approach(x_min, end, |x| f(x) > 0.0)?)
+    };
+
+    loop {
+        let mid = 0.5 * (neg + pos);
+        if mid == neg || mid == pos {
+            break;
+        }
+        let fm = f(mid);
+        if fm.is_nan() {
+            return Err(LambertError::NoConvergence);
+        }
+        if fm == 0.0 {
+            return Ok(mid);
+        }
+        if fm < 0.0 {
+            neg = mid;
+        } else {
+            pos = mid;
+        }
+    }
+    Ok(if f(neg).abs() <= f(pos).abs() {
+        neg
+    } else {
+        pos
+    })
+}
+
+/// Step from `start` halfway towards `end` until `accept(x)` holds.
+fn approach(start: f64, end: f64, accept: impl Fn(f64) -> bool) -> Result<f64, LambertError> {
+    let mut x = start;
+    loop {
+        if accept(x) {
+            return Ok(x);
+        }
+        let next = 0.5 * (x + end);
+        if next == x {
+            return Err(LambertError::NoConvergence);
+        }
+        x = next;
+    }
 }
 
 #[cfg(test)]
@@ -572,6 +667,67 @@ mod tests {
         assert!(sol.transfer_angle_rad < PI, "{}", sol.transfer_angle_rad);
         assert!((norm(sol.v1) - 1649.96).abs() < 0.1, "{:?}", sol.v1);
         check_round_trip(r1, r2, 3000.0, LambertOptions::default());
+    }
+
+    /// Near-0 degree transfers with r1 ~ r2: Householder needs 100+
+    /// iterations (1000+ for the longer flight), so these used to fail with
+    /// NoConvergence; the bisection fallback must still hit r2.
+    #[test]
+    fn near_zero_angle_transfers_converge() {
+        let r = 7.0e6;
+        for angle_deg in [1e-4_f64, 1e-3, 0.01] {
+            let th = angle_deg.to_radians();
+            let r2 = [r * th.cos(), r * th.sin(), 0.0];
+            for tof in [329.87, 1684.0, 3000.0] {
+                check_round_trip([r, 0.0, 0.0], r2, tof, LambertOptions::default());
+            }
+        }
+    }
+
+    /// With no Householder iterations every case goes through the bisection
+    /// fallback, which must agree with Householder on both multi-revolution
+    /// branches as well as for direct transfers.
+    #[test]
+    fn bisection_fallback_matches_householder() {
+        let cases = [
+            ([7.0e6, 0.0, 0.0], [0.0, 8.0e6, 0.0], 3600.0, 0, true),
+            ([7.0e6, 0.0, 0.0], [1.0e6, 6.0e6, 3.0e6], 600.0, 0, true),
+            (
+                [7.0e6, 0.0, 0.0],
+                [0.0, 7.5e6, 1.0e6],
+                4.0 * 3600.0,
+                1,
+                true,
+            ),
+            (
+                [7.0e6, 0.0, 0.0],
+                [0.0, 7.5e6, 1.0e6],
+                4.0 * 3600.0,
+                1,
+                false,
+            ),
+        ];
+        for (r1, r2, tof, revolutions, low_path) in cases {
+            let opts = LambertOptions {
+                revolutions,
+                low_path,
+                ..LambertOptions::default()
+            };
+            let fast = izzo(MU_EARTH, r1, r2, tof, opts).unwrap();
+            let bisected = izzo(
+                MU_EARTH,
+                r1,
+                r2,
+                tof,
+                LambertOptions {
+                    max_iterations: 0,
+                    ..opts
+                },
+            )
+            .unwrap();
+            assert_vec_close(fast.0, bisected.0, 1e-6);
+            assert_vec_close(fast.1, bisected.1, 1e-6);
+        }
     }
 
     /// Exactly the parabolic time of flight makes the first guess x = 1,

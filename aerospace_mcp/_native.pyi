@@ -27,19 +27,39 @@ class AtmosphereTable:
         speeds_of_sound_ms: Sequence[float],
     ) -> None: ...
 
+_PointTuple = tuple[float, float, float, float, float, float, float, float, float]
+_PerformanceTuple = tuple[
+    float, float, float, float, float, float, float, float, float, float
+]
+
+class RocketTrajectory:
+    """Native trajectory; samples are tuples in RocketTrajectoryPoint order."""
+
+    def __len__(self) -> int: ...
+    def __getitem__(self, index: int) -> _PointTuple: ...
+    def performance(self) -> _PerformanceTuple: ...
+    def points(self) -> list[_PointTuple]: ...
+
 def thrust_at_time(
     thrust_curve: Sequence[Sequence[float]] | None, time_s: float
 ) -> float: ...
+def simulate_rocket(
+    geometry: _Geometry,
+    atmosphere: AtmosphereTable,
+    dt_s: float = 0.1,
+    max_time_s: float = 300.0,
+    launch_angle_deg: float = 90.0,
+) -> RocketTrajectory: ...
 def rocket_trajectory(
     geometry: _Geometry,
     atmosphere: AtmosphereTable,
     dt_s: float = 0.1,
     max_time_s: float = 300.0,
     launch_angle_deg: float = 90.0,
-) -> list[tuple[float, float, float, float, float, float, float, float, float]]: ...
+) -> list[_PointTuple]: ...
 def analyze_performance(
     trajectory: Sequence[Any],
-) -> tuple[float, float, float, float, float, float, float, float, float, float]: ...
+) -> _PerformanceTuple: ...
 def golden_section_search(
     objective: Callable[[float], float],
     lower_bound: float,
@@ -69,7 +89,7 @@ def optimize_thrust_profile(
     total_impulse_target: float,
     n_segments: int,
     objective: str,
-) -> tuple[list[float], float, int, bool, list[tuple[float, float]]]: ...
+) -> tuple[list[float], float, float, int, bool, list[tuple[float, float]]]: ...
 def kepler_solve(
     mean_anomaly_rad: float,
     eccentricity: float,
