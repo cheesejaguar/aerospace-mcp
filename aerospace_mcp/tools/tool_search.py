@@ -248,11 +248,10 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         description="Transform coordinates between reference frames (ECEF, ECI, ITRF, GCRS, GEODETIC)",
         category="frames",
         parameters={
-            "position": "Position vector [x, y, z] in source frame",
-            "velocity": "Optional velocity vector [vx, vy, vz]",
-            "source_frame": "Source reference frame",
-            "target_frame": "Target reference frame",
-            "epoch_utc": "UTC epoch for time-dependent transformations",
+            "coordinates": "Position {x, y, z} in meters (or {latitude_deg, longitude_deg, altitude_m} for GEODETIC)",
+            "from_frame": "Source reference frame",
+            "to_frame": "Target reference frame",
+            "epoch_utc": "Optional UTC epoch for ECI/GCRS transformations (default J2000.0)",
         },
         keywords=[
             "coordinate",
@@ -628,10 +627,8 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         description="Perform genetic algorithm-based trajectory optimization",
         category="optimization",
         parameters={
-            "objective_function": "Objective function to optimize",
-            "constraints": "Optimization constraints",
-            "population_size": "GA population size",
-            "generations": "Number of generations",
+            "optimization_problem": "{trajectory: [waypoints], objective, constraints}",
+            "ga_parameters": "Optional {population_size, generations, mutation_rate, crossover_rate, elite_size, seed}",
         },
         keywords=[
             "genetic",
@@ -647,10 +644,8 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         description="Perform particle swarm optimization for trajectory design",
         category="optimization",
         parameters={
-            "objective_function": "Objective function to optimize",
-            "constraints": "Optimization constraints",
-            "swarm_size": "Number of particles in swarm",
-            "iterations": "Number of iterations",
+            "optimization_problem": "{trajectory: [waypoints], objective, constraints}",
+            "pso_parameters": "Optional {num_particles, max_iterations, w, c1, c2, convergence_tolerance, seed}",
         },
         keywords=["particle", "swarm", "pso", "optimization", "trajectory", "global"],
     ),
@@ -679,9 +674,10 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         description="Perform Monte Carlo uncertainty quantification on trajectories",
         category="optimization",
         parameters={
-            "baseline_trajectory": "Baseline trajectory",
-            "uncertainty_parameters": "Parameters with uncertainty distributions",
-            "num_samples": "Number of Monte Carlo samples",
+            "nominal_trajectory": "{trajectory: [waypoints]}",
+            "uncertainty_parameters": "1-sigma errors {position_m: {std}, velocity_ms: {std}, thrust_n: {std}}",
+            "n_samples": "Number of Monte Carlo samples (2-50,000)",
+            "analysis_options": "Optional {seed}",
         },
         keywords=[
             "monte",
@@ -724,8 +720,10 @@ TOOL_REGISTRY: list[ToolMetadata] = [
             "initial_covariance": "Initial state covariance matrix (P0)",
             "process_noise": "Process noise covariance matrix (Q)",
             "measurement_noise": "Measurement noise covariance matrix (R)",
-            "measurements": "Time-series of sensor measurements",
-            "dynamics_model": "Dynamics model type: constant_velocity, constant_acceleration, orbital",
+            "measurements": "Time-series of measurements {z, time?, H?}; H (m x n) required when len(z) != n",
+            "dynamics_model": "Dynamics model type: constant_velocity, constant_acceleration, orbital, static",
+            "dt": "Default time step (s) for measurements without a time",
+            "initial_time": "Optional time of the initial state (default: dt before the first measurement)",
         },
         keywords=[
             "kalman",
