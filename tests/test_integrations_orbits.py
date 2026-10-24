@@ -9,9 +9,9 @@ from aerospace_mcp.integrations.orbits import (
     calculate_ground_track,
     elements_to_state_vector,
     hohmann_transfer,
-    lambert_solver_simple,
     orbital_rendezvous_planning,
     propagate_orbit_j2,
+    solve_lambert,
     state_vector_to_elements,
 )
 
@@ -342,28 +342,39 @@ class TestOrbitalRendezvous:
 
 
 class TestLambertProblem:
-    """Test Lambert problem solver."""
+    """Test the Izzo Lambert solver."""
 
-    def test_lambert_half_orbit(self):
-        """Test Lambert problem for half orbit."""
+    def test_curtis_example_5_2(self):
+        """Curtis, Orbital Mechanics for Engineering Students, Example 5.2."""
+        result = solve_lambert(
+            [5000e3, 10000e3, 2100e3],
+            [-14600e3, 2500e3, 7000e3],
+            3600.0,
+        )
+        assert result["v1_ms"] == pytest.approx([-5992.5, 1925.4, 3245.6], abs=0.1)
+        assert result["v2_ms"] == pytest.approx([-3312.5, -4196.6, -385.29], abs=0.1)
+        assert 0 < result["transfer_angle_deg"] < 180
+
+    def test_half_orbit_is_rejected(self):
+        """180-degree transfers have no unique plane."""
         r1 = [7000000.0, 0.0, 0.0]
         r2 = [-7000000.0, 0.0, 0.0]
-
-        # Half orbital period for circular orbit
         mu = 3.986004418e14
-        period = 2 * np.pi * np.sqrt((7000000.0) ** 3 / mu)
-        tof = period / 2
+        tof = np.pi * np.sqrt((7000000.0) ** 3 / mu)
 
-        try:
-            result = lambert_solver_simple(r1, r2, tof)
+        with pytest.raises(ValueError, match="collinear"):
+            solve_lambert(r1, r2, tof)
 
-            # Should return a dictionary with velocity vectors
-            assert "v1_vec_ms" in result or "initial_velocity_ms" in result
-            # Lambert solver uses simplified approach, might not handle all cases
+    def test_retrograde_takes_the_long_way(self):
+        """Retrograde 90-degree geometry is a 270-degree transfer."""
+        result = solve_lambert([7e6, 0, 0], [0, 7e6, 0], 3000.0, prograde=False)
+        assert result["transfer_angle_deg"] == pytest.approx(270.0)
+        # Clockwise motion about +z.
+        assert result["v1_ms"][1] < 0
 
-        except (NotImplementedError, ValueError):
-            # Lambert solver uses simplified approach, might not handle all cases
-            pytest.skip("Lambert solver uses simplified approach")
+    def test_too_many_revolutions(self):
+        with pytest.raises(ValueError, match="revolution"):
+            solve_lambert([7e6, 0, 0], [0, 7e6, 0], 3000.0, revolutions=3)
 
 
 if __name__ == "__main__":

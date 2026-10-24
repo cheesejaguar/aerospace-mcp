@@ -1,0 +1,2790 @@
+{
+ "source_commit": "ef51ee5",
+ "trajectories": [
+  {
+   "geometry": "small_vertical",
+   "launch_angle_deg": 90.0,
+   "dt_s": 0.1,
+   "n_points": 223,
+   "performance": {
+    "max_altitude_m": 1964.434442595631,
+    "apogee_time_s": 22.100000000000044,
+    "max_velocity_ms": 223.86083887691947,
+    "max_mach": 0.6614861838843811,
+    "max_q_pa": 29316.456960125783,
+    "burnout_altitude_m": 485.20826574942294,
+    "burnout_velocity_ms": 223.86083887691947,
+    "burnout_time_s": 6.099999999999994,
+    "total_impulse_ns": 10890.0,
+    "specific_impulse_s": 18.507849265549396
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 14.19335,
+     "mass_kg": 75.0,
+     "thrust_n": 1800.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    },
+    "74": {
+     "time_s": 7.39999999999999,
+     "altitude_m": 752.994628629221,
+     "velocity_ms": 191.67818684805368,
+     "acceleration_ms2": 22.23735521843618,
+     "mass_kg": 15.0,
+     "thrust_n": 0.0,
+     "drag_n": 186.4605782765427,
+     "mach": 0.5681249535577346,
+     "dynamic_pressure_pa": 20935.5363135697
+    },
+    "111": {
+     "time_s": 11.099999999999977,
+     "altitude_m": 1326.8799505740947,
+     "velocity_ms": 124.89518886683187,
+     "acceleration_ms2": 14.795470411862661,
+     "mass_kg": 15.0,
+     "thrust_n": 0.0,
+     "drag_n": 74.83230617793993,
+     "mach": 0.3726462343827602,
+     "dynamic_pressure_pa": 8402.068029054899
+    },
+    "222": {
+     "time_s": 22.200000000000045,
+     "altitude_m": 1964.411732961115,
+     "velocity_ms": 0.22709634516174804,
+     "acceleration_ms2": 9.806634532387017,
+     "mass_kg": 15.0,
+     "thrust_n": 0.0,
+     "drag_n": 0.000232014194745815,
+     "mach": 0.0006826514522934304,
+     "dynamic_pressure_pa": 0.02605023348238597
+    }
+   }
+  },
+  {
+   "geometry": "small_vertical",
+   "launch_angle_deg": 90.0,
+   "dt_s": 0.05,
+   "n_points": 446,
+   "performance": {
+    "max_altitude_m": 1960.139424005888,
+    "apogee_time_s": 22.15000000000018,
+    "max_velocity_ms": 222.5827228604172,
+    "max_mach": 0.6576913073923693,
+    "max_q_pa": 28989.455045746407,
+    "burnout_altitude_m": 482.7857599915804,
+    "burnout_velocity_ms": 222.5827228604172,
+    "burnout_time_s": 6.099999999999986,
+    "total_impulse_ns": 10890.0,
+    "specific_impulse_s": 18.507849265549396
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 14.19335,
+     "mass_kg": 75.0,
+     "thrust_n": 1800.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    },
+    "148": {
+     "time_s": 7.399999999999982,
+     "altitude_m": 749.948020201136,
+     "velocity_ms": 190.72625921377679,
+     "acceleration_ms2": 22.11792273702308,
+     "mass_kg": 15.0,
+     "thrust_n": 0.0,
+     "drag_n": 184.66909105534617,
+     "mach": 0.5652837821978123,
+     "dynamic_pressure_pa": 20734.39060158424
+    },
+    "223": {
+     "time_s": 11.150000000000023,
+     "altitude_m": 1329.1395450488656,
+     "velocity_ms": 123.65245932054692,
+     "acceleration_ms2": 14.69560647617492,
+     "mass_kg": 15.0,
+     "thrust_n": 0.0,
+     "drag_n": 73.33434714262378,
+     "mach": 0.3689480503406786,
+     "dynamic_pressure_pa": 8233.879256554206
+    },
+    "445": {
+     "time_s": 22.25000000000018,
+     "altitude_m": 1960.068040818323,
+     "velocity_ms": 0.9589964779947531,
+     "acceleration_ms2": 9.806374048129577,
+     "mass_kg": 15.0,
+     "thrust_n": 0.0,
+     "drag_n": 0.004139278056329314,
+     "mach": 0.002882595760502748,
+     "dynamic_pressure_pa": 0.46475242574717684
+    }
+   }
+  },
+  {
+   "geometry": "small_vertical",
+   "launch_angle_deg": 84.0,
+   "dt_s": 0.1,
+   "n_points": 223,
+   "performance": {
+    "max_altitude_m": 1948.3537662242825,
+    "apogee_time_s": 22.000000000000043,
+    "max_velocity_ms": 223.67715594686916,
+    "max_mach": 0.6609176378578588,
+    "max_q_pa": 29278.065295362536,
+    "burnout_altitude_m": 481.78824130910573,
+    "burnout_velocity_ms": 223.67715594686916,
+    "burnout_time_s": 6.099999999999994,
+    "total_impulse_ns": 10890.0,
+    "specific_impulse_s": 18.507849265549396
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 14.283901191630479,
+     "mass_kg": 75.0,
+     "thrust_n": 1800.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    },
+    "74": {
+     "time_s": 7.39999999999999,
+     "altitude_m": 748.2925467957275,
+     "velocity_ms": 191.5668869790386,
+     "acceleration_ms2": 22.20491126770543,
+     "mass_kg": 15.0,
+     "thrust_n": 0.0,
+     "drag_n": 186.33120802316813,
+     "mach": 0.5677645225892958,
+     "dynamic_pressure_pa": 20921.010800120945
+    },
+    "111": {
+     "time_s": 11.099999999999977,
+     "altitude_m": 1319.0193047371517,
+     "velocity_ms": 124.97467960119532,
+     "acceleration_ms2": 14.782573414481469,
+     "mass_kg": 15.0,
+     "thrust_n": 0.0,
+     "drag_n": 74.98508227157707,
+     "mach": 0.37284926233736826,
+     "dynamic_pressure_pa": 8419.22151793576
+    },
+    "222": {
+     "time_s": 22.200000000000045,
+     "altitude_m": 1948.2521776485676,
+     "velocity_ms": 12.007857901933722,
+     "acceleration_ms2": 9.80314384222222,
+     "mass_kg": 15.0,
+     "thrust_n": 0.0,
+     "drag_n": 0.6497633607622525,
+     "mach": 0.03608876704378658,
+     "dynamic_pressure_pa": 72.95453312544267
+    }
+   }
+  },
+  {
+   "geometry": "small_vertical",
+   "launch_angle_deg": 84.0,
+   "dt_s": 0.05,
+   "n_points": 444,
+   "performance": {
+    "max_altitude_m": 1944.280317599623,
+    "apogee_time_s": 22.05000000000018,
+    "max_velocity_ms": 222.3951412828782,
+    "max_mach": 0.6571116445309393,
+    "max_q_pa": 28950.111986890435,
+    "burnout_altitude_m": 479.3975957201133,
+    "burnout_velocity_ms": 222.3951412828782,
+    "burnout_time_s": 6.099999999999986,
+    "total_impulse_ns": 10890.0,
+    "specific_impulse_s": 18.507849265549396
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 14.283901191630479,
+     "mass_kg": 75.0,
+     "thrust_n": 1800.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    },
+    "148": {
+     "time_s": 7.399999999999982,
+     "altitude_m": 745.2953491533497,
+     "velocity_ms": 190.6105470859498,
+     "acceleration_ms2": 22.085382434341575,
+     "mass_kg": 15.0,
+     "thrust_n": 0.0,
+     "drag_n": 184.53041797299707,
+     "mach": 0.5649107593754362,
+     "dynamic_pressure_pa": 20718.820579341103
+    },
+    "222": {
+     "time_s": 11.100000000000023,
+     "altitude_m": 1315.1892315473156,
+     "velocity_ms": 124.46378193303119,
+     "acceleration_ms2": 14.744131215231173,
+     "mass_kg": 15.0,
+     "thrust_n": 0.0,
+     "drag_n": 74.40103936438621,
+     "mach": 0.37130848364247626,
+     "dynamic_pressure_pa": 8353.645986607939
+    },
+    "443": {
+     "time_s": 22.15000000000018,
+     "altitude_m": 1944.2310468943563,
+     "velocity_ms": 11.869666365336396,
+     "acceleration_ms2": 9.804108872105074,
+     "mass_kg": 15.0,
+     "thrust_n": 0.0,
+     "drag_n": 0.6351591996099696,
+     "mach": 0.035671758788634725,
+     "dynamic_pressure_pa": 71.3147980728173
+    }
+   }
+  },
+  {
+   "geometry": "heavy",
+   "launch_angle_deg": 90.0,
+   "dt_s": 0.1,
+   "n_points": 249,
+   "performance": {
+    "max_altitude_m": 2537.0455434521764,
+    "apogee_time_s": 24.70000000000008,
+    "max_velocity_ms": 276.95099246377333,
+    "max_mach": 0.8215596360560973,
+    "max_q_pa": 43387.13414325126,
+    "burnout_altitude_m": 826.422427740124,
+    "burnout_velocity_ms": 276.95099246377333,
+    "burnout_time_s": 8.099999999999987,
+    "total_impulse_ns": 24150.0,
+    "specific_impulse_s": 24.62614654341697
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 14.19335,
+     "mass_kg": 125.0,
+     "thrust_n": 3000.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    },
+    "83": {
+     "time_s": 8.299999999999986,
+     "altitude_m": 880.5077560251971,
+     "velocity_ms": 268.29057293407476,
+     "acceleration_ms2": 41.611682095065774,
+     "mass_kg": 25.0,
+     "thrust_n": 0.0,
+     "drag_n": 795.1258023766444,
+     "mach": 0.7963621769512902,
+     "dynamic_pressure_pa": 40495.42458500879
+    },
+    "124": {
+     "time_s": 12.399999999999972,
+     "altitude_m": 1707.9464537677911,
+     "velocity_ms": 152.94947442978315,
+     "acceleration_ms2": 19.335018664344176,
+     "mass_kg": 25.0,
+     "thrust_n": 0.0,
+     "drag_n": 238.20921660860444,
+     "mach": 0.4583861041033017,
+     "dynamic_pressure_pa": 12131.895780258372
+    },
+    "248": {
+     "time_s": 24.800000000000082,
+     "altitude_m": 2537.004518275415,
+     "velocity_ms": 0.41025176761304805,
+     "acceleration_ms2": 9.806586933080304,
+     "mass_kg": 25.0,
+     "thrust_n": 0.0,
+     "drag_n": 0.0015766729923849853,
+     "mach": 0.0012416547239526073,
+     "dynamic_pressure_pa": 0.08029929612081942
+    }
+   }
+  },
+  {
+   "geometry": "heavy",
+   "launch_angle_deg": 90.0,
+   "dt_s": 0.05,
+   "n_points": 498,
+   "performance": {
+    "max_altitude_m": 2534.387500679343,
+    "apogee_time_s": 24.750000000000217,
+    "max_velocity_ms": 275.12398033920977,
+    "max_mach": 0.8161082287689914,
+    "max_q_pa": 42831.12622576112,
+    "burnout_altitude_m": 823.0325489975648,
+    "burnout_velocity_ms": 275.12398033920977,
+    "burnout_time_s": 8.09999999999998,
+    "total_impulse_ns": 24150.0,
+    "specific_impulse_s": 24.62614654341697
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 14.19335,
+     "mass_kg": 125.0,
+     "thrust_n": 3000.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    },
+    "166": {
+     "time_s": 8.299999999999983,
+     "altitude_m": 876.9853912241497,
+     "velocity_ms": 266.6045120423391,
+     "acceleration_ms2": 41.22432841868132,
+     "mass_kg": 25.0,
+     "thrust_n": 0.0,
+     "drag_n": 785.4419604670329,
+     "mach": 0.7913255358921467,
+     "dynamic_pressure_pa": 40002.230566437545
+    },
+    "249": {
+     "time_s": 12.450000000000042,
+     "altitude_m": 1711.1941585196082,
+     "velocity_ms": 151.52253176855024,
+     "acceleration_ms2": 19.154979107749334,
+     "mass_kg": 25.0,
+     "thrust_n": 0.0,
+     "drag_n": 233.70822769373336,
+     "mach": 0.4541268492262961,
+     "dynamic_pressure_pa": 11902.662297185232
+    },
+    "497": {
+     "time_s": 24.850000000000218,
+     "altitude_m": 2534.314014660252,
+     "velocity_ms": 0.9800241938662022,
+     "acceleration_ms2": 9.80629000745386,
+     "mass_kg": 25.0,
+     "thrust_n": 0.0,
+     "drag_n": 0.008999813653498081,
+     "mach": 0.002966014080388158,
+     "dynamic_pressure_pa": 0.4583567455552479
+    }
+   }
+  },
+  {
+   "geometry": "heavy",
+   "launch_angle_deg": 84.0,
+   "dt_s": 0.1,
+   "n_points": 249,
+   "performance": {
+    "max_altitude_m": 2524.9424383914716,
+    "apogee_time_s": 24.70000000000008,
+    "max_velocity_ms": 276.57818082704046,
+    "max_mach": 0.8204093175013292,
+    "max_q_pa": 43290.89248541138,
+    "burnout_altitude_m": 821.6967375179752,
+    "burnout_velocity_ms": 276.57818082704046,
+    "burnout_time_s": 8.099999999999987,
+    "total_impulse_ns": 24150.0,
+    "specific_impulse_s": 24.62614654341697
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 14.28390119163048,
+     "mass_kg": 125.0,
+     "thrust_n": 3000.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    },
+    "83": {
+     "time_s": 8.299999999999986,
+     "altitude_m": 875.6333220779308,
+     "velocity_ms": 267.93529882992607,
+     "acceleration_ms2": 41.53238502685438,
+     "mass_kg": 25.0,
+     "thrust_n": 0.0,
+     "drag_n": 793.4107979708023,
+     "mach": 0.795263208119084,
+     "dynamic_pressure_pa": 40408.080127852256
+    },
+    "124": {
+     "time_s": 12.399999999999972,
+     "altitude_m": 1700.7010388079266,
+     "velocity_ms": 152.7986245637113,
+     "acceleration_ms2": 19.312847245844303,
+     "mass_kg": 25.0,
+     "thrust_n": 0.0,
+     "drag_n": 237.91420095669756,
+     "mach": 0.4578951852644765,
+     "dynamic_pressure_pa": 12116.870756485425
+    },
+    "248": {
+     "time_s": 24.800000000000082,
+     "altitude_m": 2524.8629109896083,
+     "velocity_ms": 7.21374086251908,
+     "acceleration_ms2": 9.80451683804719,
+     "mass_kg": 25.0,
+     "thrust_n": 0.0,
+     "drag_n": 0.4880895572648575,
+     "mach": 0.021829705044847394,
+     "dynamic_pressure_pa": 24.85819702727577
+    }
+   }
+  },
+  {
+   "geometry": "heavy",
+   "launch_angle_deg": 84.0,
+   "dt_s": 0.05,
+   "n_points": 497,
+   "performance": {
+    "max_altitude_m": 2522.4191033482516,
+    "apogee_time_s": 24.700000000000216,
+    "max_velocity_ms": 274.7556025049356,
+    "max_mach": 0.8149718555015987,
+    "max_q_pa": 42736.516946415206,
+    "burnout_altitude_m": 818.3555437525895,
+    "burnout_velocity_ms": 274.7556025049356,
+    "burnout_time_s": 8.09999999999998,
+    "total_impulse_ns": 24150.0,
+    "specific_impulse_s": 24.62614654341697
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 14.28390119163048,
+     "mass_kg": 125.0,
+     "thrust_n": 3000.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    },
+    "165": {
+     "time_s": 8.249999999999982,
+     "altitude_m": 858.8676297586801,
+     "velocity_ms": 268.3371258652823,
+     "acceleration_ms2": 41.681585322651905,
+     "mass_kg": 25.0,
+     "thrust_n": 0.0,
+     "drag_n": 797.1358522882339,
+     "mach": 0.7963029204320137,
+     "dynamic_pressure_pa": 40597.79558638187
+    },
+    "248": {
+     "time_s": 12.400000000000041,
+     "altitude_m": 1696.4512023991165,
+     "velocity_ms": 152.33600038357127,
+     "acceleration_ms2": 19.259567367080983,
+     "mass_kg": 25.0,
+     "thrust_n": 0.0,
+     "drag_n": 236.5775407937334,
+     "mach": 0.4564861275141336,
+     "dynamic_pressure_pa": 12048.7952133911
+    },
+    "496": {
+     "time_s": 24.800000000000217,
+     "altitude_m": 2522.356614714802,
+     "velocity_ms": 7.164842823206292,
+     "acceleration_ms2": 9.804329331959833,
+     "mass_kg": 25.0,
+     "thrust_n": 0.0,
+     "drag_n": 0.481617982762861,
+     "mach": 0.02168108357764728,
+     "dynamic_pressure_pa": 24.528602444370105
+    }
+   }
+  },
+  {
+   "geometry": "high_alt",
+   "launch_angle_deg": 90.0,
+   "dt_s": 0.1,
+   "n_points": 3001,
+   "performance": {
+    "max_altitude_m": 616741.9216522233,
+    "apogee_time_s": 299.9999999999997,
+    "max_velocity_ms": 3530.9871359086087,
+    "max_mach": 31.714132655099554,
+    "max_q_pa": 426316.77655992995,
+    "burnout_altitude_m": 34338.51546223798,
+    "burnout_velocity_ms": 3527.1447737576977,
+    "burnout_time_s": 25.000000000000085,
+    "total_impulse_ns": 765000.0,
+    "specific_impulse_s": 173.3517562062478
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 70.19335,
+     "mass_kg": 500.0,
+     "thrust_n": 40000.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    },
+    "1000": {
+     "time_s": 99.9999999999986,
+     "altitude_m": 266865.55112360814,
+     "velocity_ms": 2730.537185143228,
+     "acceleration_ms2": 9.80665000003088,
+     "mass_kg": 50.0,
+     "thrust_n": 0.0,
+     "drag_n": 1.5439984147910731e-09,
+     "mach": 25.174101285240464,
+     "dynamic_pressure_pa": 7.281036439705181e-08
+    },
+    "1500": {
+     "time_s": 149.99999999999577,
+     "altitude_m": 391109.58125576447,
+     "velocity_ms": 2240.20468514312,
+     "acceleration_ms2": 9.80665,
+     "mass_kg": 50.0,
+     "thrust_n": 0.0,
+     "drag_n": 3.918280320601659e-16,
+     "mach": 20.653496297471214,
+     "dynamic_pressure_pa": 1.8477442413139274e-14
+    },
+    "3000": {
+     "time_s": 299.9999999999997,
+     "altitude_m": 616741.9216522233,
+     "velocity_ms": 769.2071851430533,
+     "acceleration_ms2": 9.80665,
+     "mass_kg": 50.0,
+     "thrust_n": 0.0,
+     "drag_n": 9.977592631398753e-29,
+     "mach": 7.0916813341658305,
+     "dynamic_pressure_pa": 4.705135370205579e-27
+    }
+   }
+  },
+  {
+   "geometry": "high_alt",
+   "launch_angle_deg": 90.0,
+   "dt_s": 0.05,
+   "n_points": 6000,
+   "performance": {
+    "max_altitude_m": 613627.5910930578,
+    "apogee_time_s": 299.9500000000339,
+    "max_velocity_ms": 3520.9112893870883,
+    "max_mach": 31.620408041067112,
+    "max_q_pa": 428685.4040946684,
+    "burnout_altitude_m": 34246.38363410466,
+    "burnout_velocity_ms": 3516.212638127629,
+    "burnout_time_s": 25.00000000000022,
+    "total_impulse_ns": 765000.0,
+    "specific_impulse_s": 173.3517562062478
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 70.19335,
+     "mass_kg": 500.0,
+     "thrust_n": 40000.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    },
+    "2000": {
+     "time_s": 99.99999999999646,
+     "altitude_m": 265961.82323911786,
+     "velocity_ms": 2719.428530152351,
+     "acceleration_ms2": 9.806650000034107,
+     "mass_kg": 50.0,
+     "thrust_n": 0.0,
+     "drag_n": 1.7054156669732498e-09,
+     "mach": 25.071685391618985,
+     "dynamic_pressure_pa": 8.042232101486053e-08
+    },
+    "3000": {
+     "time_s": 149.99999999999986,
+     "altitude_m": 389662.6789342268,
+     "velocity_ms": 2229.0960301522377,
+     "acceleration_ms2": 9.80665,
+     "mass_kg": 50.0,
+     "thrust_n": 0.0,
+     "drag_n": 4.608769646875555e-16,
+     "mach": 20.551080403849685,
+     "dynamic_pressure_pa": 2.173358432213729e-14
+    },
+    "5999": {
+     "time_s": 299.9500000000339,
+     "altitude_m": 613627.5910930578,
+     "velocity_ms": 758.588862652171,
+     "acceleration_ms2": 9.80665,
+     "mass_kg": 50.0,
+     "thrust_n": 0.0,
+     "drag_n": 1.4059448570206738e-28,
+     "mach": 6.993786045532068,
+     "dynamic_pressure_pa": 6.63001699879906e-27
+    }
+   }
+  },
+  {
+   "geometry": "high_alt",
+   "launch_angle_deg": 84.0,
+   "dt_s": 0.1,
+   "n_points": 3001,
+   "performance": {
+    "max_altitude_m": 615107.3511217467,
+    "apogee_time_s": 299.9999999999997,
+    "max_velocity_ms": 3525.8700593322496,
+    "max_mach": 31.66363469181758,
+    "max_q_pa": 427037.76480404765,
+    "burnout_altitude_m": 34276.368615751846,
+    "burnout_velocity_ms": 3521.9712933213073,
+    "burnout_time_s": 25.000000000000085,
+    "total_impulse_ns": 765000.0,
+    "specific_impulse_s": 173.3517562062478
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 70.25455060697759,
+     "mass_kg": 500.0,
+     "thrust_n": 40000.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    },
+    "1000": {
+     "time_s": 99.9999999999986,
+     "altitude_m": 266375.7866456023,
+     "velocity_ms": 2724.9136134676896,
+     "acceleration_ms2": 9.806650000032597,
+     "mass_kg": 50.0,
+     "thrust_n": 0.0,
+     "drag_n": 1.6299632201998653e-09,
+     "mach": 25.12225494389962,
+     "dynamic_pressure_pa": 7.686420846008653e-08
+    },
+    "1500": {
+     "time_s": 149.99999999999577,
+     "altitude_m": 390333.6152646412,
+     "velocity_ms": 2234.603156913111,
+     "acceleration_ms2": 9.80665,
+     "mass_kg": 50.0,
+     "thrust_n": 0.0,
+     "drag_n": 4.276019687321511e-16,
+     "mach": 20.601853184979785,
+     "dynamic_pressure_pa": 2.0164434666532717e-14
+    },
+    "3000": {
+     "time_s": 299.9999999999997,
+     "altitude_m": 615107.3511217467,
+     "velocity_ms": 763.8416063794162,
+     "acceleration_ms2": 9.80665,
+     "mass_kg": 50.0,
+     "thrust_n": 0.0,
+     "drag_n": 1.1952419836345075e-28,
+     "mach": 7.042213550322906,
+     "dynamic_pressure_pa": 5.6364050336709374e-27
+    }
+   }
+  },
+  {
+   "geometry": "high_alt",
+   "launch_angle_deg": 84.0,
+   "dt_s": 0.05,
+   "n_points": 6000,
+   "performance": {
+    "max_altitude_m": 612074.5075022099,
+    "apogee_time_s": 299.9500000000339,
+    "max_velocity_ms": 3515.8108993507517,
+    "max_mach": 31.564468586914376,
+    "max_q_pa": 429408.8387468866,
+    "burnout_altitude_m": 34184.79702608542,
+    "burnout_velocity_ms": 3511.0588593712037,
+    "burnout_time_s": 25.00000000000022,
+    "total_impulse_ns": 765000.0,
+    "specific_impulse_s": 173.3517562062478
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 70.25455060697759,
+     "mass_kg": 500.0,
+     "thrust_n": 40000.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    },
+    "2000": {
+     "time_s": 99.99999999999646,
+     "altitude_m": 265493.7142616226,
+     "velocity_ms": 2714.100485622288,
+     "acceleration_ms2": 9.80665000003592,
+     "mass_kg": 50.0,
+     "thrust_n": 0.0,
+     "drag_n": 1.7960930649363545e-09,
+     "mach": 25.0225636534563,
+     "dynamic_pressure_pa": 8.46983969000573e-08
+    },
+    "3000": {
+     "time_s": 149.99999999999986,
+     "altitude_m": 388923.25847552327,
+     "velocity_ms": 2223.789634961764,
+     "acceleration_ms2": 9.80665,
+     "mass_kg": 50.0,
+     "thrust_n": 0.0,
+     "drag_n": 5.008920756071163e-16,
+     "mach": 20.502158261089157,
+     "dynamic_pressure_pa": 2.3620577715090942e-14
+    },
+    "5999": {
+     "time_s": 299.9500000000339,
+     "altitude_m": 612074.5075022099,
+     "velocity_ms": 753.5163638385537,
+     "acceleration_ms2": 9.80665,
+     "mass_kg": 50.0,
+     "thrust_n": 0.0,
+     "drag_n": 1.6689289126807386e-28,
+     "mach": 6.947020303026142,
+     "dynamic_pressure_pa": 7.870171440655458e-27
+    }
+   }
+  },
+  {
+   "geometry": "no_thrust",
+   "launch_angle_deg": 90.0,
+   "dt_s": 0.1,
+   "n_points": 1,
+   "performance": {
+    "max_altitude_m": 0.0,
+    "apogee_time_s": 0.0,
+    "max_velocity_ms": 0.0,
+    "max_mach": 0.0,
+    "max_q_pa": 0.0,
+    "burnout_altitude_m": 0.0,
+    "burnout_velocity_ms": 0.0,
+    "burnout_time_s": 0.0,
+    "total_impulse_ns": 0.0,
+    "specific_impulse_s": 0.0
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 9.80665,
+     "mass_kg": 30.0,
+     "thrust_n": 0.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    }
+   }
+  },
+  {
+   "geometry": "no_thrust",
+   "launch_angle_deg": 90.0,
+   "dt_s": 0.05,
+   "n_points": 1,
+   "performance": {
+    "max_altitude_m": 0.0,
+    "apogee_time_s": 0.0,
+    "max_velocity_ms": 0.0,
+    "max_mach": 0.0,
+    "max_q_pa": 0.0,
+    "burnout_altitude_m": 0.0,
+    "burnout_velocity_ms": 0.0,
+    "burnout_time_s": 0.0,
+    "total_impulse_ns": 0.0,
+    "specific_impulse_s": 0.0
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 9.80665,
+     "mass_kg": 30.0,
+     "thrust_n": 0.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    }
+   }
+  },
+  {
+   "geometry": "no_thrust",
+   "launch_angle_deg": 84.0,
+   "dt_s": 0.1,
+   "n_points": 1,
+   "performance": {
+    "max_altitude_m": 0.0,
+    "apogee_time_s": 0.0,
+    "max_velocity_ms": 0.0,
+    "max_mach": 0.0,
+    "max_q_pa": 0.0,
+    "burnout_altitude_m": 0.0,
+    "burnout_velocity_ms": 0.0,
+    "burnout_time_s": 0.0,
+    "total_impulse_ns": 0.0,
+    "specific_impulse_s": 0.0
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 9.80665,
+     "mass_kg": 30.0,
+     "thrust_n": 0.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    }
+   }
+  },
+  {
+   "geometry": "no_thrust",
+   "launch_angle_deg": 84.0,
+   "dt_s": 0.05,
+   "n_points": 1,
+   "performance": {
+    "max_altitude_m": 0.0,
+    "apogee_time_s": 0.0,
+    "max_velocity_ms": 0.0,
+    "max_mach": 0.0,
+    "max_q_pa": 0.0,
+    "burnout_altitude_m": 0.0,
+    "burnout_velocity_ms": 0.0,
+    "burnout_time_s": 0.0,
+    "total_impulse_ns": 0.0,
+    "specific_impulse_s": 0.0
+   },
+   "samples": {
+    "0": {
+     "time_s": 0.0,
+     "altitude_m": 0.0,
+     "velocity_ms": 0.0,
+     "acceleration_ms2": 9.80665,
+     "mass_kg": 30.0,
+     "thrust_n": 0.0,
+     "drag_n": 0.0,
+     "mach": 0.0,
+     "dynamic_pressure_pa": 0.0
+    }
+   }
+  }
+ ],
+ "thrust_at_time": [
+  {
+   "curve": [
+    [
+     0.0,
+     40000.0
+    ],
+    [
+     2.0,
+     38000.0
+    ],
+    [
+     20.0,
+     30000.0
+    ],
+    [
+     25.0,
+     0.0
+    ]
+   ],
+   "t": -1.0,
+   "thrust": 0.0
+  },
+  {
+   "curve": [
+    [
+     0.0,
+     40000.0
+    ],
+    [
+     2.0,
+     38000.0
+    ],
+    [
+     20.0,
+     30000.0
+    ],
+    [
+     25.0,
+     0.0
+    ]
+   ],
+   "t": 0.0,
+   "thrust": 40000.0
+  },
+  {
+   "curve": [
+    [
+     0.0,
+     40000.0
+    ],
+    [
+     2.0,
+     38000.0
+    ],
+    [
+     20.0,
+     30000.0
+    ],
+    [
+     25.0,
+     0.0
+    ]
+   ],
+   "t": 1.0,
+   "thrust": 39000.0
+  },
+  {
+   "curve": [
+    [
+     0.0,
+     40000.0
+    ],
+    [
+     2.0,
+     38000.0
+    ],
+    [
+     20.0,
+     30000.0
+    ],
+    [
+     25.0,
+     0.0
+    ]
+   ],
+   "t": 2.0,
+   "thrust": 38000.0
+  },
+  {
+   "curve": [
+    [
+     0.0,
+     40000.0
+    ],
+    [
+     2.0,
+     38000.0
+    ],
+    [
+     20.0,
+     30000.0
+    ],
+    [
+     25.0,
+     0.0
+    ]
+   ],
+   "t": 10.5,
+   "thrust": 34222.22222222222
+  },
+  {
+   "curve": [
+    [
+     0.0,
+     40000.0
+    ],
+    [
+     2.0,
+     38000.0
+    ],
+    [
+     20.0,
+     30000.0
+    ],
+    [
+     25.0,
+     0.0
+    ]
+   ],
+   "t": 24.999,
+   "thrust": 6.000000000007276
+  },
+  {
+   "curve": [
+    [
+     0.0,
+     40000.0
+    ],
+    [
+     2.0,
+     38000.0
+    ],
+    [
+     20.0,
+     30000.0
+    ],
+    [
+     25.0,
+     0.0
+    ]
+   ],
+   "t": 25.0,
+   "thrust": 0.0
+  },
+  {
+   "curve": [
+    [
+     0.0,
+     40000.0
+    ],
+    [
+     2.0,
+     38000.0
+    ],
+    [
+     20.0,
+     30000.0
+    ],
+    [
+     25.0,
+     0.0
+    ]
+   ],
+   "t": 30.0,
+   "thrust": 0.0
+  },
+  {
+   "curve": [
+    [
+     1.0,
+     500.0
+    ]
+   ],
+   "t": 0.0,
+   "thrust": 500.0
+  },
+  {
+   "curve": [
+    [
+     1.0,
+     500.0
+    ]
+   ],
+   "t": 1.0,
+   "thrust": 500.0
+  },
+  {
+   "curve": [
+    [
+     1.0,
+     500.0
+    ]
+   ],
+   "t": 1.5,
+   "thrust": 0.0
+  }
+ ],
+ "launch_angle": [
+  {
+   "geometry": "small_vertical",
+   "bounds": [
+    80.0,
+    90.0
+   ],
+   "angle": 89.96894379984859,
+   "objective": 1964.43401073636
+  },
+  {
+   "geometry": "small_vertical",
+   "bounds": [
+    85.0,
+    90.0
+   ],
+   "angle": 89.9748750062968,
+   "objective": 1964.4341599400611
+  },
+  {
+   "geometry": "heavy",
+   "bounds": [
+    80.0,
+    90.0
+   ],
+   "angle": 89.96894379984859,
+   "objective": 2537.0452187764877
+  },
+  {
+   "geometry": "heavy",
+   "bounds": [
+    85.0,
+    90.0
+   ],
+   "angle": 89.9748750062968,
+   "objective": 2537.04533094918
+  },
+  {
+   "geometry": "no_thrust",
+   "bounds": [
+    80.0,
+    90.0
+   ],
+   "angle": 89.96894379984859,
+   "objective": 0.0
+  },
+  {
+   "geometry": "no_thrust",
+   "bounds": [
+    85.0,
+    90.0
+   ],
+   "angle": 89.9748750062968,
+   "objective": 0.0
+  }
+ ],
+ "thrust_profile": [
+  {
+   "burn_time_s": 8.0,
+   "total_impulse_target": 15000.0,
+   "n_segments": 4,
+   "objective": "max_altitude",
+   "optimal_parameters": {
+    "thrust_mult_seg_1": 0.1,
+    "thrust_mult_seg_2": 0.1,
+    "thrust_mult_seg_3": 2.922154478961602,
+    "thrust_mult_seg_4": 3.0,
+    "thrust_curve": [
+     [
+      0.0,
+      122.50589275022834
+     ],
+     [
+      2.0,
+      122.50589275022834
+     ],
+     [
+      4.0,
+      3579.8114319926935
+     ],
+     [
+      6.0,
+      3675.17678250685
+     ],
+     [
+      8.0,
+      0.0
+     ]
+    ]
+   },
+   "optimal_objective": 1.0,
+   "iterations": 2,
+   "converged": true,
+   "max_altitude_m": 0.0
+  },
+  {
+   "burn_time_s": 6.0,
+   "total_impulse_target": 12000.0,
+   "n_segments": 3,
+   "objective": "max_altitude",
+   "optimal_parameters": {
+    "thrust_mult_seg_1": 0.1,
+    "thrust_mult_seg_2": 0.1,
+    "thrust_mult_seg_3": 3.0,
+    "thrust_curve": [
+     [
+      0.0,
+      187.5
+     ],
+     [
+      2.0,
+      187.5
+     ],
+     [
+      4.0,
+      5625.0
+     ],
+     [
+      6.0,
+      0.0
+     ]
+    ]
+   },
+   "optimal_objective": 1.0,
+   "iterations": 2,
+   "converged": true,
+   "max_altitude_m": 0.0
+  },
+  {
+   "burn_time_s": 5.0,
+   "total_impulse_target": 10000.0,
+   "n_segments": 3,
+   "objective": "min_max_q",
+   "optimal_parameters": {
+    "thrust_mult_seg_1": 3.0,
+    "thrust_mult_seg_2": 3.0,
+    "thrust_mult_seg_3": 0.1,
+    "thrust_curve": [
+     [
+      0.0,
+      2950.819672131148
+     ],
+     [
+      1.6666666666666667,
+      2950.819672131148
+     ],
+     [
+      3.3333333333333335,
+      98.36065573770493
+     ],
+     [
+      5.0,
+      0.0
+     ]
+    ]
+   },
+   "optimal_objective": 4702.146397568568,
+   "iterations": 100,
+   "converged": false,
+   "max_altitude_m": 523.2512537900681
+  },
+  {
+   "burn_time_s": 5.0,
+   "total_impulse_target": 10000.0,
+   "n_segments": 3,
+   "objective": "min_gravity_loss",
+   "optimal_parameters": {
+    "thrust_mult_seg_1": 1.0,
+    "thrust_mult_seg_2": 1.0,
+    "thrust_mult_seg_3": 1.0,
+    "thrust_curve": [
+     [
+      0.0,
+      2000.0
+     ],
+     [
+      1.6666666666666667,
+      2000.0
+     ],
+     [
+      3.3333333333333335,
+      2000.0
+     ],
+     [
+      5.0,
+      0.0
+     ]
+    ]
+   },
+   "optimal_objective": 49.03325000000002,
+   "iterations": 1,
+   "converged": true,
+   "max_altitude_m": 1222.071389696204
+  },
+  {
+   "burn_time_s": 4.0,
+   "total_impulse_target": 8000.0,
+   "n_segments": 5,
+   "objective": "max_altitude",
+   "optimal_parameters": {
+    "thrust_mult_seg_1": 0.1,
+    "thrust_mult_seg_2": 0.1,
+    "thrust_mult_seg_3": 0.1,
+    "thrust_mult_seg_4": 3.0,
+    "thrust_mult_seg_5": 3.0,
+    "thrust_curve": [
+     [
+      0.0,
+      158.73015873015873
+     ],
+     [
+      0.8,
+      158.73015873015873
+     ],
+     [
+      1.6,
+      158.73015873015873
+     ],
+     [
+      2.4000000000000004,
+      4761.9047619047615
+     ],
+     [
+      3.2,
+      4761.9047619047615
+     ],
+     [
+      4.0,
+      0.0
+     ]
+    ]
+   },
+   "optimal_objective": 1.0,
+   "iterations": 2,
+   "converged": true,
+   "max_altitude_m": 0.0
+  }
+ ],
+ "orbits": {
+  "elements_to_state": [
+   {
+    "elements": {
+     "semi_major_axis_m": 7000000.0,
+     "eccentricity": 0.01,
+     "inclination_deg": 51.6,
+     "raan_deg": 30.0,
+     "arg_periapsis_deg": 45.0,
+     "true_anomaly_deg": 10.0,
+     "epoch_utc": "2026-01-01T00:00:00Z"
+    },
+    "position_m": [
+     1679561.6150024845,
+     5041879.326791039,
+     4449480.480045962
+    ],
+    "velocity_ms": [
+     -6760.576717577492,
+     -760.4084226793543,
+     3434.000613057199
+    ]
+   },
+   {
+    "elements": {
+     "semi_major_axis_m": 26000000.0,
+     "eccentricity": 0.7,
+     "inclination_deg": 63.4,
+     "raan_deg": 200.0,
+     "arg_periapsis_deg": 270.0,
+     "true_anomaly_deg": 170.0,
+     "epoch_utc": "2026-01-01T00:00:00Z"
+    },
+    "position_m": [
+     -527603.222860287,
+     -20223085.130796507,
+     37588728.197685234
+    ],
+    "velocity_ms": [
+     1613.1554806866573,
+     133.48532050514103,
+     851.2944354077666
+    ]
+   },
+   {
+    "elements": {
+     "semi_major_axis_m": 42164000.0,
+     "eccentricity": 0.0,
+     "inclination_deg": 0.0,
+     "raan_deg": 0.0,
+     "arg_periapsis_deg": 0.0,
+     "true_anomaly_deg": 75.0,
+     "epoch_utc": "2026-01-01T00:00:00Z"
+    },
+    "position_m": [
+     10912846.217702685,
+     40727296.53965227,
+     0.0
+    ],
+    "velocity_ms": [
+     -2969.8995710591726,
+     795.782191666843,
+     0.0
+    ]
+   }
+  ],
+  "state_to_elements": [
+   {
+    "position_m": [
+     1679561.6150024845,
+     5041879.326791039,
+     4449480.480045962
+    ],
+    "velocity_ms": [
+     -6760.576717577492,
+     -760.4084226793543,
+     3434.000613057199
+    ],
+    "elements": {
+     "semi_major_axis_m": 6999999.999999996,
+     "eccentricity": 0.009999999999999757,
+     "inclination_deg": 51.60000000000001,
+     "raan_deg": 29.999999999999993,
+     "arg_periapsis_deg": 44.99999999999969,
+     "true_anomaly_deg": 10.000000000000234,
+     "epoch_utc": "2026-01-01T00:00:00Z"
+    }
+   },
+   {
+    "position_m": [
+     -527603.222860287,
+     -20223085.130796507,
+     37588728.197685234
+    ],
+    "velocity_ms": [
+     1613.1554806866573,
+     133.48532050514103,
+     851.2944354077666
+    ],
+    "elements": {
+     "semi_major_axis_m": 25999999.999999993,
+     "eccentricity": 0.7000000000000001,
+     "inclination_deg": 63.4,
+     "raan_deg": 199.99999999999997,
+     "arg_periapsis_deg": 270.0,
+     "true_anomaly_deg": 170.00000000000009,
+     "epoch_utc": "2026-01-01T00:00:00Z"
+    }
+   },
+   {
+    "position_m": [
+     10912846.217702685,
+     40727296.53965227,
+     0.0
+    ],
+    "velocity_ms": [
+     -2969.8995710591726,
+     795.782191666843,
+     0.0
+    ],
+    "elements": {
+     "semi_major_axis_m": 42164000.0,
+     "eccentricity": 0.0,
+     "inclination_deg": 0.0,
+     "raan_deg": 0.0,
+     "arg_periapsis_deg": 0.0,
+     "true_anomaly_deg": 75.00000000000001,
+     "epoch_utc": "2026-01-01T00:00:00Z"
+    }
+   }
+  ],
+  "properties": [
+   {
+    "elements": {
+     "semi_major_axis_m": 7000000.0,
+     "eccentricity": 0.01,
+     "inclination_deg": 51.6,
+     "raan_deg": 30.0,
+     "arg_periapsis_deg": 45.0,
+     "true_anomaly_deg": 10.0,
+     "epoch_utc": "2026-01-01T00:00:00Z"
+    },
+    "properties": {
+     "period_s": 5828.516637686015,
+     "apoapsis_m": 691863.0,
+     "periapsis_m": 551863.0,
+     "energy_j_kg": -28471460.12857143,
+     "angular_momentum_m2s": 52819731846.069984
+    }
+   },
+   {
+    "elements": {
+     "semi_major_axis_m": 26000000.0,
+     "eccentricity": 0.7,
+     "inclination_deg": 63.4,
+     "raan_deg": 200.0,
+     "arg_periapsis_deg": 270.0,
+     "true_anomaly_deg": 170.0,
+     "epoch_utc": "2026-01-01T00:00:00Z"
+    },
+    "properties": {
+     "period_s": 41722.56524266928,
+     "apoapsis_m": 37821863.0,
+     "periapsis_m": 1421863.000000001,
+     "energy_j_kg": -7665393.111538461,
+     "angular_momentum_m2s": 72701044409.74696
+    }
+   },
+   {
+    "elements": {
+     "semi_major_axis_m": 42164000.0,
+     "eccentricity": 0.0,
+     "inclination_deg": 0.0,
+     "raan_deg": 0.0,
+     "arg_periapsis_deg": 0.0,
+     "true_anomaly_deg": 75.0,
+     "epoch_utc": "2026-01-01T00:00:00Z"
+    },
+    "properties": {
+     "period_s": 86163.57055057827,
+     "apoapsis_m": 35785863.0,
+     "periapsis_m": 35785863.0,
+     "energy_j_kg": -4726786.379375771,
+     "angular_momentum_m2s": 129640229203.95967
+    }
+   }
+  ],
+  "kepler": [
+   {
+    "M": 0.1,
+    "e": 0.0,
+    "E": 0.1
+   },
+   {
+    "M": 0.1,
+    "e": 0.3,
+    "E": 0.14265001166029925
+   },
+   {
+    "M": 0.1,
+    "e": 0.85,
+    "E": 0.5288863064149507
+   },
+   {
+    "M": 0.1,
+    "e": 0.97,
+    "E": 0.7869726734337712
+   },
+   {
+    "M": 1.0,
+    "e": 0.0,
+    "E": 1.0
+   },
+   {
+    "M": 1.0,
+    "e": 0.3,
+    "E": 1.2880913132118377
+   },
+   {
+    "M": 1.0,
+    "e": 0.85,
+    "E": 1.8230908647471675
+   },
+   {
+    "M": 1.0,
+    "e": 0.97,
+    "E": 1.9135709610674911
+   },
+   {
+    "M": 3.0,
+    "e": 0.0,
+    "E": 3.0
+   },
+   {
+    "M": 3.0,
+    "e": 0.3,
+    "E": 3.0326254934859693
+   },
+   {
+    "M": 3.0,
+    "e": 0.85,
+    "E": 3.0650217155854214
+   },
+   {
+    "M": 3.0,
+    "e": 0.97,
+    "E": 3.0696877088498247
+   },
+   {
+    "M": 5.5,
+    "e": 0.0,
+    "E": 5.5
+   },
+   {
+    "M": 5.5,
+    "e": 0.3,
+    "E": 5.2409381127704275
+   },
+   {
+    "M": 5.5,
+    "e": 0.85,
+    "E": 4.651571491485002
+   },
+   {
+    "M": 5.5,
+    "e": 0.97,
+    "E": 4.543758865604482
+   }
+  ],
+  "propagate": [
+   {
+    "span": 3600.0,
+    "step": 60.0,
+    "initial": {
+     "position_m": [
+      7000000.0,
+      0.0,
+      100000.0
+     ],
+     "velocity_ms": [
+      0.0,
+      6000.0,
+      4500.0
+     ],
+     "epoch_utc": "2026-01-01T00:00:00Z",
+     "frame": "J2000"
+    },
+    "n_states": 61,
+    "final": {
+     "position_m": [
+      -4773938.442518722,
+      -3879061.7088220497,
+      -2966227.8926684423
+     ],
+     "velocity_ms": [
+      5487.279132896614,
+      -4339.080424552912,
+      -3193.995811227436
+     ],
+     "epoch_utc": "2026-01-01T01:00:00+00:00",
+     "frame": "J2000"
+    },
+    "middle": {
+     "position_m": [
+      -2484058.0843302114,
+      5206878.304884716,
+      3879064.269813698
+     ],
+     "velocity_ms": [
+      -7019.778523417062,
+      -2193.534148463446,
+      -1734.351817197334
+     ],
+     "epoch_utc": "2026-01-01T00:30:00+00:00",
+     "frame": "J2000"
+    }
+   },
+   {
+    "span": 86400.0,
+    "step": 30.0,
+    "initial": {
+     "position_m": [
+      7000000.0,
+      0.0,
+      100000.0
+     ],
+     "velocity_ms": [
+      0.0,
+      6000.0,
+      4500.0
+     ],
+     "epoch_utc": "2026-01-01T00:00:00Z",
+     "frame": "J2000"
+    },
+    "n_states": 2881,
+    "final": {
+     "position_m": [
+      6508776.108147511,
+      2285592.2420330243,
+      1293898.0198256078
+     ],
+     "velocity_ms": [
+      -2751.2345088900247,
+      5486.714711285408,
+      4276.710770987627
+     ],
+     "epoch_utc": "2026-01-02T00:00:00+00:00",
+     "frame": "J2000"
+    },
+    "middle": {
+     "position_m": [
+      -6736783.573822052,
+      -1008473.5690407001,
+      -589589.1850625863
+     ],
+     "velocity_ms": [
+      1349.0649372617318,
+      -6032.478580096939,
+      -4556.098241642637
+     ],
+     "epoch_utc": "2026-01-01T12:00:00+00:00",
+     "frame": "J2000"
+    }
+   },
+   {
+    "span": 1000.0,
+    "step": 7.0,
+    "initial": {
+     "position_m": [
+      7000000.0,
+      0.0,
+      100000.0
+     ],
+     "velocity_ms": [
+      0.0,
+      6000.0,
+      4500.0
+     ],
+     "epoch_utc": "2026-01-01T00:00:00Z",
+     "frame": "J2000"
+    },
+    "n_states": 144,
+    "final": {
+     "position_m": [
+      3334176.7237852346,
+      4912110.487275718,
+      3733904.894736637
+     ],
+     "velocity_ms": [
+      -6608.04337593437,
+      2861.4442553764393,
+      2057.581034257632
+     ],
+     "epoch_utc": "2026-01-01T00:16:40+00:00",
+     "frame": "J2000"
+    },
+    "middle": {
+     "position_m": [
+      5997151.017981867,
+      2878383.395338609,
+      2244788.160896671
+     ],
+     "velocity_ms": [
+      -3876.7219777848586,
+      5142.659862711086,
+      3803.4398792422435
+     ],
+     "epoch_utc": "2026-01-01T00:08:24+00:00",
+     "frame": "J2000"
+    }
+   }
+  ],
+  "ground_track": {
+   "positions": [
+    [
+     7000000.0,
+     0.0,
+     100000.0
+    ],
+    [
+     6985394.619417233,
+     359749.6016197071,
+     369604.622465639
+    ],
+    [
+     6941669.002967043,
+     717999.875503962,
+     637672.8935421298
+    ],
+    [
+     6869045.944944973,
+     1073261.5232254504,
+     903093.9959048305
+    ],
+    [
+     6767863.043154896,
+     1424061.0994826136,
+     1164770.571077816
+    ],
+    [
+     6638570.905326003,
+     1768946.3176023257,
+     1421622.6512418857
+    ],
+    [
+     6481731.041793776,
+     2106491.2432259726,
+     1672591.5033915504
+    ],
+    [
+     6298013.4536364265,
+     2435301.371569331,
+     1916643.3825735666
+    ],
+    [
+     6088193.924056122,
+     2754018.583819227,
+     2152773.1910454277
+    ],
+    [
+     5853151.019477579,
+     3061325.978175445,
+     2380008.040129911
+    ],
+    [
+     5593862.805640132,
+     3355952.5707832184,
+     2597410.711325628
+    ],
+    [
+     5311403.282913763,
+     3636677.8613505145,
+     2804083.0128793814
+    ],
+    [
+     5006938.544201529,
+     3902336.2576276986,
+     2999169.027551143
+    ],
+    [
+     4681722.65812311,
+     4151821.352168913,
+     3181858.246724803
+    ],
+    [
+     4337093.279725691,
+     4384090.043919719,
+     3351388.5853564497
+    ],
+    [
+     3974466.9907542286,
+     4598166.496210171,
+     3507049.2715264126
+    ],
+    [
+     3595334.3715449576,
+     4793145.921703163,
+     3648183.603591671
+    ],
+    [
+     3201254.806891441,
+     4968198.18378176,
+     3774191.567141814
+    ],
+    [
+     2793851.0287759574,
+     5122571.202783725,
+     3884532.3031650768
+    ],
+    [
+     2374803.3996611848,
+     5255594.154434127,
+     3978726.418051604
+    ],
+    [
+     1945843.9410949645,
+     5366680.446815296,
+     4056358.1253194422
+    ],
+    [
+     1508750.113687912,
+     5455330.461274642,
+     4117077.20826499
+    ],
+    [
+     1065338.3560694305,
+     5521134.041831588,
+     4160600.792133496
+    ],
+    [
+     617457.392198408,
+     5563772.716931119,
+     4186714.9138956815
+    ],
+    [
+     166981.31838292629,
+     5583021.636827746,
+     4195275.877321914
+    ],
+    [
+     -284197.51647248585,
+     5578751.209493679,
+     4186211.380782651
+    ],
+    [
+     -734175.8215477918,
+     5550928.417749959,
+     4159521.405088768
+    ],
+    [
+     -1181046.8474129909,
+     5499617.800339084,
+     4115278.848732036
+    ],
+    [
+     -1622908.0210926817,
+     5424982.079908969,
+     4053629.8981065904
+    ],
+    [
+     -2057868.7093930151,
+     5327282.421375417,
+     3974794.1206968417
+    ],
+    [
+     -2484058.0843302114,
+     5206878.304884716,
+     3879064.269813698
+    ],
+    [
+     -2899633.061840108,
+     5064226.99861736,
+     3766805.790254433
+    ],
+    [
+     -3302786.282331935,
+     4899882.617962647,
+     3638456.015254713
+    ],
+    [
+     -3691754.099116227,
+     4714494.759152689,
+     3494523.0462940563
+    ],
+    [
+     -4064824.5383261875,
+     4508806.697270346,
+     3335584.3087056647
+    ],
+    [
+     -4420345.191703065,
+     4283653.140632257,
+     3162284.7776226164
+    ],
+    [
+     -4756731.001567404,
+     4039957.535885641,
+     2975334.870557012
+    ],
+    [
+     -5072471.89548609,
+     3778728.920732772,
+     2775508.0048464825
+    ],
+    [
+     -5366140.226604887,
+     3501058.323993995,
+     2563637.820301119
+    ],
+    [
+     -5636397.974380507,
+     3208114.7157201585,
+     2340615.069629059
+    ],
+    [
+     -5882003.659545978,
+     2901140.513247418,
+     2107384.1815946363
+    ],
+    [
+     -6101818.926606741,
+     2581446.652428312,
+     1864939.50435167
+    ],
+    [
+     -6294814.747019123,
+     2250407.2367478027,
+     1614321.2389772588
+    ],
+    [
+     -6460077.196472298,
+     1909453.7806145165,
+     1356611.075888035
+    ],
+    [
+     -6596812.760402468,
+     1560069.066776783,
+     1092927.5495296414
+    ],
+    [
+     -6704353.123035174,
+     1203780.641518977,
+     824421.1294679134
+    ],
+    [
+     -6782159.39689788,
+     842153.9750124213,
+     552269.0687518124
+    ],
+    [
+     -6829825.751888032,
+     476785.3178898945,
+     277670.0331363167
+    ],
+    [
+     -6847082.405636806,
+     109294.28874341282,
+     1838.5374183827662
+    ],
+    [
+     -6833797.940087624,
+     -258683.7692327922,
+     -274000.78228191537
+    ],
+    [
+     -6789980.912918587,
+     -625505.6208667515,
+     -548619.0290057815
+    ],
+    [
+     -6715780.736680721,
+     -989528.1161576802,
+     -820789.004620076
+    ],
+    [
+     -6611487.803292942,
+     -1349116.2643176182,
+     -1089291.2329830602
+    ],
+    [
+     -6477532.836814087,
+     -1702651.3545132496,
+     -1352920.0090880021
+    ],
+    [
+     -6314485.463174575,
+     -2048539.070946081,
+     -1610489.4351113988
+    ],
+    [
+     -6123051.991754514,
+     -2385217.548196317,
+     -1860839.4030857442
+    ],
+    [
+     -5904072.410285494,
+     -2711165.311563446,
+     -2102841.4830999984
+    ],
+    [
+     -5658516.601458509,
+     -3024909.0465256767,
+     -2335404.675548827
+    ],
+    [
+     -5387479.7967528375,
+     -3325031.141465829,
+     -2557480.9860443543
+    ],
+    [
+     -5092177.290257247,
+     -3610176.948519082,
+     -2768070.782204922
+    ],
+    [
+     -4773938.442518722,
+     -3879061.7088220497,
+     -2966227.8926684423
+    ],
+    [
+     -4434200.011596505,
+     -4130477.09060226,
+     -3151064.4103566
+    ],
+    [
+     -4074498.8553842674,
+     -4363297.291444091,
+     -3321755.164240609
+    ],
+    [
+     -3696464.055750288,
+     -4576484.659684525,
+     -3477541.826615594
+    ],
+    [
+     -3301808.520995282,
+     -4769094.794192284,
+     -3617736.6261498174
+    ],
+    [
+     -2892320.1284069717,
+     -4940281.0867093075,
+     -3741725.6406928957
+    ],
+    [
+     -2469852.4731778027,
+     -5089298.67640676,
+     -3848971.647945063
+    ],
+    [
+     -2036315.2935423665,
+     -5215507.792233598,
+     -3939016.5165357124
+    ],
+    [
+     -1593664.644599956,
+     -5318376.464903734,
+     -4011483.124750822
+    ],
+    [
+     -1143892.8948559668,
+     -5397482.596855887,
+     -4066076.7989940173
+    ],
+    [
+     -689018.6200117238,
+     -5452515.385098579,
+     -4102586.2689679693
+    ],
+    [
+     -231076.4679528586,
+     -5483276.0983884,
+     -4120884.141422581
+    ],
+    [
+     227892.93274210626,
+     -5489678.216551445,
+     -4120926.8990363916
+    ],
+    [
+     685852.9510744353,
+     -5471746.945820341,
+     -4102754.435485021
+    ],
+    [
+     1140780.7525181226,
+     -5429618.129707634,
+     -4066489.141920455
+    ],
+    [
+     1590676.856721272,
+     -5363536.580069811,
+     -4012334.563863402
+    ],
+    [
+     2033574.3972437435,
+     -5273853.857550841,
+     -3940573.6508365576
+    ],
+    [
+     2467548.032154222,
+     -5161025.534465616,
+     -3851566.623892579
+    ],
+    [
+     2890722.460317496,
+     -5025607.976347694,
+     -3745748.4884855556
+    ],
+    [
+     3301280.5044758585,
+     -4868254.680819509,
+     -3623626.2218828592
+    ],
+    [
+     3697470.728621872,
+     -4689712.214143792,
+     -3485775.665515038
+    ],
+    [
+     4077614.563534087,
+     -4490815.786799193,
+     -3332838.15332851
+    ],
+    [
+     4440112.920573459,
+     -4272484.509724688,
+     -3165516.907365861
+    ],
+    [
+     4783452.2798003685,
+     -4035716.372545564,
+     -2984573.2314891703
+    ],
+    [
+     5106210.2440702,
+     -3781582.984189571,
+     -2790822.533429607
+    ],
+    [
+     5407060.555916781,
+     -3511224.114895976,
+     -2585130.204245037
+    ],
+    [
+     5684777.578673345,
+     -3225842.0767898303,
+     -2368407.3828546386
+    ],
+    [
+     5938240.247364249,
+     -2926695.9780192394,
+     -2141606.631656057
+    ],
+    [
+     6166435.4983995315,
+     -2615095.8830164718,
+     -1905717.5473775319
+    ],
+    [
+     6368461.190007636,
+     -2292396.90882426,
+     -1661762.3293344127
+    ],
+    [
+     6543528.527653558,
+     -1959993.284703183,
+     -1410791.3252035542
+    ]
+   ],
+   "time_step_s": 60.0,
+   "track": [
+    {
+     "latitude_deg": 0.8184554616886143,
+     "longitude_deg": 0.0,
+     "altitude_m": 622577.2492748555,
+     "time_utc": "2026-01-01T00:00:00Z"
+    },
+    {
+     "latitude_deg": 3.02475489828731,
+     "longitude_deg": 2.697458166860106,
+     "altitude_m": 626273.4207132766,
+     "time_utc": "2026-01-01T00:01:00+00:00"
+    },
+    {
+     "latitude_deg": 5.220854169562923,
+     "longitude_deg": 5.403924354275032,
+     "altitude_m": 629638.6162091512,
+     "time_utc": "2026-01-01T00:02:00+00:00"
+    },
+    {
+     "latitude_deg": 7.401107085193924,
+     "longitude_deg": 8.128386637906344,
+     "altitude_m": 632659.0501244469,
+     "time_utc": "2026-01-01T00:03:00+00:00"
+    },
+    {
+     "latitude_deg": 9.559774634813994,
+     "longitude_deg": 10.87982244941655,
+     "altitude_m": 635322.2512689782,
+     "time_utc": "2026-01-01T00:04:00+00:00"
+    },
+    {
+     "latitude_deg": 11.690966668693358,
+     "longitude_deg": 13.667202849489813,
+     "altitude_m": 637617.1078720642,
+     "time_utc": "2026-01-01T00:05:00+00:00"
+    },
+    {
+     "latitude_deg": 13.788584986707107,
+     "longitude_deg": 16.499484317722086,
+     "altitude_m": 639533.9094370008,
+     "time_utc": "2026-01-01T00:06:00+00:00"
+    },
+    {
+     "latitude_deg": 15.846268569455894,
+     "longitude_deg": 19.385583512341455,
+     "altitude_m": 641064.3853796739,
+     "time_utc": "2026-01-01T00:07:00+00:00"
+    },
+    {
+     "latitude_deg": 17.857342100365337,
+     "longitude_deg": 22.334329907657988,
+     "altitude_m": 642201.7403329369,
+     "time_utc": "2026-01-01T00:08:00+00:00"
+    },
+    {
+     "latitude_deg": 19.814769463516036,
+     "longitude_deg": 25.354390685138522,
+     "altitude_m": 642940.6859785765,
+     "time_utc": "2026-01-01T00:09:00+00:00"
+    },
+    {
+     "latitude_deg": 21.711114561578906,
+     "longitude_deg": 28.45416187917248,
+     "altitude_m": 643277.4692490334,
+     "time_utc": "2026-01-01T00:10:00+00:00"
+    },
+    {
+     "latitude_deg": 23.53851257058145,
+     "longitude_deg": 31.641619771650813,
+     "altitude_m": 643209.8967216518,
+     "time_utc": "2026-01-01T00:11:00+00:00"
+    },
+    {
+     "latitude_deg": 25.288655598012248,
+     "longitude_deg": 34.924127179813524,
+     "altitude_m": 642737.3550094059,
+     "time_utc": "2026-01-01T00:12:00+00:00"
+    },
+    {
+     "latitude_deg": 26.952797564946618,
+     "longitude_deg": 38.30819095680508,
+     "altitude_m": 641860.8269341122,
+     "time_utc": "2026-01-01T00:13:00+00:00"
+    },
+    {
+     "latitude_deg": 28.521783866043027,
+     "longitude_deg": 41.79917014211502,
+     "altitude_m": 640582.9032512521,
+     "time_utc": "2026-01-01T00:14:00+00:00"
+    },
+    {
+     "latitude_deg": 29.986111783722155,
+     "longitude_deg": 45.40093915665014,
+     "altitude_m": 638907.7896802425,
+     "time_utc": "2026-01-01T00:15:00+00:00"
+    },
+    {
+     "latitude_deg": 31.33602748860055,
+     "longitude_deg": 49.11551747675271,
+     "altitude_m": 636841.3089805301,
+     "time_utc": "2026-01-01T00:16:00+00:00"
+    },
+    {
+     "latitude_deg": 32.56166444354797,
+     "longitude_deg": 52.942686227950816,
+     "altitude_m": 634390.8978027822,
+     "time_utc": "2026-01-01T00:17:00+00:00"
+    },
+    {
+     "latitude_deg": 33.65322584332639,
+     "longitude_deg": 56.87962239247793,
+     "altitude_m": 631565.5980361355,
+     "time_utc": "2026-01-01T00:18:00+00:00"
+    },
+    {
+     "latitude_deg": 34.60121016127385,
+     "longitude_deg": 60.92059128004583,
+     "altitude_m": 628376.0423675254,
+     "time_utc": "2026-01-01T00:19:00+00:00"
+    },
+    {
+     "latitude_deg": 35.39667395893755,
+     "longitude_deg": 65.05674514364493,
+     "altitude_m": 624834.4337680023,
+     "time_utc": "2026-01-01T00:20:00+00:00"
+    },
+    {
+     "latitude_deg": 36.031520223951084,
+     "longitude_deg": 69.27607730340013,
+     "altitude_m": 620954.5186243504,
+     "time_utc": "2026-01-01T00:21:00+00:00"
+    },
+    {
+     "latitude_deg": 36.49879445998713,
+     "longitude_deg": 73.56357398041676,
+     "altitude_m": 616751.5532427318,
+     "time_utc": "2026-01-01T00:22:00+00:00"
+    },
+    {
+     "latitude_deg": 36.792965785075076,
+     "longitude_deg": 77.90158863329762,
+     "altitude_m": 612242.2634651847,
+     "time_utc": "2026-01-01T00:23:00+00:00"
+    },
+    {
+     "latitude_deg": 36.910167796504325,
+     "longitude_deg": 82.27043682790799,
+     "altitude_m": 607444.7971601207,
+     "time_utc": "2026-01-01T00:24:00+00:00"
+    },
+    {
+     "latitude_deg": 36.84837509338046,
+     "longitude_deg": 86.6491776252827,
+     "altitude_m": 602378.6693750424,
+     "time_utc": "2026-01-01T00:25:00+00:00"
+    },
+    {
+     "latitude_deg": 36.60749657591669,
+     "longitude_deg": 91.01651690265645,
+     "altitude_m": 597064.6999740647,
+     "time_utc": "2026-01-01T00:26:00+00:00"
+    },
+    {
+     "latitude_deg": 36.18937541060254,
+     "longitude_deg": 95.35174654936564,
+     "altitude_m": 591524.9436248085,
+     "time_utc": "2026-01-01T00:27:00+00:00"
+    },
+    {
+     "latitude_deg": 35.59769630580315,
+     "longitude_deg": 99.63562696439472,
+     "altitude_m": 585782.6120492416,
+     "time_utc": "2026-01-01T00:28:00+00:00"
+    },
+    {
+     "latitude_deg": 34.8378113282321,
+     "longitude_deg": 103.85113057482256,
+     "altitude_m": 579861.9885110343,
+     "time_utc": "2026-01-01T00:29:00+00:00"
+    },
+    {
+     "latitude_deg": 33.916503810984516,
+     "longitude_deg": 107.98398828758978,
+     "altitude_m": 573788.3345782338,
+     "time_utc": "2026-01-01T00:30:00+00:00"
+    },
+    {
+     "latitude_deg": 32.84171455099759,
+     "longitude_deg": 112.02301238032301,
+     "altitude_m": 567587.7892740155,
+     "time_utc": "2026-01-01T00:31:00+00:00"
+    },
+    {
+     "latitude_deg": 31.622255089465042,
+     "longitude_deg": 115.96020068852208,
+     "altitude_m": 561287.2608098043,
+     "time_utc": "2026-01-01T00:32:00+00:00"
+    },
+    {
+     "latitude_deg": 30.267530010076726,
+     "longitude_deg": 119.79065179940852,
+     "altitude_m": 554914.3111832608,
+     "time_utc": "2026-01-01T00:33:00+00:00"
+    },
+    {
+     "latitude_deg": 28.787285092284968,
+     "longitude_deg": 123.51233598468181,
+     "altitude_m": 548497.034017683,
+     "time_utc": "2026-01-01T00:34:00+00:00"
+    },
+    {
+     "latitude_deg": 27.19139219249675,
+     "longitude_deg": 127.12577156568199,
+     "altitude_m": 542063.9261180218,
+     "time_utc": "2026-01-01T00:35:00+00:00"
+    },
+    {
+     "latitude_deg": 25.489676049192344,
+     "longitude_deg": 130.63365331988635,
+     "altitude_m": 535643.7533204379,
+     "time_utc": "2026-01-01T00:36:00+00:00"
+    },
+    {
+     "latitude_deg": 23.691783560431283,
+     "longitude_deg": 134.0404714196672,
+     "altitude_m": 529265.4113153722,
+     "time_utc": "2026-01-01T00:37:00+00:00"
+    },
+    {
+     "latitude_deg": 21.807092776967345,
+     "longitude_deg": 137.35214917929122,
+     "altitude_m": 522957.78222644515,
+     "time_utc": "2026-01-01T00:38:00+00:00"
+    },
+    {
+     "latitude_deg": 19.844656870922954,
+     "longitude_deg": 140.57571780600108,
+     "altitude_m": 516749.5878269207,
+     "time_utc": "2026-01-01T00:39:00+00:00"
+    },
+    {
+     "latitude_deg": 17.813177459692074,
+     "longitude_deg": 143.71903774605354,
+     "altitude_m": 510669.24036944937,
+     "time_utc": "2026-01-01T00:40:00+00:00"
+    },
+    {
+     "latitude_deg": 15.721001590829182,
+     "longitude_deg": 146.7905696443088,
+     "altitude_m": 504744.6920909686,
+     "time_utc": "2026-01-01T00:41:00+00:00"
+    },
+    {
+     "latitude_deg": 13.576137135449258,
+     "longitude_deg": 149.79919340665015,
+     "altitude_m": 499003.28453029133,
+     "time_utc": "2026-01-01T00:42:00+00:00"
+    },
+    {
+     "latitude_deg": 11.386282054633256,
+     "longitude_deg": 152.75407107285454,
+     "altitude_m": 493471.59885853436,
+     "time_utc": "2026-01-01T00:43:00+00:00"
+    },
+    {
+     "latitude_deg": 9.158863819495783,
+     "longitude_deg": 155.6645477597695,
+     "altitude_m": 488175.3084697714,
+     "time_utc": "2026-01-01T00:44:00+00:00"
+    },
+    {
+     "latitude_deg": 6.901086065442187,
+     "longitude_deg": 158.54008440688602,
+     "altitude_m": 483139.0351089565,
+     "time_utc": "2026-01-01T00:45:00+00:00"
+    },
+    {
+     "latitude_deg": 4.619980277463274,
+     "longitude_deg": 161.39021609437506,
+     "altitude_m": 478386.20982430875,
+     "time_utc": "2026-01-01T00:46:00+00:00"
+    },
+    {
+     "latitude_deg": 2.3224609028453354,
+     "longitude_deg": 164.22453003248353,
+     "altitude_m": 473938.94002067484,
+     "time_utc": "2026-01-01T00:47:00+00:00"
+    },
+    {
+     "latitude_deg": 0.015382758444281705,
+     "longitude_deg": 167.0526577422118,
+     "altitude_m": 469817.8838578714,
+     "time_utc": "2026-01-01T00:48:00+00:00"
+    },
+    {
+     "latitude_deg": -2.2944000589991096,
+     "longitude_deg": 169.8842763248392,
+     "altitude_m": 466042.13318328,
+     "time_utc": "2026-01-01T00:49:00+00:00"
+    },
+    {
+     "latitude_deg": -4.5999743357085325,
+     "longitude_deg": 172.72911396423117,
+     "altitude_m": 462629.10611135326,
+     "time_utc": "2026-01-01T00:50:00+00:00"
+    },
+    {
+     "latitude_deg": -6.894307460998848,
+     "longitude_deg": 175.5969548675865,
+     "altitude_m": 459594.45026503876,
+     "time_utc": "2026-01-01T00:51:00+00:00"
+    },
+    {
+     "latitude_deg": -9.170187220668392,
+     "longitude_deg": 178.4976386996257,
+     "altitude_m": 456951.9575770274,
+     "time_utc": "2026-01-01T00:52:00+00:00"
+    },
+    {
+     "latitude_deg": -11.420162341163532,
+     "longitude_deg": -178.5589508036083,
+     "altitude_m": 454713.491414343,
+     "time_utc": "2026-01-01T00:53:00+00:00"
+    },
+    {
+     "latitude_deg": -13.636484763846525,
+     "longitude_deg": -175.56291392380865,
+     "altitude_m": 452888.9266409669,
+     "time_utc": "2026-01-01T00:54:00+00:00"
+    },
+    {
+     "latitude_deg": -15.811055085036493,
+     "longitude_deg": -172.50438635232953,
+     "altitude_m": 451486.1030730447,
+     "time_utc": "2026-01-01T00:55:00+00:00"
+    },
+    {
+     "latitude_deg": -17.93537322265666,
+     "longitude_deg": -169.37362125282212,
+     "altitude_m": 450510.79261351936,
+     "time_utc": "2026-01-01T00:56:00+00:00"
+    },
+    {
+     "latitude_deg": -20.000497172459962,
+     "longitude_deg": -166.16111001297082,
+     "altitude_m": 449966.68018161785,
+     "time_utc": "2026-01-01T00:57:00+00:00"
+    },
+    {
+     "latitude_deg": -21.997013687806046,
+     "longitude_deg": -162.8577499749474,
+     "altitude_m": 449855.35838148464,
+     "time_utc": "2026-01-01T00:58:00+00:00"
+    },
+    {
+     "latitude_deg": -23.915025817557854,
+     "longitude_deg": -159.45506694597208,
+     "altitude_m": 450176.33568742685,
+     "time_utc": "2026-01-01T00:59:00+00:00"
+    },
+    {
+     "latitude_deg": -25.744163376591864,
+     "longitude_deg": -155.9454985345586,
+     "altitude_m": 450927.05776456185,
+     "time_utc": "2026-01-01T01:00:00+00:00"
+    },
+    {
+     "latitude_deg": -27.473623438352764,
+     "longitude_deg": -152.32274072291898,
+     "altitude_m": 452102.94139653444,
+     "time_utc": "2026-01-01T01:01:00+00:00"
+    },
+    {
+     "latitude_deg": -29.092248569541677,
+     "longitude_deg": -148.58215394450173,
+     "altitude_m": 453697.42035960127,
+     "time_utc": "2026-01-01T01:02:00+00:00"
+    },
+    {
+     "latitude_deg": -30.588650411212633,
+     "longitude_deg": -144.72121583002397,
+     "altitude_m": 455702.0024672495,
+     "time_utc": "2026-01-01T01:03:00+00:00"
+    },
+    {
+     "latitude_deg": -31.951384905379243,
+     "longitude_deg": -140.73999572883713,
+     "altitude_m": 458106.33691354655,
+     "time_utc": "2026-01-01T01:04:00+00:00"
+    },
+    {
+     "latitude_deg": -33.1691825215566,
+     "longitude_deg": -136.64161198394243,
+     "altitude_m": 460898.2909679068,
+     "time_utc": "2026-01-01T01:05:00+00:00"
+    },
+    {
+     "latitude_deg": -34.231231937075265,
+     "longitude_deg": -132.4326188634739,
+     "altitude_m": 464064.03501958214,
+     "time_utc": "2026-01-01T01:06:00+00:00"
+    },
+    {
+     "latitude_deg": -35.12750878946115,
+     "longitude_deg": -128.12325954744207,
+     "altitude_m": 467588.1349367695,
+     "time_utc": "2026-01-01T01:07:00+00:00"
+    },
+    {
+     "latitude_deg": -35.84913292639672,
+     "longitude_deg": -123.72751916353836,
+     "altitude_m": 471453.6506922338,
+     "time_utc": "2026-01-01T01:08:00+00:00"
+    },
+    {
+     "latitude_deg": -36.38872929844499,
+     "longitude_deg": -119.26292194229393,
+     "altitude_m": 475642.2402135022,
+     "time_utc": "2026-01-01T01:09:00+00:00"
+    },
+    {
+     "latitude_deg": -36.74076115143273,
+     "longitude_deg": -114.7500414992143,
+     "altitude_m": 480134.26743934583,
+     "time_utc": "2026-01-01T01:10:00+00:00"
+    },
+    {
+     "latitude_deg": -36.9018015703935,
+     "longitude_deg": -110.21173145677457,
+     "altitude_m": 484908.9136033179,
+     "time_utc": "2026-01-01T01:11:00+00:00"
+    },
+    {
+     "latitude_deg": -36.87071232581798,
+     "longitude_deg": -105.67212852084236,
+     "altitude_m": 489944.29081732314,
+     "time_utc": "2026-01-01T01:12:00+00:00"
+    },
+    {
+     "latitude_deg": -36.648707784722724,
+     "longitude_deg": -101.15552117920207,
+     "altitude_m": 495217.5570910098,
+     "time_utc": "2026-01-01T01:13:00+00:00"
+    },
+    {
+     "latitude_deg": -36.239295135202035,
+     "longitude_deg": -96.68520310341643,
+     "altitude_m": 500705.0319936555,
+     "time_utc": "2026-01-01T01:14:00+00:00"
+    },
+    {
+     "latitude_deg": -35.64809762293074,
+     "longitude_deg": -92.28243337085622,
+     "altitude_m": 506382.31224167254,
+     "time_utc": "2026-01-01T01:15:00+00:00"
+    },
+    {
+     "latitude_deg": -34.88258154086817,
+     "longitude_deg": -87.96560484789559,
+     "altitude_m": 512224.38657447323,
+     "time_utc": "2026-01-01T01:16:00+00:00"
+    },
+    {
+     "latitude_deg": -33.95171743699221,
+     "longitude_deg": -83.74968376519412,
+     "altitude_m": 518205.7493619798,
+     "time_utc": "2026-01-01T01:17:00+00:00"
+    },
+    {
+     "latitude_deg": -32.8656098645896,
+     "longitude_deg": -79.64593848533532,
+     "altitude_m": 524300.5124665508,
+     "time_utc": "2026-01-01T01:18:00+00:00"
+    },
+    {
+     "latitude_deg": -31.63512812780678,
+     "longitude_deg": -75.66193481102562,
+     "altitude_m": 530482.5149588659,
+     "time_utc": "2026-01-01T01:19:00+00:00"
+    },
+    {
+     "latitude_deg": -30.27156434273961,
+     "longitude_deg": -71.80174664292049,
+     "altitude_m": 536725.4303598283,
+     "time_utc": "2026-01-01T01:20:00+00:00"
+    },
+    {
+     "latitude_deg": -28.786336832032013,
+     "longitude_deg": -68.06631715786716,
+     "altitude_m": 543002.8711478394,
+     "time_utc": "2026-01-01T01:21:00+00:00"
+    },
+    {
+     "latitude_deg": -27.190748384177375,
+     "longitude_deg": -64.45390537294111,
+     "altitude_m": 549288.4903318817,
+     "time_utc": "2026-01-01T01:22:00+00:00"
+    },
+    {
+     "latitude_deg": -25.49580165123871,
+     "longitude_deg": -60.96056190717813,
+     "altitude_m": 555556.0799453026,
+     "time_utc": "2026-01-01T01:23:00+00:00"
+    },
+    {
+     "latitude_deg": -23.712068634243753,
+     "longitude_deg": -57.580591320310155,
+     "altitude_m": 561779.6663626442,
+     "time_utc": "2026-01-01T01:24:00+00:00"
+    },
+    {
+     "latitude_deg": -21.84960791506138,
+     "longitude_deg": -54.306972766064156,
+     "altitude_m": 567933.6023821915,
+     "time_utc": "2026-01-01T01:25:00+00:00"
+    },
+    {
+     "latitude_deg": -19.91792175298343,
+     "longitude_deg": -51.13172337640439,
+     "altitude_m": 573992.6560503868,
+     "time_utc": "2026-01-01T01:26:00+00:00"
+    },
+    {
+     "latitude_deg": -17.925944920684746,
+     "longitude_deg": -48.04619863680598,
+     "altitude_m": 579932.0962309232,
+     "time_utc": "2026-01-01T01:27:00+00:00"
+    },
+    {
+     "latitude_deg": -15.882057743507167,
+     "longitude_deg": -45.04133083247769,
+     "altitude_m": 585727.7749417285,
+     "time_utc": "2026-01-01T01:28:00+00:00"
+    },
+    {
+     "latitude_deg": -13.794116839208952,
+     "longitude_deg": -42.1078108142028,
+     "altitude_m": 591356.2064975444,
+     "time_utc": "2026-01-01T01:29:00+00:00"
+    },
+    {
+     "latitude_deg": -11.669498249116643,
+     "longitude_deg": -39.236220455267016,
+     "altitude_m": 596794.6435049828,
+     "time_utc": "2026-01-01T01:30:00+00:00"
+    }
+   ]
+  },
+  "hohmann": [
+   {
+    "r1": 6778000.0,
+    "r2": 42164000.0,
+    "result": {
+     "delta_v1_ms": 2397.5085699579868,
+     "delta_v2_ms": 1456.5008896284685,
+     "total_delta_v_ms": 3854.0094595864553,
+     "transfer_time_s": 19048.402546893998,
+     "transfer_time_h": 5.291222929692777,
+     "transfer_semi_major_axis_m": 24471000.0
+    }
+   },
+   {
+    "r1": 10000000.0,
+    "r2": 7000000.0,
+    "result": {
+     "delta_v1_ms": -584.0903636144039,
+     "delta_v2_ms": -638.7906846274864,
+     "total_delta_v_ms": 1222.8810482418903,
+     "transfer_time_s": 3899.504029069546,
+     "transfer_time_h": 1.0831955636304293,
+     "transfer_semi_major_axis_m": 8500000.0
+    }
+   }
+  ]
+ }
+}

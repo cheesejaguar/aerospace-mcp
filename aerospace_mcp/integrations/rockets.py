@@ -7,15 +7,18 @@ Provides 3-DOF (three degrees of freedom) rocket ascent modeling with:
     - Performance metric extraction (apogee, max-Q, burnout, Isp)
     - Preliminary rocket sizing from target altitude / payload mass
 
+The trajectory integration, thrust interpolation and performance analysis
+run in the native Rust core (``aerospace_mcp._native``, sources in
+``rust/src/rocket.rs``); this module keeps the Python data model, builds the
+atmosphere table (so the ISA / ambiance model stays in Python), and converts
+results back into dataclasses.
+
 The Tsiolkovsky rocket equation underpins the sizing calculations::
 
     delta_V = Isp * g0 * ln(m0 / mf)
 
 where m0 is the initial mass, mf is the final (dry) mass, and Isp is the
 specific impulse.
-
-Uses NumPy for vectorized calculations with CuPy compatibility for GPU
-acceleration via the ``_array_backend`` module.
 
 References:
     - Sutton, G.P. & Biblarz, O., "Rocket Propulsion Elements" (9th ed., 2017)
@@ -29,7 +32,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-from ._array_backend import np
+from .. import _native
+from ._array_backend import np, to_numpy
 from .atmosphere import get_atmosphere_profile
 
 # ===========================================================================
@@ -141,24 +145,7 @@ def get_thrust_at_time(thrust_curve: list[list[float]], time_s: float) -> float:
     Returns:
         Thrust in Newtons (0.0 outside the thrust curve bounds).
     """
-    if not thrust_curve:
-        return 0.0
-
-    # Convert to NumPy arrays for efficient interpolation
-    thrust_array = np.array(thrust_curve)
-    times = thrust_array[:, 0]
-    thrusts = thrust_array[:, 1]
-
-    # Handle constant thrust (single point)
-    if len(thrust_curve) == 1:
-        return float(thrusts[0]) if time_s <= times[0] else 0.0
-
-    # Before first point or after last point
-    if time_s < times[0] or time_s >= times[-1]:
-        return 0.0
-
-    # Use NumPy interpolation
-    return float(np.interp(time_s, times, thrusts))
+    return _native.thrust_at_time(thrust_curve, time_s)
 
 
 @lru_cache(maxsize=4)
@@ -197,6 +184,17 @@ def _build_atmosphere_table(
     return altitudes, densities, speeds_of_sound
 
 
+@lru_cache(maxsize=4)
+def _native_atmosphere(max_alt_m: int = 50000) -> "_native.AtmosphereTable":
+    """Atmosphere table in the form the native simulation consumes (cached)."""
+    altitudes, densities, speeds_of_sound = _build_atmosphere_table(max_alt_m)
+    return _native.AtmosphereTable(
+        to_numpy(altitudes).tolist(),
+        to_numpy(densities).tolist(),
+        to_numpy(speeds_of_sound).tolist(),
+    )
+
+
 # ===========================================================================
 # 3-DOF Rocket Trajectory Simulation
 # ===========================================================================
@@ -224,7 +222,8 @@ def rocket_3dof_trajectory(
     Mass depletion: dm/dt = -m_propellant / t_burn (constant flow rate).
 
     Uses a pre-computed ISA atmosphere lookup table for density and
-    speed-of-sound interpolation at each time step.
+    speed-of-sound interpolation at each time step (exponential fallback
+    above 50 km). Integration runs natively; see ``rust/src/rocket.rs``.
 
     Args:
         geometry: Rocket geometry and mass properties.
@@ -240,208 +239,29 @@ def rocket_3dof_trajectory(
         ValueError: If the time step or duration is out of bounds, or the
             resulting step count exceeds the safety cap.
     """
-    if not 0.001 <= dt_s <= 10.0:
-        raise ValueError("dt_s must be between 0.001 and 10 s")
-    if not 0 < max_time_s <= 3600.0:
-        raise ValueError("max_time_s must be > 0 and <= 3600 s")
-    if max_time_s / dt_s > 500_000:
-        raise ValueError("too many integration steps (max 500000); increase dt_s")
-
-    # Initial conditions
-    trajectory = []
-    time = 0.0
-    altitude = 0.0  # m above sea level
-    velocity_vertical = 0.0  # m/s
-    velocity_horizontal = 0.0  # m/s
-    mass = geometry.dry_mass_kg + geometry.propellant_mass_kg
-
-    # Launch angle
-    launch_angle_rad = np.radians(launch_angle_deg)
-    sin_launch = np.sin(launch_angle_rad)
-    cos_launch = np.cos(launch_angle_rad)
-
-    # Reference (cross-sectional) area for drag: A = pi * (d/2)^2
-    drag_area = PI * (geometry.diameter_m / 2) ** 2
-
-    # Pre-compute mass flow rate if thrust curve exists
-    mass_flow_rate = 0.0
-    if geometry.thrust_curve:
-        thrust_array = np.array(geometry.thrust_curve)
-        burn_time_total = float(
-            np.max(thrust_array[thrust_array[:, 1] > 0, 0], initial=1.0)
-        )
-        if burn_time_total > 0:
-            mass_flow_rate = geometry.propellant_mass_kg / burn_time_total
-
-    # Build atmosphere lookup table for fast interpolation
-    max_alt_m = 50000
-    atm_altitudes, atm_densities, atm_speeds_of_sound = _build_atmosphere_table(
-        max_alt_m
+    points = _native.rocket_trajectory(
+        geometry, _native_atmosphere(), dt_s, max_time_s, launch_angle_deg
     )
-
-    while time <= max_time_s and altitude >= 0:
-        # Get current thrust
-        thrust = (
-            get_thrust_at_time(geometry.thrust_curve, time)
-            if geometry.thrust_curve
-            else 0.0
-        )
-
-        # Get atmospheric properties via interpolation
-        if 0 <= altitude <= max_alt_m:
-            rho = float(np.interp(altitude, atm_altitudes, atm_densities))
-            speed_of_sound = float(
-                np.interp(altitude, atm_altitudes, atm_speeds_of_sound)
-            )
-        else:
-            # Fallback for extreme altitudes
-            rho = 1.225 * np.exp(-altitude / 8400)
-            speed_of_sound = 343.0 * np.sqrt(
-                max(0.1, (288.15 - 0.0065 * altitude) / 288.15)
-            )
-
-        # Total velocity (NumPy for efficiency)
-        velocity_total = np.sqrt(velocity_vertical**2 + velocity_horizontal**2)
-
-        # Mach number
-        mach = velocity_total / speed_of_sound if speed_of_sound > 0 else 0.0
-
-        # Dynamic pressure
-        dynamic_pressure = 0.5 * rho * velocity_total**2
-
-        # Drag force
-        drag_force = geometry.cd * drag_area * dynamic_pressure
-
-        # Drag acceleration components
-        if velocity_total > 0:
-            drag_accel_vertical = (
-                -drag_force * (velocity_vertical / velocity_total) / mass
-            )
-            drag_accel_horizontal = (
-                -drag_force * (velocity_horizontal / velocity_total) / mass
-            )
-        else:
-            drag_accel_vertical = 0.0
-            drag_accel_horizontal = 0.0
-
-        # Thrust acceleration (in launch direction initially, then vertical)
-        if time < 5.0:  # First 5 seconds follow launch angle
-            thrust_accel_vertical = thrust * sin_launch / mass
-            thrust_accel_horizontal = thrust * cos_launch / mass
-        else:  # After 5 seconds, thrust is vertical only
-            thrust_accel_vertical = thrust / mass
-            thrust_accel_horizontal = 0.0
-
-        # Total acceleration
-        accel_vertical = thrust_accel_vertical - G0 + drag_accel_vertical
-        accel_horizontal = thrust_accel_horizontal + drag_accel_horizontal
-
-        # Record current state
-        trajectory.append(
-            RocketTrajectoryPoint(
-                time_s=time,
-                altitude_m=altitude,
-                velocity_ms=float(velocity_total),
-                acceleration_ms2=float(
-                    np.sqrt(accel_vertical**2 + accel_horizontal**2)
-                ),
-                mass_kg=mass,
-                thrust_n=thrust,
-                drag_n=drag_force,
-                mach=float(mach),
-                dynamic_pressure_pa=dynamic_pressure,
-            )
-        )
-
-        # Forward Euler integration: v_{n+1} = v_n + a*dt,  h_{n+1} = h_n + v*dt
-        velocity_vertical += accel_vertical * dt_s
-        velocity_horizontal += accel_horizontal * dt_s
-        altitude += velocity_vertical * dt_s
-
-        # Update mass
-        if thrust > 0 and mass_flow_rate > 0:
-            mass = max(geometry.dry_mass_kg, mass - mass_flow_rate * dt_s)
-
-        time += dt_s
-
-        # Stop if apogee reached and descending
-        if altitude > 0 and velocity_vertical < -1.0:
-            break
-
-    return trajectory
+    return [RocketTrajectoryPoint(*p) for p in points]
 
 
 def analyze_rocket_performance(
     trajectory: list[RocketTrajectoryPoint],
 ) -> RocketPerformance:
-    """
-    Analyze rocket performance from trajectory data using NumPy.
+    """Extract apogee, max-Q, burnout and impulse metrics from a trajectory.
+
+    Burnout is the sample right after the last one with thrust above 100 N;
+    total impulse uses trapezoidal integration and Isp is
+    ``I_total / (m_propellant_used * g0)``.
 
     Args:
-        trajectory: List of trajectory points
+        trajectory: List of trajectory points (any objects with the
+            ``RocketTrajectoryPoint`` attributes).
 
     Returns:
-        RocketPerformance summary
+        RocketPerformance summary (all zeros for an empty trajectory).
     """
-    if not trajectory:
-        return RocketPerformance(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-
-    # Convert trajectory to NumPy arrays for vectorized analysis
-    n = len(trajectory)
-    times = np.array([p.time_s for p in trajectory])
-    altitudes = np.array([p.altitude_m for p in trajectory])
-    velocities = np.array([p.velocity_ms for p in trajectory])
-    machs = np.array([p.mach for p in trajectory])
-    dynamic_pressures = np.array([p.dynamic_pressure_pa for p in trajectory])
-    thrusts = np.array([p.thrust_n for p in trajectory])
-
-    # Find key performance metrics using NumPy
-    max_altitude = float(np.max(altitudes))
-    max_velocity = float(np.max(velocities))
-    max_mach = float(np.max(machs))
-    max_q = float(np.max(dynamic_pressures))
-
-    # Find apogee time
-    apogee_idx = int(np.argmax(altitudes))
-    apogee_time = float(times[apogee_idx])
-
-    # Find burnout point (when thrust drops to near zero)
-    thrust_active = thrusts > 100
-    if np.any(thrust_active):
-        # Find last index where thrust is active, then next point is burnout
-        last_thrust_idx = int(np.max(np.where(thrust_active)[0]))
-        burnout_idx = min(last_thrust_idx + 1, n - 1)
-    else:
-        burnout_idx = n - 1
-
-    burnout_point = trajectory[burnout_idx]
-
-    # Calculate total impulse using trapezoidal integration
-    if n > 1:
-        dt = np.diff(times)
-        avg_thrusts = (thrusts[:-1] + thrusts[1:]) / 2
-        total_impulse = float(np.sum(avg_thrusts * dt))
-    else:
-        total_impulse = 0.0
-
-    # Estimate specific impulse
-    initial_prop_mass = trajectory[0].mass_kg - burnout_point.mass_kg
-    specific_impulse = (
-        total_impulse / (initial_prop_mass * G0) if initial_prop_mass > 0 else 0.0
-    )
-
-    return RocketPerformance(
-        max_altitude_m=max_altitude,
-        apogee_time_s=apogee_time,
-        max_velocity_ms=max_velocity,
-        max_mach=max_mach,
-        max_q_pa=max_q,
-        burnout_altitude_m=burnout_point.altitude_m,
-        burnout_velocity_ms=burnout_point.velocity_ms,
-        burnout_time_s=burnout_point.time_s,
-        total_impulse_ns=total_impulse,
-        specific_impulse_s=specific_impulse,
-    )
+    return RocketPerformance(*_native.analyze_performance(trajectory))
 
 
 # ===========================================================================

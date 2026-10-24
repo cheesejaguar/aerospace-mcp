@@ -30,6 +30,9 @@ For real flight planning, always use certified aviation software and consult off
 # Install UV (fast Python package manager)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
+# Install a Rust toolchain (builds the native trajectory/orbit core)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
 # Clone and setup
 git clone https://github.com/cheesejaguar/aerospace-mcp.git
 cd aerospace-mcp
@@ -122,13 +125,13 @@ uv run aerospace-mcp sse 0.0.0.0 8001
 ### Space & Orbital Mechanics Capabilities
 
 - 🛰️ **Orbital Elements & State Vectors**: Convert between Keplerian elements and Cartesian state vectors
-- 🌍 **Orbit Propagation**: Numerical integration with J2 perturbations using RK4 method
+- 🌍 **Orbit Propagation**: Numerical integration with J2 perturbations using RK4 method (native Rust core)
 - 🗺️ **Ground Track Computation**: Calculate satellite ground tracks for mission planning
 - 🔄 **Hohmann Transfers**: Calculate optimal two-impulse orbital transfers
 - 🤝 **Orbital Rendezvous**: Plan multi-maneuver rendezvous sequences
 - 🎯 **Trajectory Optimization**: Genetic algorithms and particle swarm optimization
 - 📊 **Uncertainty Analysis**: Monte Carlo sampling for trajectory robustness assessment
-- 🚀 **Lambert Problem**: Two-body trajectory determination for given time-of-flight
+- 🚀 **Lambert Problem**: Two-body trajectory determination for given time-of-flight (Izzo's 2015 algorithm, multi-revolution and retrograde; native Rust core)
 
 ### Supported Operations
 
@@ -192,6 +195,7 @@ uv run aerospace-mcp sse 0.0.0.0 8001
 ### System Requirements
 
 - **Python**: 3.11+ (3.12+ recommended for best performance)
+- **Rust**: stable toolchain via [rustup](https://rustup.rs) when installing from source (the trajectory and orbital-mechanics core is a Rust extension built automatically by `uv sync` / `pip install`)
 - **Memory**: 512MB RAM minimum (1GB+ recommended)
 - **Storage**: 200MB free space
 - **Network**: Internet connection for initial setup
@@ -697,6 +701,15 @@ graph TB
    - **OpenAP Integration**: Aircraft performance models
    - **GeographicLib**: Precise geodesic calculations
 
+5. **Native Core** (`rust/`, imported as `aerospace_mcp._native`)
+   - Rust + PyO3 extension for the numerically heavy code: 3-DOF rocket
+     simulation and performance analysis, the launch-angle and
+     thrust-profile optimizers, Kepler / element conversions, J2 orbit
+     propagation, ground tracks, Hohmann transfers, and Izzo's Lambert solver
+   - Optimizers evaluate every candidate trajectory natively (no Python
+     call per evaluation), roughly 190x faster than the former pure-Python
+     loop; the MCP server, tool wrappers and data models remain Python
+
 ### Design Principles
 
 - **Performance First**: In-memory data structures for sub-millisecond lookups
@@ -1163,7 +1176,13 @@ pytest tests/test_plan.py -v
 
 # Run tool-specific tests
 pytest tests/tools/ -v
+
+# Native core unit tests (no Python needed)
+cd rust && cargo test --no-default-features
 ```
+
+After editing Rust sources, `uv sync` (or `uv run ...`) rebuilds the
+extension automatically; with a plain pip setup run `pip install -e .` again.
 
 ### Code Quality
 
@@ -1176,6 +1195,9 @@ mypy main.py aerospace_mcp/
 
 # Linting
 ruff check .
+
+# Rust formatting and lints
+(cd rust && cargo fmt --check && cargo clippy --no-default-features --all-targets -- -D warnings)
 
 # Pre-commit (runs all checks)
 pre-commit run --all-files
@@ -1208,9 +1230,18 @@ aerospace-mcp/
 │       ├── atmosphere.py  # Vectorized ISA calculations
 │       ├── aero.py        # Vectorized aerodynamics
 │       ├── frames.py      # Vectorized coordinate transforms
-│       ├── rockets.py     # Vectorized trajectory integration
-│       ├── orbits.py      # Orbital mechanics computations
+│       ├── rockets.py     # Rocket data model (simulation in rust/)
+│       ├── trajopt.py     # Trajectory optimization (optimizers in rust/)
+│       ├── orbits.py      # Orbital mechanics (kernels in rust/)
 │       └── propellers.py  # Propeller BEMT analysis
+├── rust/                  # Native core (Rust + PyO3 -> aerospace_mcp._native)
+│   ├── Cargo.toml
+│   └── src/
+│       ├── rocket.rs      # 3-DOF ascent simulation & performance metrics
+│       ├── optimize.rs    # Golden-section, gradient descent, rocket optimizers
+│       ├── orbit.rs       # Kepler, elements <-> state, J2 RK4, ground track
+│       ├── lambert.rs     # Izzo Lambert solver
+│       └── python.rs      # PyO3 bindings
 ├── app/                   # Alternative FastAPI structure
 │   ├── __init__.py
 │   └── main.py

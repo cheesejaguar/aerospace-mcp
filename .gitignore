@@ -351,3 +351,6 @@ config.local.toml
 .env.production
 .env.staging
 docker-compose.override.local.yml
+
+# Test fixtures (checked in, despite the data/ rule above)
+!tests/data/

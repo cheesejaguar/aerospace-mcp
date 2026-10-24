@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ### Development Setup
+Building from source needs a Rust toolchain (rustup): the trajectory/orbit core is a PyO3 extension (`rust/`, built by maturin, imported as `aerospace_mcp._native`). `uv sync` rebuilds it when Rust sources change.
 ```bash
 # Install with UV (recommended)
 uv venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
@@ -55,6 +56,11 @@ mypy app/ aerospace_mcp/
 
 # Pre-commit hooks (runs all checks)
 pre-commit run --all-files
+
+# Native core (from rust/): format, lint, unit tests without Python
+cargo fmt --check
+cargo clippy --no-default-features --all-targets -- -D warnings
+cargo test --no-default-features
 ```
 
 ### Docker Operations
@@ -93,6 +99,13 @@ The system follows a layered architecture with shared business logic:
 - Single registration source: `aerospace_mcp/tools/registry.py` (`ALL_TOOLS`) — shared by the FastMCP server and the CLI; a contract test keeps it in sync with `TOOL_REGISTRY` search metadata. New tools register in exactly two places: `ALL_TOOLS` and `TOOL_REGISTRY`.
 - FastMCP framework for simplified tool development with decorators and automatic schema generation
 - **Tool search tool** for dynamic tool discovery following Anthropic's guide
+
+**Native Core** (`rust/`, Python module `aerospace_mcp._native`):
+- Rust + PyO3 (abi3, Python >= 3.11), built by maturin as the project's build backend
+- `rocket.rs` (3-DOF Euler ascent + performance analysis), `optimize.rs` (golden-section, projected gradient descent, launch-angle / thrust-profile optimizers that simulate natively), `orbit.rs` (Kepler, elements <-> state, J2 RK4 propagation, ground track, Hohmann), `lambert.rs` (Izzo 2015, replaces poliastro)
+- `python.rs` holds the only PyO3 code; the math modules are pure Rust and testable with `cargo test --no-default-features`
+- Python `integrations/rockets.py`, `trajopt.py`, `orbits.py` keep the dataclasses and orchestration and delegate math to `_native`; the atmosphere table is built in Python and passed in
+- `tests/test_native_parity.py` checks results against `tests/data/legacy_python_reference.json`, recorded from the original pure-Python implementation
 
 **Tool Discovery** (`aerospace_mcp/tools/tool_search.py`):
 - `search_aerospace_tools`: Search tools by name, description, or functionality
@@ -147,7 +160,8 @@ The legacy low-level MCP server (`aerospace_mcp/server.py`) was removed; `fastmc
 - **fastapi/uvicorn**: HTTP API framework and ASGI server
 - **fastmcp**: High-level Model Context Protocol framework for simplified tool development
 - **pydantic**: Data validation and serialization
-- **Optional packages**: ambiance (atmosphere), poliastro/astropy (space), aerosandbox (aerodynamics), rocketpy (rockets), filterpy/control (GNC)
+- **pyo3/maturin**: Rust bindings and build backend for the native core
+- **Optional packages**: ambiance (atmosphere), astropy/spiceypy/skyfield (space), aerosandbox (aerodynamics), rocketpy (rockets), filterpy/control (GNC)
 
 ### Safety Considerations
 

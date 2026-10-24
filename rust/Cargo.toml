@@ -1,0 +1,28 @@
+[package]
+name = "aerospace-mcp-native"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Native trajectory and orbital mechanics core for aerospace-mcp"
+license = "MIT"
+repository = "https://github.com/cheesejaguar/aerospace-mcp"
+publish = false
+
+[lib]
+# Built by maturin as the `aerospace_mcp._native` extension module.
+name = "_native"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["python"]
+# PyO3 bindings. The pure-Rust math modules do not depend on it, so the core
+# can be unit-tested without a Python toolchain:
+#   cargo test --no-default-features
+python = ["dep:pyo3"]
+
+[dependencies]
+pyo3 = { version = "0.30", features = ["abi3-py311"], optional = true }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

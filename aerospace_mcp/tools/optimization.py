@@ -60,7 +60,9 @@ def optimize_thrust_profile(
 
         return json.dumps(
             {
-                "optimization_result": result.optimization_result,
+                "objective": objective,
+                "iterations": result.iterations,
+                "converged": result.converged,
                 "optimal_objective": result.optimal_objective,
                 "optimal_parameters": result.optimal_parameters,
                 "performance": {
@@ -89,8 +91,10 @@ def trajectory_sensitivity_analysis(
 
     Args:
         rocket_geometry: Baseline rocket geometry
-        parameter_variations: Parameters to vary and their ranges
-        analysis_options: Optional analysis settings
+        parameter_variations: Parameters to vary (dry_mass_kg,
+            propellant_mass_kg, diameter_m, cd) mapped to lists of values
+        analysis_options: Optional analysis settings: ``objective`` is one of
+            "max_altitude" (default), "max_velocity", "specific_impulse"
 
     Returns:
         JSON string with sensitivity analysis results showing how each parameter
@@ -109,7 +113,8 @@ def trajectory_sensitivity_analysis(
 
         geometry = RocketGeometry(**rocket_geometry)
 
-        result = _sensitivity(geometry, parameter_variations, analysis_options or {})
+        objective = (analysis_options or {}).get("objective", "max_altitude")
+        result = _sensitivity(geometry, parameter_variations, objective=objective)
 
         return json.dumps(result, indent=2)
 
@@ -215,9 +220,10 @@ def porkchop_plot_analysis(
     Args:
         departure_body: Departure celestial body name
         arrival_body: Arrival celestial body name
-        departure_date_range: Range of departure dates (ISO format)
-        arrival_date_range: Range of arrival dates (ISO format)
-        analysis_options: Optional analysis settings
+        departure_date_range: Departure dates to evaluate (ISO format)
+        arrival_date_range: Arrival dates to evaluate (ISO format)
+        analysis_options: Optional analysis settings: ``min_tof_days``
+            (default 100) and ``max_tof_days`` (default 400)
 
     Returns:
         JSON string with porkchop plot data (departure date vs arrival date
@@ -227,14 +233,16 @@ def porkchop_plot_analysis(
         No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
-        from ..integrations.trajopt import porkchop_plot_analysis as _porkchop
+        from ..integrations.orbits import porkchop_plot_analysis as _porkchop
 
+        options = analysis_options or {}
         result = _porkchop(
             departure_body,
             arrival_body,
-            departure_date_range,
-            arrival_date_range,
-            analysis_options or {},
+            departure_dates=departure_date_range or None,
+            arrival_dates=arrival_date_range or None,
+            min_tof_days=options.get("min_tof_days", 100),
+            max_tof_days=options.get("max_tof_days", 400),
         )
 
         return json.dumps(result, indent=2)

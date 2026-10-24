@@ -19,6 +19,11 @@ The optimization problem is formulated as::
 where *J* is the objective (e.g., negative max altitude for maximization)
 and *x* is the design vector (launch angle, thrust multipliers, etc.).
 
+The optimizers and the rocket simulation they drive run in the native Rust
+core (``aerospace_mcp._native``, sources in ``rust/src/optimize.rs``).
+``optimize_launch_angle`` and ``optimize_thrust_profile`` evaluate every
+candidate trajectory natively, without a Python round-trip per evaluation.
+
 References:
     - Betts, J.T., "Practical Methods for Optimal Control and Estimation
       Using Nonlinear Programming" (2nd ed., 2010)
@@ -28,12 +33,17 @@ WARNING: This module is for educational and research purposes only.
 Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
-import math
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from .rockets import RocketGeometry, analyze_rocket_performance, rocket_3dof_trajectory
+from .. import _native
+from .rockets import (
+    RocketGeometry,
+    _native_atmosphere,
+    analyze_rocket_performance,
+    rocket_3dof_trajectory,
+)
 
 # ===========================================================================
 # Data Classes
@@ -112,40 +122,9 @@ def simple_golden_section_search(
     Returns:
         Tuple of ``(optimal_x, optimal_value)``.
     """
-    # Golden ratio constants
-    phi = (1 + math.sqrt(5)) / 2  # ~1.618
-    resphi = 2 - phi  # ~0.382 = 1/phi^2
-
-    # Place two interior probe points
-    x1 = lower_bound + resphi * (upper_bound - lower_bound)
-    x2 = upper_bound - resphi * (upper_bound - lower_bound)
-    f1 = objective_func(x1)
-    f2 = objective_func(x2)
-
-    for _i in range(max_iterations):
-        if abs(upper_bound - lower_bound) < tolerance:
-            break
-
-        if f1 < f2:
-            # f1 is better -- narrow from the right
-            upper_bound = x2
-            x2 = x1
-            f2 = f1
-            x1 = lower_bound + resphi * (upper_bound - lower_bound)
-            f1 = objective_func(x1)
-        else:
-            # f2 is better -- narrow from the left
-            lower_bound = x1
-            x1 = x2
-            f1 = f2
-            x2 = upper_bound - resphi * (upper_bound - lower_bound)
-            f2 = objective_func(x2)
-
-    # Return the better of the two remaining probe points
-    if f1 < f2:
-        return x1, f1
-    else:
-        return x2, f2
+    return _native.golden_section_search(
+        objective_func, lower_bound, upper_bound, tolerance, max_iterations
+    )
 
 
 # ===========================================================================
@@ -185,51 +164,19 @@ def simple_gradient_descent(
 
     Returns:
         Tuple of ``(optimal_params, optimal_value, iterations, converged)``.
+
+    Raises:
+        ValueError: If ``param_bounds`` does not have one pair per parameter.
     """
-    current_params = initial_params.copy()
-    current_value = objective_func(current_params)
-
-    for iteration in range(max_iterations):
-        # Numerical gradient estimation via central differences
-        gradient = []
-        h = 1e-6  # Finite-difference step size
-
-        for i, param in enumerate(current_params):
-            # Forward perturbation (clamped to bounds)
-            params_plus = current_params.copy()
-            params_plus[i] = min(param_bounds[i][1], param + h)
-            value_plus = objective_func(params_plus)
-
-            # Backward perturbation (clamped to bounds)
-            params_minus = current_params.copy()
-            params_minus[i] = max(param_bounds[i][0], param - h)
-            value_minus = objective_func(params_minus)
-
-            # Central-difference gradient: dJ/dx_i ~ (J+ - J-) / (2h)
-            grad = (value_plus - value_minus) / (2 * h)
-            gradient.append(grad)
-
-        # Gradient descent update with box-constraint projection
-        new_params = []
-        max_change = 0.0
-
-        for i, (param, grad) in enumerate(zip(current_params, gradient, strict=False)):
-            new_param = param - learning_rate * grad
-            # Project onto box constraints [lower, upper]
-            new_param = max(param_bounds[i][0], min(param_bounds[i][1], new_param))
-            new_params.append(new_param)
-            max_change = max(max_change, abs(new_param - param))
-
-        # Convergence check: both parameter and objective changes small
-        new_value = objective_func(new_params)
-
-        if max_change < tolerance and abs(new_value - current_value) < tolerance:
-            return new_params, new_value, iteration + 1, True
-
-        current_params = new_params
-        current_value = new_value
-
-    return current_params, current_value, max_iterations, False
+    params, value, iterations, converged = _native.gradient_descent(
+        objective_func,
+        initial_params,
+        param_bounds,
+        learning_rate,
+        tolerance,
+        max_iterations,
+    )
+    return params, value, iterations, converged
 
 
 # ===========================================================================
@@ -242,50 +189,24 @@ def optimize_launch_angle(
     objective: str = "max_altitude",
     angle_bounds: tuple[float, float] = (80.0, 90.0),
 ) -> TrajectoryOptimizationResult:
-    """
-    Optimize launch angle for maximum altitude or range.
+    """Optimize the launch angle by golden-section search (0.1 deg tolerance).
+
+    Each candidate is simulated with the default trajectory settings
+    (``dt_s=0.1``, ``max_time_s=300``).
 
     Args:
-        geometry: Rocket geometry and properties
-        objective: "max_altitude" or "max_range"
-        angle_bounds: (min_angle_deg, max_angle_deg)
+        geometry: Rocket geometry and properties.
+        objective: ``"max_altitude"``, or ``"max_range"`` (accepted, but
+            downrange is not modelled, so every angle scores zero).
+        angle_bounds: ``(min_angle_deg, max_angle_deg)``.
 
     Returns:
-        Optimization result
+        Optimization result with the trajectory at the optimal angle.
     """
-
-    def objective_function(angle_deg: float) -> float:
-        """Objective function to minimize (negative for maximization)."""
-        try:
-            trajectory = rocket_3dof_trajectory(geometry, launch_angle_deg=angle_deg)
-            if not trajectory:
-                return float("inf")  # Invalid trajectory
-
-            performance = analyze_rocket_performance(trajectory)
-
-            if objective == "max_altitude":
-                return -performance.max_altitude_m  # Negative for maximization
-            elif objective == "max_range":
-                # Estimate range from final horizontal position (simplified)
-                final_horizontal_distance = (
-                    0.0  # Placeholder - would need 2D integration
-                )
-                return -final_horizontal_distance
-            else:
-                return float("inf")
-        except Exception:
-            return float("inf")
-
-    # Optimize using golden section search
-    optimal_angle, optimal_value = simple_golden_section_search(
-        objective_function,
-        angle_bounds[0],
-        angle_bounds[1],
-        tolerance=0.1,  # 0.1 degree tolerance
-        max_iterations=50,
+    optimal_angle, optimal_value = _native.optimize_launch_angle(
+        geometry, _native_atmosphere(), objective, angle_bounds[0], angle_bounds[1]
     )
 
-    # Generate final trajectory with optimal parameters
     final_trajectory = rocket_3dof_trajectory(geometry, launch_angle_deg=optimal_angle)
     final_performance = analyze_rocket_performance(final_trajectory)
 
@@ -306,117 +227,42 @@ def optimize_thrust_profile(
     n_segments: int = 5,
     objective: str = "max_altitude",
 ) -> TrajectoryOptimizationResult:
-    """
-    Optimize thrust profile for better performance.
+    """Optimize a segmented thrust profile at fixed burn time and total impulse.
+
+    Each of ``n_segments`` equal-length segments gets a thrust multiplier in
+    ``[0.1, 3.0]`` (relative to the average thrust); the curve is rescaled to
+    ``total_impulse_target`` before every evaluation. Candidates are
+    simulated with ``dt_s=0.2`` and ``max_time_s=150``; the final trajectory
+    uses the default settings.
 
     Args:
-        geometry: Base rocket geometry
-        burn_time_s: Total burn time
-        total_impulse_target: Target total impulse
-        n_segments: Number of thrust profile segments
-        objective: "max_altitude", "min_max_q", or "min_gravity_loss"
+        geometry: Base rocket geometry (its thrust curve is replaced).
+        burn_time_s: Total burn time (s), > 0.
+        total_impulse_target: Target total impulse (N*s), > 0.
+        n_segments: Number of thrust profile segments, >= 1.
+        objective: ``"max_altitude"``, ``"min_max_q"``, or
+            ``"min_gravity_loss"`` (approximated as ``g0 * burnout_time``).
 
     Returns:
-        Optimization result
+        Optimization result; ``optimal_parameters`` holds one
+        ``thrust_mult_seg_<i>`` per segment plus the final ``thrust_curve``.
+
+    Raises:
+        ValueError: If the burn time, impulse target, or segment count is
+            not positive.
     """
-    # Create initial thrust profile (constant thrust)
-    avg_thrust = total_impulse_target / burn_time_s
-    segment_time = burn_time_s / n_segments
-
-    # Initial parameters: thrust multipliers for each segment
-    initial_multipliers = [1.0] * n_segments
-    multiplier_bounds = [(0.1, 3.0)] * n_segments  # 10% to 300% of average
-
-    def objective_function(multipliers: list[float]) -> float:
-        """Objective function for thrust profile optimization."""
-        try:
-            # Create thrust curve from multipliers
-            thrust_curve = []
-            for i, mult in enumerate(multipliers):
-                time_start = i * segment_time
-                time_end = (i + 1) * segment_time
-                thrust_level = avg_thrust * mult
-                thrust_curve.append([time_start, thrust_level])
-                if i == len(multipliers) - 1:  # Last segment
-                    thrust_curve.append([time_end, 0.0])  # End thrust
-
-            # Normalize to maintain total impulse
-            current_impulse = sum(
-                avg_thrust * mult * segment_time for mult in multipliers
-            )
-            if current_impulse <= 0:
-                return float("inf")
-
-            scale_factor = total_impulse_target / current_impulse
-            thrust_curve = [[t, thrust * scale_factor] for t, thrust in thrust_curve]
-
-            # Update geometry with new thrust curve
-            opt_geometry = RocketGeometry(
-                dry_mass_kg=geometry.dry_mass_kg,
-                propellant_mass_kg=geometry.propellant_mass_kg,
-                diameter_m=geometry.diameter_m,
-                length_m=geometry.length_m,
-                cd=geometry.cd,
-                thrust_curve=thrust_curve,
-            )
-
-            # Run trajectory simulation with reasonable parameters
-            trajectory = rocket_3dof_trajectory(
-                opt_geometry, dt_s=0.2, max_time_s=150.0
-            )
-            if not trajectory:
-                return 1e6  # Large penalty instead of inf
-
-            performance = analyze_rocket_performance(trajectory)
-
-            if objective == "max_altitude":
-                # Return negative altitude for minimization, but ensure it's not zero
-                result = -max(
-                    1.0, performance.max_altitude_m
-                )  # At least -1 to avoid zero
-                return result
-            elif objective == "min_max_q":
-                return performance.max_q_pa
-            elif objective == "min_gravity_loss":
-                # Estimate gravity loss (simplified)
-                gravity_loss = 9.80665 * performance.burnout_time_s
-                return gravity_loss
-            else:
-                return 1e6
-
-        except Exception:
-            return 1e6  # Large penalty for failed cases
-
-    # Optimize using gradient descent
-    optimal_multipliers, optimal_value, iterations, converged = simple_gradient_descent(
-        objective_function,
-        initial_multipliers,
-        multiplier_bounds,
-        learning_rate=0.05,
-        tolerance=1e-3,
-        max_iterations=100,
+    multipliers, optimal_value, iterations, converged, curve = (
+        _native.optimize_thrust_profile(
+            geometry,
+            _native_atmosphere(),
+            burn_time_s,
+            total_impulse_target,
+            n_segments,
+            objective,
+        )
     )
+    final_thrust_curve = [[t, thrust] for t, thrust in curve]
 
-    # Generate final thrust curve and trajectory
-    final_thrust_curve = []
-    for i, mult in enumerate(optimal_multipliers):
-        time_start = i * segment_time
-        time_end = (i + 1) * segment_time
-        thrust_level = avg_thrust * mult
-        final_thrust_curve.append([time_start, thrust_level])
-        if i == len(optimal_multipliers) - 1:
-            final_thrust_curve.append([time_end, 0.0])
-
-    # Normalize final curve
-    current_impulse = sum(
-        avg_thrust * mult * segment_time for mult in optimal_multipliers
-    )
-    scale_factor = total_impulse_target / current_impulse
-    final_thrust_curve = [
-        [t, thrust * scale_factor] for t, thrust in final_thrust_curve
-    ]
-
-    # Generate final trajectory
     final_geometry = RocketGeometry(
         dry_mass_kg=geometry.dry_mass_kg,
         propellant_mass_kg=geometry.propellant_mass_kg,
@@ -425,13 +271,11 @@ def optimize_thrust_profile(
         cd=geometry.cd,
         thrust_curve=final_thrust_curve,
     )
-
     final_trajectory = rocket_3dof_trajectory(final_geometry)
     final_performance = analyze_rocket_performance(final_trajectory)
 
-    # Prepare optimal parameters
-    optimal_params = {
-        f"thrust_mult_seg_{i + 1}": mult for i, mult in enumerate(optimal_multipliers)
+    optimal_params: dict[str, Any] = {
+        f"thrust_mult_seg_{i + 1}": mult for i, mult in enumerate(multipliers)
     }
     optimal_params["thrust_curve"] = final_thrust_curve
 

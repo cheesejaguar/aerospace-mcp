@@ -3,6 +3,9 @@
 .gitignore
 .gitmodules
 
+# Rust build output
+rust/target/
+
 # Python cache and build files
 __pycache__/
 *.py[cod]
