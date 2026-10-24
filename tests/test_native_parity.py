@@ -4,7 +4,13 @@
 trajectory, optimizer and orbit implementations (commit ``source_commit`` in
 the file) before they were moved to ``rust/``. These tests check the port
 reproduces those results to floating-point rounding, except for two
-intentional fixes covered at the end of this module:
+intentional fixes covered at the end of this module.
+
+The rocket simulation's atmosphere table depends on whether the optional
+``ambiance`` package is installed, so the tests feed the native simulation
+the exact table the reference was recorded with (``atmosphere_table``).
+
+Intentional fixes:
 
 * The J2 perturbation sign (the legacy code advanced the node of prograde
   orbits instead of regressing it). Legacy propagation results are compared
@@ -65,6 +71,17 @@ GEOMETRIES = {
 }
 
 REL = 1e-9
+
+
+@pytest.fixture(autouse=True)
+def reference_atmosphere(monkeypatch):
+    """Simulate with the atmosphere the reference was recorded with."""
+    t = REFERENCE["atmosphere_table"]
+    table = _native.AtmosphereTable(
+        t["altitudes_m"], t["densities_kg_m3"], t["speeds_of_sound_ms"]
+    )
+    monkeypatch.setattr(R, "_native_atmosphere", lambda *_: table)
+    monkeypatch.setattr(T, "_native_atmosphere", lambda *_: table)
 
 
 def approx(value):
