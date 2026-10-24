@@ -1122,6 +1122,7 @@ numpy==1.26.4 \
     --hash=sha256:cd25bcecc4974d09257ffcd1f098ee778f7834c3ad767fe5db785be9a4aa9cb2 \
     --hash=sha256:edd8b5fe47dab091176d21bb6de568acdd906d1887a4584a15a9a96a1dca06ef
     # via
+    #   aerospace-mcp
     #   contourpy
     #   matplotlib
     #   openap
@@ -1816,7 +1817,9 @@ scipy==1.16.1 \
     --hash=sha256:f8a5d6cd147acecc2603fbd382fed6c46f474cccfcf69ea32582e033fb54dcfe \
     --hash=sha256:f965bbf3235b01c776115ab18f092a95aa74c271a52577bcb0563e85738fd618 \
     --hash=sha256:fedc2cbd1baed37474b1924c331b97bdff611d762c196fac1a9b71e67b813b1b
-    # via openap
+    # via
+    #   aerospace-mcp
+    #   openap
 six==1.17.0 \
     --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274 \
     --hash=sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81
