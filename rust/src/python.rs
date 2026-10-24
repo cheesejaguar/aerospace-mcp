@@ -287,6 +287,8 @@ fn kepler_solve(
 }
 
 /// Classical elements (degrees) -> `(position_m, velocity_ms)`.
+///
+/// Raises `ValueError` for parabolic, inconsistent or non-finite elements.
 #[pyfunction]
 #[pyo3(signature = (semi_major_axis_m, eccentricity, inclination_deg, raan_deg, arg_periapsis_deg, true_anomaly_deg, mu=orbit::MU_EARTH))]
 fn elements_to_state(
@@ -297,7 +299,7 @@ fn elements_to_state(
     arg_periapsis_deg: f64,
     true_anomaly_deg: f64,
     mu: f64,
-) -> (Vec3, Vec3) {
+) -> PyResult<(Vec3, Vec3)> {
     let el = Elements {
         semi_major_axis_m,
         eccentricity,
@@ -306,7 +308,7 @@ fn elements_to_state(
         arg_periapsis_deg,
         true_anomaly_deg,
     };
-    orbit::elements_to_state(&el, mu)
+    orbit::elements_to_state(&el, mu).map_err(value_error)
 }
 
 /// `(position_m, velocity_ms)` -> `(a, e, i, raan, arg_periapsis, true_anomaly)`
@@ -329,7 +331,8 @@ fn state_to_elements(
     ))
 }
 
-/// `(period_s, apoapsis_alt_m, periapsis_alt_m, energy_j_kg, angular_momentum_m2s)`.
+/// `(period_s, apoapsis_alt_m, periapsis_alt_m, energy_j_kg, angular_momentum_m2s)`
+/// of an elliptical orbit; raises `ValueError` otherwise.
 #[pyfunction]
 #[pyo3(signature = (semi_major_axis_m, eccentricity, mu=orbit::MU_EARTH, body_radius_m=orbit::R_EARTH))]
 fn orbit_properties(
@@ -337,15 +340,16 @@ fn orbit_properties(
     eccentricity: f64,
     mu: f64,
     body_radius_m: f64,
-) -> (f64, f64, f64, f64, f64) {
-    let p = orbit::orbit_properties(semi_major_axis_m, eccentricity, mu, body_radius_m);
-    (
+) -> PyResult<(f64, f64, f64, f64, f64)> {
+    let p = orbit::orbit_properties(semi_major_axis_m, eccentricity, mu, body_radius_m)
+        .map_err(value_error)?;
+    Ok((
         p.period_s,
         p.apoapsis_m,
         p.periapsis_m,
         p.energy_j_kg,
         p.angular_momentum_m2s,
-    )
+    ))
 }
 
 /// RK4 propagation with J2; returns `[(t_s, position_m, velocity_ms), ...]`
@@ -373,11 +377,10 @@ fn propagate_j2(
 }
 
 /// `[(latitude_deg, longitude_deg, altitude_m), ...]` for inertial positions
-/// sampled every `time_step_s`.
+/// at `elapsed_s` seconds after the first sample.
 #[pyfunction]
-#[pyo3(signature = (positions_m, time_step_s=60.0))]
-fn ground_track(positions_m: Vec<Vec3>, time_step_s: f64) -> PyResult<Vec<(f64, f64, f64)>> {
-    orbit::ground_track(&positions_m, time_step_s).map_err(value_error)
+fn ground_track(positions_m: Vec<Vec3>, elapsed_s: Vec<f64>) -> PyResult<Vec<(f64, f64, f64)>> {
+    orbit::ground_track(&positions_m, &elapsed_s).map_err(value_error)
 }
 
 /// `(delta_v1, delta_v2, total_delta_v, transfer_time_s, transfer_semi_major_axis_m)`.
@@ -394,7 +397,9 @@ fn hohmann_transfer(r1_m: f64, r2_m: f64, mu: f64) -> PyResult<(f64, f64, f64, f
     ))
 }
 
-/// Izzo's Lambert solver; returns `(v1, v2)` in units consistent with the inputs.
+/// Izzo's Lambert solver; returns `(v1, v2, transfer_angle_rad)`, velocities
+/// in units consistent with the inputs and the transfer angle actually
+/// traversed (in the direction of motion, excluding full revolutions).
 ///
 /// Raises `ValueError` for invalid or infeasible geometry and
 /// `RuntimeError` if the iteration fails to converge.
@@ -411,7 +416,7 @@ fn lambert_izzo(
     low_path: bool,
     max_iterations: usize,
     tolerance: f64,
-) -> PyResult<(Vec3, Vec3)> {
+) -> PyResult<(Vec3, Vec3, f64)> {
     let opts = LambertOptions {
         revolutions,
         prograde,
@@ -419,10 +424,12 @@ fn lambert_izzo(
         max_iterations,
         tolerance,
     };
-    lambert::izzo(mu, r1, r2, tof, opts).map_err(|e| match e {
-        LambertError::NoConvergence => PyRuntimeError::new_err(e.to_string()),
-        _ => value_error(e),
-    })
+    lambert::izzo(mu, r1, r2, tof, opts)
+        .map(|s| (s.v1, s.v2, s.transfer_angle_rad))
+        .map_err(|e| match e {
+            LambertError::NoConvergence => PyRuntimeError::new_err(e.to_string()),
+            _ => value_error(e),
+        })
 }
 
 /// Native trajectory and orbital-mechanics core for aerospace-mcp.

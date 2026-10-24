@@ -15,7 +15,7 @@
 use std::f64::consts::PI;
 use std::fmt;
 
-use crate::interp::interp;
+use crate::interp::{interp, interp_pairs};
 
 /// Standard gravitational acceleration (m/s^2).
 pub const G0: f64 = 9.80665;
@@ -139,6 +139,7 @@ pub enum SimError {
     TimeStep,
     Duration,
     TooManySteps,
+    Geometry(&'static str),
 }
 
 impl fmt::Display for SimError {
@@ -147,6 +148,7 @@ impl fmt::Display for SimError {
             SimError::TimeStep => "dt_s must be between 0.001 and 10 s",
             SimError::Duration => "max_time_s must be > 0 and <= 3600 s",
             SimError::TooManySteps => "too many integration steps (max 500000); increase dt_s",
+            SimError::Geometry(msg) => msg,
         })
     }
 }
@@ -172,9 +174,40 @@ pub fn thrust_at_time(curve: &[(f64, f64)], time_s: f64) -> f64 {
             if time_s < first || time_s >= last {
                 return 0.0;
             }
-            let (times, thrusts): (Vec<f64>, Vec<f64>) = curve.iter().copied().unzip();
-            interp(time_s, &times, &thrusts)
+            interp_pairs(time_s, curve)
         }
+    }
+}
+
+impl Geometry {
+    /// Reject inputs that would make the simulation divide by zero or
+    /// produce NaN/infinite results.
+    pub fn validate(&self) -> Result<(), SimError> {
+        let finite = [
+            self.dry_mass_kg,
+            self.propellant_mass_kg,
+            self.diameter_m,
+            self.cd,
+        ]
+        .iter()
+        .chain(self.thrust_curve.iter().flat_map(|(t, f)| [t, f]))
+        .all(|x| x.is_finite());
+        if !finite {
+            return Err(SimError::Geometry("rocket geometry values must be finite"));
+        }
+        if !(self.dry_mass_kg > 0.0) {
+            return Err(SimError::Geometry("dry_mass_kg must be > 0"));
+        }
+        if self.propellant_mass_kg < 0.0 {
+            return Err(SimError::Geometry("propellant_mass_kg must be >= 0"));
+        }
+        if !(self.diameter_m > 0.0) {
+            return Err(SimError::Geometry("diameter_m must be > 0"));
+        }
+        if self.cd < 0.0 {
+            return Err(SimError::Geometry("cd must be >= 0"));
+        }
+        Ok(())
     }
 }
 
@@ -212,6 +245,7 @@ pub fn simulate_into(
     out: &mut Vec<TrajectoryPoint>,
 ) -> Result<(), SimError> {
     validate(opts)?;
+    geometry.validate()?;
     out.clear();
 
     let dt = opts.dt_s;
@@ -440,5 +474,24 @@ pub(crate) mod tests {
         assert_eq!(traj.len(), 1);
         assert_eq!(analyze(&traj).max_altitude_m, 0.0);
         assert_eq!(analyze(&[]), Performance::default());
+    }
+
+    #[test]
+    fn rejects_degenerate_geometry() {
+        let atm = test_atmosphere();
+        let opts = SimOptions::default();
+        let mut g = test_rocket();
+        g.dry_mass_kg = 0.0;
+        g.propellant_mass_kg = 0.0;
+        assert!(matches!(
+            simulate(&g, &atm, &opts),
+            Err(SimError::Geometry(_))
+        ));
+        let mut g = test_rocket();
+        g.propellant_mass_kg = -1.0;
+        assert!(simulate(&g, &atm, &opts).is_err());
+        let mut g = test_rocket();
+        g.thrust_curve.push((7.0, f64::INFINITY));
+        assert!(simulate(&g, &atm, &opts).is_err());
     }
 }

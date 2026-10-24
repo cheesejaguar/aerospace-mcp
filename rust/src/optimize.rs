@@ -213,6 +213,9 @@ pub fn thrust_profile_curve(
     Some(curve)
 }
 
+/// Upper bound on [`optimize_thrust_profile`]'s `n_segments`.
+pub const MAX_THRUST_SEGMENTS: usize = 50;
+
 /// Result of [`optimize_thrust_profile`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct ThrustProfileResult {
@@ -238,10 +241,13 @@ pub fn optimize_thrust_profile(
     n_segments: usize,
     objective: &str,
 ) -> Result<ThrustProfileResult, OptimizeError> {
-    if n_segments == 0 {
-        return Err(OptimizeError::InvalidInput(
-            "n_segments must be >= 1".into(),
-        ));
+    // Each iteration runs 2 * n_segments + 1 simulations and allocates
+    // per-segment buffers, so an unbounded count can hang or exhaust memory
+    // (an allocation failure aborts the whole server process).
+    if !(1..=MAX_THRUST_SEGMENTS).contains(&n_segments) {
+        return Err(OptimizeError::InvalidInput(format!(
+            "n_segments must be between 1 and {MAX_THRUST_SEGMENTS}"
+        )));
     }
     if !(burn_time_s > 0.0 && burn_time_s.is_finite()) {
         return Err(OptimizeError::InvalidInput(
@@ -380,6 +386,10 @@ mod tests {
     fn thrust_profile_rejects_bad_inputs_and_runs() {
         let (g, atm) = (test_rocket(), test_atmosphere());
         assert!(optimize_thrust_profile(&g, &atm, 6.0, 10800.0, 0, "max_altitude").is_err());
+        assert!(optimize_thrust_profile(&g, &atm, 6.0, 10800.0, 51, "max_altitude").is_err());
+        assert!(
+            optimize_thrust_profile(&g, &atm, 6.0, 10800.0, usize::MAX, "max_altitude").is_err()
+        );
         assert!(optimize_thrust_profile(&g, &atm, 0.0, 10800.0, 3, "max_altitude").is_err());
         assert!(optimize_thrust_profile(&g, &atm, 6.0, -1.0, 3, "max_altitude").is_err());
         let r = optimize_thrust_profile(&g, &atm, 6.0, 10800.0, 3, "min_max_q").unwrap();

@@ -11,7 +11,7 @@
 //! pykep, rather than reusing the starting value.
 //!
 //! Supports single- and multi-revolution transfers, prograde or retrograde
-//! motion, and the low/high-energy branch for multi-revolution cases.
+//! motion, and both solution branches for multi-revolution cases.
 
 use std::f64::consts::PI;
 use std::fmt;
@@ -25,8 +25,10 @@ pub struct LambertOptions {
     pub revolutions: u32,
     /// Counter-clockwise motion about +z (prograde) or clockwise.
     pub prograde: bool,
-    /// For multi-revolution transfers, pick the low-energy (`true`) or
-    /// high-energy solution. Ignored when `revolutions == 0`.
+    /// For multi-revolution transfers, which of the two solutions to return
+    /// (poliastro's `lowpath` convention: `true` takes the larger initial
+    /// guess `x`). This is a branch selector, not "lowest energy"; compare
+    /// both branches if energy matters. Ignored when `revolutions == 0`.
     pub low_path: bool,
     pub max_iterations: usize,
     pub tolerance: f64,
@@ -80,7 +82,19 @@ impl fmt::Display for LambertError {
 
 impl std::error::Error for LambertError {}
 
-/// Solve Lambert's problem; returns `(v1, v2)`, the velocities at `r1` and `r2`.
+/// A Lambert solution.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LambertSolution {
+    /// Velocity at `r1`.
+    pub v1: Vec3,
+    /// Velocity at `r2`.
+    pub v2: Vec3,
+    /// Transfer angle actually traversed, in `(0, 2*pi)` radians, measured in
+    /// the direction of motion (excluding complete revolutions).
+    pub transfer_angle_rad: f64,
+}
+
+/// Solve Lambert's problem for the velocities at `r1` and `r2`.
 ///
 /// Units are whatever `mu`, the positions and `tof` use consistently
 /// (e.g. m^3/s^2, m, s -> m/s).
@@ -90,7 +104,7 @@ pub fn izzo(
     r2: Vec3,
     tof: f64,
     opts: LambertOptions,
-) -> Result<(Vec3, Vec3), LambertError> {
+) -> Result<LambertSolution, LambertError> {
     if !(mu > 0.0 && mu.is_finite()) {
         return Err(LambertError::InvalidInput(
             "gravitational parameter must be > 0",
@@ -124,9 +138,12 @@ pub fn izzo(
     }
     let i_h = scale(h, 1.0 / h_n);
 
-    // lambda: transfer geometry parameter, |lambda| < 1.
+    // lambda: transfer geometry parameter, |lambda| < 1. The motion sense
+    // is taken from the unnormalized r1 x r2: for transfer planes containing
+    // the z-axis its z-component is exactly 0, while the normalized i_h[2]
+    // can pick up a rounding-level sign that would flip the branch.
     let mut ll = (1.0 - (c_n / s).min(1.0)).sqrt();
-    let (mut i_t1, mut i_t2) = if i_h[2] < 0.0 {
+    let (mut i_t1, mut i_t2) = if cross(r1, r2)[2] < 0.0 {
         ll = -ll;
         (cross(i_r1, i_h), cross(i_r2, i_h))
     } else {
@@ -153,7 +170,19 @@ pub fn izzo(
 
     let v1 = add(scale(i_r1, v_r1), scale(i_t1, v_t1));
     let v2 = add(scale(i_r2, v_r2), scale(i_t2, v_t2));
-    Ok((v1, v2))
+
+    // lambda < 0 exactly when the motion goes the long way round.
+    let short_angle = h_n.atan2(i_r1[0] * i_r2[0] + i_r1[1] * i_r2[1] + i_r1[2] * i_r2[2]);
+    let transfer_angle_rad = if ll < 0.0 {
+        2.0 * PI - short_angle
+    } else {
+        short_angle
+    };
+    Ok(LambertSolution {
+        v1,
+        v2,
+        transfer_angle_rad,
+    })
 }
 
 fn find_xy(ll: f64, t: f64, opts: LambertOptions) -> Result<(f64, f64), LambertError> {
@@ -314,6 +343,11 @@ fn householder(
     for _ in 0..opts.max_iterations {
         let y = compute_y(x, ll);
         let fval = tof_equation_y(x, y, t0, ll, m);
+        // Already on the solution: the derivatives are singular at x = 1
+        // (exactly parabolic), so don't evaluate them.
+        if fval.abs() <= 4.0 * f64::EPSILON * t0.abs() {
+            return Ok(x);
+        }
         let t = fval + t0;
         let (d1, d2, d3) = tof_derivatives(x, y, t, ll);
         let next = x - fval
@@ -334,6 +368,17 @@ fn householder(
 mod tests {
     use super::*;
     use crate::orbit::{Gravity, MU_EARTH, propagate};
+
+    /// `(v1, v2)` view of [`super::izzo`], for the velocity-only tests.
+    fn izzo(
+        mu: f64,
+        r1: Vec3,
+        r2: Vec3,
+        tof: f64,
+        opts: LambertOptions,
+    ) -> Result<(Vec3, Vec3), LambertError> {
+        super::izzo(mu, r1, r2, tof, opts).map(|s| (s.v1, s.v2))
+    }
 
     fn assert_vec_close(a: Vec3, b: Vec3, tol: f64) {
         for k in 0..3 {
@@ -488,5 +533,56 @@ mod tests {
         let (v1, _) = izzo(MU_EARTH, r1, r2, 300.0, LambertOptions::default()).unwrap();
         let energy = norm(v1).powi(2) / 2.0 - MU_EARTH / 7.0e6;
         assert!(energy > 0.0);
+    }
+
+    #[test]
+    fn reports_the_transfer_angle_it_solved() {
+        let r1 = [7.0e6, 0.0, 0.0];
+        let pro = super::izzo(
+            MU_EARTH,
+            r1,
+            [0.0, 7.0e6, 0.0],
+            3000.0,
+            LambertOptions::default(),
+        )
+        .unwrap();
+        assert!((pro.transfer_angle_rad - PI / 2.0).abs() < 1e-12);
+        let retro = super::izzo(
+            MU_EARTH,
+            r1,
+            [0.0, 7.0e6, 0.0],
+            3000.0,
+            LambertOptions {
+                prograde: false,
+                ..LambertOptions::default()
+            },
+        )
+        .unwrap();
+        assert!((retro.transfer_angle_rad - 1.5 * PI).abs() < 1e-12);
+    }
+
+    /// Transfer plane containing the z-axis: (r1 x r2)_z is exactly 0, but
+    /// the normalized normal's z picks up a -5.6e-17 rounding error that
+    /// used to flip "prograde" onto the long (351 degree) way.
+    #[test]
+    fn plane_through_z_axis_takes_the_short_way() {
+        let r1 = [17e6, 13e6, 739122.8681162545];
+        let r2 = [17e6, 13e6, -2495907.938505691];
+        let sol = super::izzo(MU_EARTH, r1, r2, 3000.0, LambertOptions::default()).unwrap();
+        assert!(sol.transfer_angle_rad < PI, "{}", sol.transfer_angle_rad);
+        assert!((norm(sol.v1) - 1649.96).abs() < 0.1, "{:?}", sol.v1);
+        check_round_trip(r1, r2, 3000.0, LambertOptions::default());
+    }
+
+    /// Exactly the parabolic time of flight makes the first guess x = 1,
+    /// where the time-of-flight derivatives are singular.
+    #[test]
+    fn exactly_parabolic_time_of_flight() {
+        let (r1, r2) = ([7e6, 0.0, 0.0], [0.0, 8e6, 0.0]);
+        let tof = 1006.9374781471273;
+        let (v1, _) = izzo(MU_EARTH, r1, r2, tof, LambertOptions::default()).unwrap();
+        let energy = norm(v1).powi(2) / 2.0 - MU_EARTH / 7e6;
+        assert!(energy.abs() < 1e-3 * MU_EARTH / 7e6, "energy {energy}");
+        check_round_trip(r1, r2, tof, LambertOptions::default());
     }
 }

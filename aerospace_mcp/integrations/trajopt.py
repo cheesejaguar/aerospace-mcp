@@ -239,7 +239,7 @@ def optimize_thrust_profile(
         geometry: Base rocket geometry (its thrust curve is replaced).
         burn_time_s: Total burn time (s), > 0.
         total_impulse_target: Target total impulse (N*s), > 0.
-        n_segments: Number of thrust profile segments, >= 1.
+        n_segments: Number of thrust profile segments, 1-50.
         objective: ``"max_altitude"``, ``"min_max_q"``, or
             ``"min_gravity_loss"`` (approximated as ``g0 * burnout_time``).
 
@@ -248,9 +248,11 @@ def optimize_thrust_profile(
         ``thrust_mult_seg_<i>`` per segment plus the final ``thrust_curve``.
 
     Raises:
-        ValueError: If the burn time, impulse target, or segment count is
-            not positive.
+        ValueError: If the burn time or impulse target is not positive, or
+            the segment count is outside 1-50.
     """
+    if not isinstance(n_segments, int) or not 1 <= n_segments <= 50:
+        raise ValueError("n_segments must be an integer between 1 and 50")
     multipliers, optimal_value, iterations, converged, curve = (
         _native.optimize_thrust_profile(
             geometry,

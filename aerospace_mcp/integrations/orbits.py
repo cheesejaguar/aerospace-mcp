@@ -481,6 +481,23 @@ def propagate_orbit_j2(
 # ===========================================================================
 
 
+def _elapsed_seconds(
+    orbit_states: list[StateVector], time_step_s: float
+) -> list[float]:
+    """Seconds since the first state, from epochs if usable, else index * step."""
+    try:
+        epochs = [
+            datetime.fromisoformat(s.epoch_utc.replace("Z", "+00:00"))
+            for s in orbit_states
+        ]
+        elapsed = [(e - epochs[0]).total_seconds() for e in epochs]
+    except (ValueError, TypeError, AttributeError):
+        elapsed = []
+    if elapsed and all(b > a for a, b in zip(elapsed, elapsed[1:], strict=False)):
+        return elapsed
+    return [i * time_step_s for i in range(len(orbit_states))]
+
+
 def calculate_ground_track(
     orbit_states: list[StateVector], time_step_s: float = 60.0
 ) -> list[GroundTrack]:
@@ -488,13 +505,19 @@ def calculate_ground_track(
 
     Converts ECI position to latitude/longitude (spherical Earth) by
     accounting for Earth's rotation.  Longitude is adjusted by subtracting
-    ``OMEGA_EARTH * i * time_step_s`` for the i-th state to approximate the
-    ECI-to-ECEF transformation (ignoring precession/nutation for
+    ``OMEGA_EARTH * t`` (``t`` = time since the first state) to approximate
+    the ECI-to-ECEF transformation (ignoring precession/nutation for
     simplicity) and wrapped into [-180, 180).
+
+    ``t`` comes from the states' epochs when they parse and strictly
+    increase (as states from :func:`propagate_orbit_j2` do, including its
+    shortened final step); otherwise state ``i`` is taken to be at
+    ``i * time_step_s``.
 
     Args:
         orbit_states: List of state vectors in the J2000 frame.
-        time_step_s: Time step between consecutive states (seconds).
+        time_step_s: Time step between consecutive states (seconds), used
+            when the epochs can't provide the timing.
 
     Returns:
         List of ground track points with lat/lon/alt.
@@ -503,9 +526,14 @@ def calculate_ground_track(
         ValueError: If the time step is below the minimum or the state
             list exceeds the safety cap.
     """
-    if len(orbit_states) > 100_000:
-        raise ValueError("too many orbit states (max 100000)")
-    track = _native.ground_track([s.position_m for s in orbit_states], time_step_s)
+    if time_step_s < 0.1:
+        raise ValueError("time_step_s must be >= 0.1 s")
+    if len(orbit_states) > 100_001:
+        raise ValueError("too many orbit states (max 100001)")
+    track = _native.ground_track(
+        [s.position_m for s in orbit_states],
+        _elapsed_seconds(orbit_states, time_step_s),
+    )
     return [
         GroundTrack(
             latitude_deg=lat,
@@ -593,13 +621,15 @@ def solve_lambert(
         mu: Gravitational parameter of the central body (m^3/s^2).
         prograde: Counter-clockwise motion about +z if True.
         revolutions: Complete revolutions before arrival (0 = direct).
-        low_path: For multi-revolution transfers, choose the low-energy
-            solution (ignored when ``revolutions == 0``).
+        low_path: For multi-revolution transfers, which of the two solutions
+            to return (poliastro's ``lowpath`` convention; this selects a
+            branch, it does not guarantee the lower-energy one). Ignored
+            when ``revolutions == 0``.
 
     Returns:
         Dictionary with ``v1_ms`` / ``v2_ms`` (velocity vectors at departure
-        and arrival) and ``transfer_angle_deg`` (0-360, measured in the
-        direction of motion).
+        and arrival) and ``transfer_angle_deg`` (0-360, the angle the
+        solution actually traverses in the direction of motion).
 
     Raises:
         ValueError: Invalid input, collinear position vectors (0 or 180
@@ -607,23 +637,16 @@ def solve_lambert(
             the time of flight allows.
         RuntimeError: If the iteration fails to converge.
     """
-    v1, v2 = _native.lambert_izzo(
+    if not isinstance(revolutions, int) or revolutions < 0:
+        raise ValueError("revolutions must be a non-negative integer")
+    v1, v2, transfer_angle_rad = _native.lambert_izzo(
         mu, r1_vec, r2_vec, time_flight_s, revolutions, prograde, low_path
     )
-
-    cos_dnu = vector_dot(r1_vec, r2_vec) / (
-        vector_magnitude(r1_vec) * vector_magnitude(r2_vec)
-    )
-    dnu = math.acos(max(-1.0, min(1.0, cos_dnu)))
-    # Long way round when the motion sense opposes r1 x r2.
-    z_sense = vector_cross(r1_vec, r2_vec)[2]
-    if (z_sense < 0) == prograde:
-        dnu = 2 * math.pi - dnu
 
     return {
         "v1_ms": v1,
         "v2_ms": v2,
-        "transfer_angle_deg": rad_to_deg(dnu),
+        "transfer_angle_deg": rad_to_deg(transfer_angle_rad),
         "revolutions": revolutions,
         "prograde": prograde,
     }

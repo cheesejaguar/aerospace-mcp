@@ -324,7 +324,12 @@ def state_vector_to_elements(state_vector: dict) -> str:
             state_vector_to_elements as _state_to_elements,
         )
 
-        state = StateVector(**state_vector)
+        state = StateVector(
+            position_m=_vector(state_vector["position_m"]),
+            velocity_ms=_vector(state_vector["velocity_ms"]),
+            epoch_utc=state_vector.get("epoch_utc", "2000-01-01T12:00:00"),
+            frame=state_vector.get("frame", "J2000"),
+        )
         result = _state_to_elements(state)
 
         return json.dumps(

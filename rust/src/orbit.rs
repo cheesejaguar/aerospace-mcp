@@ -61,16 +61,23 @@ pub struct Elements {
 }
 
 /// Solve Kepler's equation `M = E - e sin E` for `E` by Newton-Raphson.
+///
+/// `M` is reduced to `[-pi, pi]` before iterating (the result is shifted
+/// back by the same multiple of `2*pi`); without that, high-eccentricity
+/// cases with large or negative `M` diverge.
 pub fn kepler_solve(
     mean_anomaly_rad: f64,
     eccentricity: f64,
     tolerance: f64,
     max_iterations: usize,
 ) -> f64 {
+    let turns = ((mean_anomaly_rad + PI) / (2.0 * PI)).floor();
+    let offset = turns * 2.0 * PI;
+    let mean_anomaly_rad = mean_anomaly_rad - offset;
     let mut e_anom = if eccentricity < 0.8 {
         mean_anomaly_rad
     } else {
-        PI
+        PI.copysign(mean_anomaly_rad)
     };
     for _ in 0..max_iterations {
         let f = e_anom - eccentricity * e_anom.sin() - mean_anomaly_rad;
@@ -80,18 +87,49 @@ pub fn kepler_solve(
         }
         let next = e_anom - f / f_prime;
         if (next - e_anom).abs() < tolerance {
-            return next;
+            return next + offset;
         }
         e_anom = next;
     }
-    e_anom
+    e_anom + offset
 }
 
 /// Classical elements -> inertial `(position_m, velocity_ms)`.
 ///
 /// Perifocal position/velocity rotated by `R3(-RAAN) R1(-i) R3(-omega)`
-/// (Vallado Algorithm 10).
-pub fn elements_to_state(el: &Elements, mu: f64) -> (Vec3, Vec3) {
+/// (Vallado Algorithm 10). Elliptic (`a > 0, 0 <= e < 1`) and hyperbolic
+/// (`a < 0, e > 1`) orbits are supported; parabolic orbits (`e == 1`) and
+/// true anomalies beyond a hyperbola's asymptotes are rejected rather than
+/// producing NaN/infinite states.
+pub fn elements_to_state(el: &Elements, mu: f64) -> Result<(Vec3, Vec3), OrbitError> {
+    let values = [
+        el.semi_major_axis_m,
+        el.eccentricity,
+        el.inclination_deg,
+        el.raan_deg,
+        el.arg_periapsis_deg,
+        el.true_anomaly_deg,
+        mu,
+    ];
+    if values.iter().any(|x| !x.is_finite()) {
+        return err("orbital elements must be finite");
+    }
+    if !(mu > 0.0) {
+        return err("gravitational parameter must be > 0");
+    }
+    if el.eccentricity < 0.0 {
+        return err("eccentricity must be >= 0");
+    }
+    if !(el.semi_major_axis_m * (1.0 - el.eccentricity.powi(2)) > 0.0) {
+        return err(
+            "invalid conic: need a > 0 with 0 <= e < 1 (ellipse) or a < 0 with e > 1 \
+             (hyperbola); parabolic orbits (e = 1) are not supported",
+        );
+    }
+    if !(1.0 + el.eccentricity * deg_to_rad(el.true_anomaly_deg).cos() > 0.0) {
+        return err("true anomaly lies beyond the hyperbola's asymptotes");
+    }
+
     let i = deg_to_rad(el.inclination_deg);
     let raan = deg_to_rad(el.raan_deg);
     let arg_pe = deg_to_rad(el.arg_periapsis_deg);
@@ -132,7 +170,15 @@ pub fn elements_to_state(el: &Elements, mu: f64) -> (Vec3, Vec3) {
             rot[2][0] * v[0] + rot[2][1] * v[1] + rot[2][2] * v[2],
         ]
     };
-    (apply(r_peri), apply(v_peri))
+    Ok((apply(r_peri), apply(v_peri)))
+}
+
+/// Angle from `a` to `b` in `[0, 2*pi)`, measured counter-clockwise about
+/// `h`. Uses `atan2`, which unlike `acos` keeps full precision near 0 and pi.
+fn angle_about(a: Vec3, b: Vec3, h: Vec3) -> f64 {
+    let sin_part = dot(cross(a, b), h) / norm(h);
+    // `+ 0.0` turns a -0.0 result into 0.0.
+    sin_part.atan2(dot(a, b)).rem_euclid(2.0 * PI) + 0.0
 }
 
 /// Inertial state -> classical elements (Vallado Algorithm 9).
@@ -143,6 +189,12 @@ pub fn elements_to_state(el: &Elements, mu: f64) -> (Vec3, Vec3) {
 /// measure the true anomaly from the node (or the x-axis when also
 /// equatorial).
 pub fn state_to_elements(r_vec: Vec3, v_vec: Vec3, mu: f64) -> Result<Elements, OrbitError> {
+    if r_vec.iter().chain(&v_vec).any(|x| !x.is_finite()) {
+        return err("state vector must be finite");
+    }
+    if !(mu > 0.0 && mu.is_finite()) {
+        return err("gravitational parameter must be > 0");
+    }
     let r = norm(r_vec);
     let v = norm(v_vec);
     if r == 0.0 {
@@ -164,20 +216,17 @@ pub fn state_to_elements(r_vec: Vec3, v_vec: Vec3, mu: f64) -> Result<Elements, 
     let e_vec: Vec3 = std::array::from_fn(|k| v_cross_h[k] / mu - r_vec[k] / r);
     let e = norm(e_vec);
 
-    let i = (h_vec[2] / h).clamp(-1.0, 1.0).acos();
-
     let n_vec = cross([0.0, 0.0, 1.0], h_vec);
     let n = norm(n_vec);
+    // Equatorial when the node vector is negligible relative to |h|
+    // (n = |h| sin i); an absolute threshold misclassifies i = 180 deg.
+    let equatorial = n <= 1e-11 * h;
 
-    let raan = if n > 1e-10 {
-        let raan = (n_vec[0] / n).clamp(-1.0, 1.0).acos();
-        if n_vec[1] < 0.0 {
-            2.0 * PI - raan
-        } else {
-            raan
-        }
-    } else {
+    let i = n.atan2(h_vec[2]);
+    let raan = if equatorial {
         0.0
+    } else {
+        n_vec[1].atan2(n_vec[0]).rem_euclid(2.0 * PI) + 0.0
     };
 
     // Equatorial orbits have no node; there the "argument of periapsis" is
@@ -186,27 +235,20 @@ pub fn state_to_elements(r_vec: Vec3, v_vec: Vec3, mu: f64) -> Result<Elements, 
     let sense = h_vec[2].signum();
     let arg_pe = if e <= 1e-10 {
         0.0
-    } else if n > 1e-10 {
-        let arg = (dot(n_vec, e_vec) / (n * e)).clamp(-1.0, 1.0).acos();
-        if e_vec[2] < 0.0 { 2.0 * PI - arg } else { arg }
+    } else if !equatorial {
+        angle_about(n_vec, e_vec, h_vec)
     } else {
-        (sense * e_vec[1]).atan2(e_vec[0]).rem_euclid(2.0 * PI)
+        (sense * e_vec[1]).atan2(e_vec[0]).rem_euclid(2.0 * PI) + 0.0
     };
 
     let nu = if e > 1e-10 {
-        let nu = (dot(e_vec, r_vec) / (e * r)).clamp(-1.0, 1.0).acos();
-        if dot(r_vec, v_vec) < 0.0 {
-            2.0 * PI - nu
-        } else {
-            nu
-        }
-    } else if n > 1e-10 {
-        let nu = (dot(n_vec, r_vec) / (n * r)).clamp(-1.0, 1.0).acos();
-        if r_vec[2] < 0.0 { 2.0 * PI - nu } else { nu }
+        angle_about(e_vec, r_vec, h_vec)
+    } else if !equatorial {
+        // Circular inclined: argument of latitude, from the node.
+        angle_about(n_vec, r_vec, h_vec)
     } else {
         // Circular equatorial: true longitude.
-        let nu = (sense * r_vec[1]).atan2(r_vec[0]);
-        if nu < 0.0 { nu + 2.0 * PI } else { nu }
+        (sense * r_vec[1]).atan2(r_vec[0]).rem_euclid(2.0 * PI) + 0.0
     };
 
     Ok(Elements {
@@ -231,20 +273,29 @@ pub struct Properties {
     pub angular_momentum_m2s: f64,
 }
 
+/// Period, apsis altitudes, energy and angular momentum of an elliptical
+/// orbit (`a > 0`, `0 <= e < 1`); other conics have no period and are
+/// rejected.
 pub fn orbit_properties(
     semi_major_axis_m: f64,
     eccentricity: f64,
     mu: f64,
     body_radius_m: f64,
-) -> Properties {
+) -> Result<Properties, OrbitError> {
     let (a, e) = (semi_major_axis_m, eccentricity);
-    Properties {
+    if [a, e, mu, body_radius_m].iter().any(|x| !x.is_finite()) {
+        return err("orbit parameters must be finite");
+    }
+    if !(a > 0.0 && (0.0..1.0).contains(&e) && mu > 0.0) {
+        return err("orbit properties require an elliptical orbit (a > 0, 0 <= e < 1)");
+    }
+    Ok(Properties {
         period_s: 2.0 * PI * (a.powf(3.0) / mu).sqrt(),
         apoapsis_m: a * (1.0 + e) - body_radius_m,
         periapsis_m: a * (1.0 - e) - body_radius_m,
         energy_j_kg: -mu / (2.0 * a),
         angular_momentum_m2s: (mu * a * (1.0 - e.powi(2))).sqrt(),
-    }
+    })
 }
 
 /// Central-body plus J2 acceleration (Vallado, ch. 8):
@@ -316,8 +367,11 @@ pub fn propagate(
     let mut samples = Vec::with_capacity((time_span_s / time_step_s).ceil() as usize + 2);
     samples.push((0.0, r0, v0));
     let (mut r, mut v) = (r0, v0);
+    // A remainder this small is accumulated rounding in `t`, not a real
+    // step; stepping it would emit a near-duplicate final sample.
+    let negligible = 1e-9 * time_step_s;
     let mut t = 0.0;
-    while t < time_span_s {
+    while time_span_s - t > negligible {
         let dt = time_step_s.min(time_span_s - t);
 
         let (k1_r, k1_v) = (v, accel(r));
@@ -337,32 +391,43 @@ pub fn propagate(
         t += dt;
         samples.push((t, r, v));
     }
+    if let Some(last) = samples.last_mut() {
+        last.0 = time_span_s;
+    }
     Ok(samples)
 }
 
+/// Most samples [`ground_track`] accepts: one more than [`propagate`]'s
+/// step cap, since propagation also returns the initial state.
+pub const MAX_GROUND_TRACK_POINTS: usize = 100_001;
+
 /// Sub-satellite `(latitude_deg, longitude_deg, altitude_m)` for inertial
-/// positions sampled every `time_step_s`, correcting longitude for Earth
-/// rotation (precession/nutation ignored) and a spherical Earth.
+/// positions at `elapsed_s` seconds after the first sample, correcting
+/// longitude for Earth rotation (precession/nutation ignored) and a
+/// spherical Earth.
 pub fn ground_track(
     positions: &[Vec3],
-    time_step_s: f64,
+    elapsed_s: &[f64],
 ) -> Result<Vec<(f64, f64, f64)>, OrbitError> {
-    if !(time_step_s >= 0.1) {
-        return err("time_step_s must be >= 0.1 s");
+    if positions.len() != elapsed_s.len() {
+        return err("need one elapsed time per position");
     }
-    if positions.len() > 100_000 {
-        return err("too many orbit states (max 100000)");
+    if positions.len() > MAX_GROUND_TRACK_POINTS {
+        return err("too many orbit states (max 100001)");
+    }
+    if elapsed_s.iter().any(|t| !t.is_finite()) {
+        return err("elapsed times must be finite");
     }
     positions
         .iter()
-        .enumerate()
-        .map(|(i, &r_vec)| {
+        .zip(elapsed_s)
+        .map(|(&r_vec, &t)| {
             let r = norm(r_vec);
-            if r == 0.0 {
-                return err("position vector must be non-zero");
+            if !(r > 0.0 && r.is_finite()) {
+                return err("position vector must be finite and non-zero");
             }
             let lat = (r_vec[2] / r).asin();
-            let lon = r_vec[1].atan2(r_vec[0]) - OMEGA_EARTH * (i as f64 * time_step_s);
+            let lon = r_vec[1].atan2(r_vec[0]) - OMEGA_EARTH * t;
             // Wrap into [-pi, pi).
             let lon = (lon + PI).rem_euclid(2.0 * PI) - PI;
             Ok((rad_to_deg(lat), rad_to_deg(lon), r - R_EARTH))
@@ -421,7 +486,7 @@ fn kepler_propagate(r: Vec3, v: Vec3, dt: f64, mu: f64) -> Result<(Vec3, Vec3), 
     let nu1 =
         2.0 * ((1.0 + e).sqrt() * (e1 / 2.0).sin()).atan2((1.0 - e).sqrt() * (e1 / 2.0).cos());
     el.true_anomaly_deg = rad_to_deg(nu1);
-    Ok(elements_to_state(&el, mu))
+    elements_to_state(&el, mu)
 }
 
 #[cfg(test)]
@@ -452,7 +517,7 @@ mod tests {
             arg_periapsis_deg: 270.0,
             true_anomaly_deg: 170.0,
         };
-        let (r, v) = elements_to_state(&el, MU_EARTH);
+        let (r, v) = elements_to_state(&el, MU_EARTH).unwrap();
         let back = state_to_elements(r, v, MU_EARTH).unwrap();
         assert!(close(back.semi_major_axis_m, el.semi_major_axis_m, 1e-9));
         assert!(close(back.eccentricity, el.eccentricity, 1e-9));
@@ -473,9 +538,9 @@ mod tests {
                 arg_periapsis_deg: 40.0,
                 true_anomaly_deg: 100.0,
             };
-            let (r, v) = elements_to_state(&el, MU_EARTH);
+            let (r, v) = elements_to_state(&el, MU_EARTH).unwrap();
             let back = state_to_elements(r, v, MU_EARTH).unwrap();
-            let (r2, v2) = elements_to_state(&back, MU_EARTH);
+            let (r2, v2) = elements_to_state(&back, MU_EARTH).unwrap();
             for k in 0..3 {
                 assert!((r[k] - r2[k]).abs() < 1e-6 * 9.0e6, "i={inclination_deg}");
                 assert!((v[k] - v2[k]).abs() < 1e-6 * 1e4, "i={inclination_deg}");
@@ -535,7 +600,7 @@ mod tests {
             arg_periapsis_deg: 0.0,
             true_anomaly_deg: 0.0,
         };
-        let (r, v) = elements_to_state(&el, MU_EARTH);
+        let (r, v) = elements_to_state(&el, MU_EARTH).unwrap();
         let samples = propagate(r, v, 86400.0, 30.0, Gravity::EARTH_J2).unwrap();
         let (_, rf, vf) = *samples.last().unwrap();
         let raan_f = state_to_elements(rf, vf, MU_EARTH).unwrap().raan_deg;
@@ -546,16 +611,144 @@ mod tests {
 
     #[test]
     fn ground_track_wraps_longitude() {
-        let pts =
-            ground_track(&[[7e6, 0.0, 0.0], [-7e6, 1e-9, 0.0], [0.0, 0.0, 7e6]], 60.0).unwrap();
+        let pts = ground_track(
+            &[[7e6, 0.0, 0.0], [-7e6, 1e-9, 0.0], [0.0, 0.0, 7e6]],
+            &[0.0, 60.0, 120.0],
+        )
+        .unwrap();
         for (lat, lon, _) in &pts {
             assert!((-90.0..=90.0).contains(lat));
             assert!((-180.0..180.0).contains(lon));
         }
         assert!((pts[2].0 - 90.0).abs() < 1e-12);
-        assert!(ground_track(&[[7e6, 0.0, 0.0]], 0.01).is_err());
-        // Huge steps used to spin the Python while-loop normalization forever.
-        assert!(ground_track(&[[7e6, 0.0, 0.0], [7e6, 0.0, 0.0]], 1e300).is_ok());
+        assert!(ground_track(&[[7e6, 0.0, 0.0]], &[]).is_err());
+        assert!(ground_track(&[[7e6, 0.0, 0.0]], &[f64::NAN]).is_err());
+        // Huge times used to spin the Python while-loop normalization forever.
+        assert!(ground_track(&[[7e6, 0.0, 0.0]], &[1e300]).is_ok());
+    }
+
+    #[test]
+    fn ground_track_uses_actual_sample_times() {
+        // 100 s at 30 s steps: the last sample is at t = 100, not 4 * 30.
+        let samples = propagate(
+            [7e6, 0.0, 0.0],
+            [0.0, 7546.0, 0.0],
+            100.0,
+            30.0,
+            Gravity::EARTH_J2,
+        )
+        .unwrap();
+        let positions: Vec<Vec3> = samples.iter().map(|s| s.1).collect();
+        let times: Vec<f64> = samples.iter().map(|s| s.0).collect();
+        assert_eq!(times, vec![0.0, 30.0, 60.0, 90.0, 100.0]);
+        let track = ground_track(&positions, &times).unwrap();
+        let (_, last_lon, _) = track[4];
+        let p = positions[4];
+        let expected = (p[1].atan2(p[0]) - OMEGA_EARTH * 100.0).to_degrees();
+        assert!(
+            (last_lon - expected).abs() < 1e-9,
+            "{last_lon} vs {expected}"
+        );
+        // A full-length propagation (100k steps + initial state) is accepted.
+        let positions = vec![[7e6, 0.0, 0.0]; MAX_GROUND_TRACK_POINTS];
+        let times = vec![0.0; MAX_GROUND_TRACK_POINTS];
+        assert!(ground_track(&positions, &times).is_ok());
+    }
+
+    #[test]
+    fn propagation_does_not_emit_rounding_level_final_steps() {
+        // 10 x 0.1 accumulates to 0.9999999999999999, which used to add an
+        // 11th step of 1e-16 s.
+        let s = propagate(
+            [7e6, 0.0, 0.0],
+            [0.0, 7546.0, 0.0],
+            1.0,
+            0.1,
+            Gravity::EARTH_J2,
+        )
+        .unwrap();
+        assert_eq!(s.len(), 11);
+        assert_eq!(s[10].0, 1.0);
+    }
+
+    #[test]
+    fn invalid_conics_are_rejected_instead_of_returning_nan() {
+        let base = Elements {
+            semi_major_axis_m: 7e6,
+            eccentricity: 0.1,
+            inclination_deg: 30.0,
+            raan_deg: 0.0,
+            arg_periapsis_deg: 0.0,
+            true_anomaly_deg: 0.0,
+        };
+        let with = |a: f64, e: f64, nu: f64| Elements {
+            semi_major_axis_m: a,
+            eccentricity: e,
+            true_anomaly_deg: nu,
+            ..base
+        };
+        assert!(elements_to_state(&with(7e6, 1.5, 0.0), MU_EARTH).is_err()); // a > 0, e > 1
+        assert!(elements_to_state(&with(7e6, 1.0, 0.0), MU_EARTH).is_err()); // parabolic
+        assert!(elements_to_state(&with(7e6, -0.1, 0.0), MU_EARTH).is_err());
+        assert!(elements_to_state(&with(f64::NAN, 0.1, 0.0), MU_EARTH).is_err());
+        // Hyperbola: asymptote at acos(-1/1.5) = 131.8 deg.
+        assert!(elements_to_state(&with(-7e6, 1.5, 150.0), MU_EARTH).is_err());
+        let (r, v) = elements_to_state(&with(-7e6, 1.5, 100.0), MU_EARTH).unwrap();
+        let back = state_to_elements(r, v, MU_EARTH).unwrap();
+        assert!(close(back.eccentricity, 1.5, 1e-9) && close(back.semi_major_axis_m, -7e6, 1e-9));
+
+        assert!(orbit_properties(-7e6, 1.5, MU_EARTH, R_EARTH).is_err());
+        assert!(orbit_properties(7e6, 1.0, MU_EARTH, R_EARTH).is_err());
+        assert!(state_to_elements([f64::NAN, 0.0, 0.0], [0.0, 7e3, 0.0], MU_EARTH).is_err());
+    }
+
+    #[test]
+    fn retrograde_equatorial_is_treated_as_equatorial() {
+        // sin(pi) is 1.2e-16, which an absolute node threshold called inclined.
+        let el = Elements {
+            semi_major_axis_m: 9e6,
+            eccentricity: 0.2,
+            inclination_deg: 180.0,
+            raan_deg: 30.0,
+            arg_periapsis_deg: 20.0,
+            true_anomaly_deg: 60.0,
+        };
+        let (r, v) = elements_to_state(&el, MU_EARTH).unwrap();
+        let back = state_to_elements(r, v, MU_EARTH).unwrap();
+        assert_eq!(back.raan_deg, 0.0);
+        let (r2, v2) = elements_to_state(&back, MU_EARTH).unwrap();
+        for k in 0..3 {
+            assert!((r[k] - r2[k]).abs() < 1e-6, "{r:?} vs {r2:?}");
+            assert!((v[k] - v2[k]).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn small_angles_keep_precision() {
+        // acos lost ~1e-8 rad here (1e-6 deg came back as 1.479e-6 deg).
+        let el = Elements {
+            semi_major_axis_m: 7e6,
+            eccentricity: 0.01,
+            inclination_deg: 1e-6,
+            raan_deg: 1e-6,
+            arg_periapsis_deg: 1e-6,
+            true_anomaly_deg: 1e-6,
+        };
+        let (r, v) = elements_to_state(&el, MU_EARTH).unwrap();
+        let back = state_to_elements(r, v, MU_EARTH).unwrap();
+        assert!((back.inclination_deg - 1e-6).abs() < 1e-12, "{back:?}");
+        let (r2, _) = elements_to_state(&back, MU_EARTH).unwrap();
+        for k in 0..3 {
+            assert!((r[k] - r2[k]).abs() < 1e-5, "{r:?} vs {r2:?}");
+        }
+    }
+
+    #[test]
+    fn kepler_handles_large_and_negative_mean_anomaly() {
+        for &(m, e) in &[(10.0, 0.999), (-3.0, 0.99), (100.0, 0.5), (-50.0, 0.97)] {
+            let ea = kepler_solve(m, e, 1e-12, 50);
+            assert!((ea - e * ea.sin() - m).abs() < 1e-9, "M={m} e={e}: E={ea}");
+        }
     }
 
     #[test]

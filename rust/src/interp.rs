@@ -11,29 +11,46 @@
 /// `xp` and `fp` must be non-empty and of equal length.
 pub fn interp(x: f64, xp: &[f64], fp: &[f64]) -> f64 {
     let n = xp.len().min(fp.len());
+    interp_by(x, n, |i| xp[i], |i| fp[i])
+}
+
+/// [`interp`] over `(x, y)` samples, without splitting them into two slices.
+pub fn interp_pairs(x: f64, samples: &[(f64, f64)]) -> f64 {
+    interp_by(x, samples.len(), |i| samples[i].0, |i| samples[i].1)
+}
+
+fn interp_by(x: f64, n: usize, xp: impl Fn(usize) -> f64, fp: impl Fn(usize) -> f64) -> f64 {
     debug_assert!(n > 0, "interp requires at least one sample");
     if x.is_nan() {
         return x;
     }
-    if n == 1 || x < xp[0] {
-        return fp[0];
+    if n == 1 || x < xp(0) {
+        return fp(0);
     }
-    if x >= xp[n - 1] {
-        return fp[n - 1];
+    if x >= xp(n - 1) {
+        return fp(n - 1);
     }
-    let j = xp[..n]
-        .partition_point(|&v| v <= x)
-        .saturating_sub(1)
-        .min(n - 2);
-    if xp[j] == x {
-        return fp[j];
+    // First index with xp > x (a partition point), by binary search.
+    let (mut lo, mut hi) = (0, n);
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if xp(mid) <= x {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
     }
-    let slope = (fp[j + 1] - fp[j]) / (xp[j + 1] - xp[j]);
-    let mut y = slope * (x - xp[j]) + fp[j];
+    let j = lo.saturating_sub(1).min(n - 2);
+    let (x0, x1, y0, y1) = (xp(j), xp(j + 1), fp(j), fp(j + 1));
+    if x0 == x {
+        return y0;
+    }
+    let slope = (y1 - y0) / (x1 - x0);
+    let mut y = slope * (x - x0) + y0;
     if y.is_nan() {
-        y = slope * (x - xp[j + 1]) + fp[j + 1];
-        if y.is_nan() && fp[j] == fp[j + 1] {
-            y = fp[j];
+        y = slope * (x - x1) + y1;
+        if y.is_nan() && y0 == y1 {
+            y = y0;
         }
     }
     y
@@ -41,7 +58,7 @@ pub fn interp(x: f64, xp: &[f64], fp: &[f64]) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::interp;
+    use super::{interp, interp_pairs};
 
     #[test]
     fn matches_numpy_semantics() {
@@ -71,6 +88,21 @@ mod tests {
         let fp = [1.0, 2.0, 3.0];
         for x in [0.0, 1.5, 2.5, 3.5] {
             assert!(interp(x, &xp, &fp).is_finite());
+        }
+    }
+
+    #[test]
+    fn pairs_match_slices() {
+        let xp = [0.0, 1.0, 1.0, 3.0, 7.0];
+        let fp = [10.0, 20.0, 5.0, 0.0, 4.0];
+        let pairs: Vec<(f64, f64)> = xp.iter().copied().zip(fp).collect();
+        for k in -10..=80 {
+            let x = f64::from(k) / 10.0;
+            assert_eq!(
+                interp(x, &xp, &fp).to_bits(),
+                interp_pairs(x, &pairs).to_bits(),
+                "x={x}"
+            );
         }
     }
 }
