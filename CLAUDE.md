@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ### Development Setup
+Building from source needs a Rust toolchain (rustup): the trajectory/orbit core is a PyO3 extension (`rust/`, built by maturin, imported as `aerospace_mcp._native`). `uv sync` rebuilds it when Rust sources change. End users never need Rust: releases publish prebuilt abi3 wheels (see Distribution below).
 ```bash
 # Install with UV (recommended)
 uv venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
@@ -55,6 +56,11 @@ mypy app/ aerospace_mcp/
 
 # Pre-commit hooks (runs all checks)
 pre-commit run --all-files
+
+# Native core (from rust/): format, lint, unit tests without Python
+cargo fmt --check
+cargo clippy --no-default-features --all-targets -- -D warnings
+cargo test --no-default-features
 ```
 
 ### Docker Operations
@@ -83,7 +89,7 @@ The system follows a layered architecture with shared business logic:
 - Pydantic models for all data structures (AirportOut, PlanRequest, PlanResponse, SegmentEst)
 - Business logic functions: `health()`, `airports_by_city()`, `plan_flight()`
 
-**HTTP Interface** (root `main.py`, launched via `app/main.py`):
+**HTTP Interface** (`aerospace_mcp/http_app.py`, launched via `app/main.py`; root `main.py` is only a shim for `uvicorn main:app` in a checkout, it is not in the wheel):
 - Thin FastAPI layer over `aerospace_mcp.core` with three endpoints: `/health`, `/airports/by_city`, `/plan`
 - Environment-driven configuration: UVICORN_HOST, UVICORN_PORT, CORS_ORIGINS (comma-separated origins; CORS disabled when unset), RATE_LIMIT_RPM (per-IP requests/minute, default 120, 0 disables), MAX_BODY_BYTES (default 1 MiB)
 - OpenAPI documentation at `/docs`
@@ -93,6 +99,13 @@ The system follows a layered architecture with shared business logic:
 - Single registration source: `aerospace_mcp/tools/registry.py` (`ALL_TOOLS`) — shared by the FastMCP server and the CLI; a contract test keeps it in sync with `TOOL_REGISTRY` search metadata. New tools register in exactly two places: `ALL_TOOLS` and `TOOL_REGISTRY`.
 - FastMCP framework for simplified tool development with decorators and automatic schema generation
 - **Tool search tool** for dynamic tool discovery following Anthropic's guide
+
+**Native Core** (`rust/`, Python module `aerospace_mcp._native`):
+- Rust + PyO3 (abi3, Python >= 3.11), built by maturin as the project's build backend
+- `rocket.rs` (3-DOF Euler ascent + performance analysis), `optimize.rs` (golden-section, projected gradient descent, launch-angle / thrust-profile optimizers that simulate natively), `orbit.rs` (Kepler, elements <-> state, J2 RK4 propagation, ground track, Hohmann), `lambert.rs` (Izzo 2015, replaces poliastro)
+- `python.rs` holds the only PyO3 code; the math modules are pure Rust and testable with `cargo test --no-default-features`
+- Python `integrations/rockets.py`, `trajopt.py`, `orbits.py` keep the dataclasses and orchestration and delegate math to `_native`; the atmosphere table is built in Python and passed in
+- `tests/test_native_parity.py` checks results against `tests/data/legacy_python_reference.json`, recorded from the original pure-Python implementation. Parity is partial by design: model bugs fixed after the port (J2 sign, thrust-proportional mass flow, atmosphere above the table) are checked against corrected references and invariants instead; the module docstring lists each one
 
 **Tool Discovery** (`aerospace_mcp/tools/tool_search.py`):
 - `search_aerospace_tools`: Search tools by name, description, or functionality
@@ -133,11 +146,11 @@ The legacy low-level MCP server (`aerospace_mcp/server.py`) was removed; `fastmc
 
 **Error Handling**: Custom exceptions (`FlightPlanError`, `AirportResolutionError`, `OpenAPError`) with proper HTTP status codes and MCP error messages.
 
-**Testing Strategy**: Comprehensive mocking of external dependencies (OpenAP, airport data) to ensure deterministic tests. Separate test files for each interface layer.
+**Testing Strategy**: Comprehensive mocking of external dependencies (OpenAP, airport data) to ensure deterministic tests. Separate test files for each interface layer. Many `tests/tools/` tests stub the integration modules, so `tests/test_tool_smoke.py` also calls every registered tool against the real integrations with known-answer checks; add a case there for every new tool (a coverage test enforces it). Agent tool descriptions in `tools/agents.py` are checked against the real signatures by `tests/test_tool_schema_contracts.py`. `tests/test_skill_docs.py` runs every CLI example and Python snippet in `skills/*/SKILL.md` and checks their parameter references, so update the skills when a tool's parameters change.
 
 **Configuration**: Environment variable-driven configuration with sensible defaults. Production configs use container environment variables.
 
-**Package Management**: Uses UV for fast dependency resolution with fallback to standard pip. Development dependencies separated into `[dev]` optional group.
+**Package Management**: Uses UV for fast dependency resolution with fallback to standard pip. Development dependencies separated into `[dev]` optional group. LiteLLM is the optional `[llm]` extra (it doubles the install size and only the LLM agent tools use it); `agents._get_litellm()` reports the extra when it is missing.
 
 ### External Dependencies
 
@@ -147,7 +160,17 @@ The legacy low-level MCP server (`aerospace_mcp/server.py`) was removed; `fastmc
 - **fastapi/uvicorn**: HTTP API framework and ASGI server
 - **fastmcp**: High-level Model Context Protocol framework for simplified tool development
 - **pydantic**: Data validation and serialization
-- **Optional packages**: ambiance (atmosphere), poliastro/astropy (space), aerosandbox (aerodynamics), rocketpy (rockets), filterpy/control (GNC)
+- **pyo3/maturin**: Rust bindings and build backend for the native core
+- **numpy/scipy**: vectorised numerics; `scipy.linalg` for the Kalman filter and LQR (Riccati) solutions
+- **Optional packages**: litellm (llm), ambiance (atmosphere), astropy/spiceypy/skyfield (space), aerosandbox (aerodynamics), rocketpy (rockets), control (GNC)
+
+### Distribution
+
+Users install without cloning or Rust; keep these paths working:
+- **PyPI wheels**: `.github/workflows/wheels.yml` builds abi3 wheels (manylinux_2_28 and musllinux x86_64/aarch64, macOS 11+ x86_64/arm64, Windows x64) plus the sdist, then installs each on a runner of that platform with `uv --no-build` (any source build fails) and runs `scripts/smoke_installed.py` (CLI, MCP stdio, HTTP). It runs on packaging PRs, weekly (fresh installs resolve the newest dependencies, not `uv.lock`), and on `v*` tags, which also publish to PyPI via trusted publishing; the tag must equal `project.version`.
+- **One-liners**: `uvx aerospace-mcp` (MCP server), `uvx --from aerospace-mcp aerospace-mcp-cli ...`, `claude mcp add aerospace -- uvx aerospace-mcp`.
+- **Claude Code plugin**: `.claude-plugin/plugin.json` (MCP server via `uvx aerospace-mcp` + the skills) and `.claude-plugin/marketplace.json` (the repo is its own marketplace). Keep `plugin.json`'s `version` equal to `project.version` (a test enforces it); validate with `claude plugin validate .`.
+- **Agent skills**: `skills/<name>/SKILL.md` with `name` equal to the directory, the layout `npx skills add cheesejaguar/aerospace-mcp` and Claude Code plugins discover. Each skill's Setup section tells the agent to fall back to `uvx --from aerospace-mcp aerospace-mcp-cli`.
 
 ### Safety Considerations
 

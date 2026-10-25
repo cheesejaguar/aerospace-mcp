@@ -92,6 +92,89 @@ def _get_isa_conditions(altitude_m: float) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Unit conversions (exact definitions)
+# ---------------------------------------------------------------------------
+KTS_TO_MS = 1852.0 / 3600.0  # 1 kt = 1 NM/h = 1852 m / 3600 s
+MS_TO_KTS = 3600.0 / 1852.0
+M_TO_FT = 1.0 / 0.3048  # 1 ft = 0.3048 m exactly
+
+# ---------------------------------------------------------------------------
+# Compressible-flow airspeed relations (ISA, gamma = 1.4)
+# ---------------------------------------------------------------------------
+# Impact pressure qc = pt - p sensed by a pitot tube, as a ratio qc/p:
+#   subsonic (St. Venant):  qc/p = (1 + 0.2 M^2)^3.5 - 1
+#   supersonic (Rayleigh pitot formula, normal shock ahead of the probe):
+#                           qc/p = 166.9216 M^7 / (7 M^2 - 1)^2.5 - 1
+# Calibrated airspeed is the speed that produces the same qc at sea-level
+# ISA conditions:  qc = P0 * f(CAS / a0).  Mach follows from qc and the
+# static pressure p at the pressure altitude.  Both relations are
+# temperature-independent; temperature only enters TAS = M * a(T).
+# Reference: e.g. Anderson, "Introduction to Flight", ch. 4 (pitot-static
+# measurement of airspeed); USAF TO 1F-1A-1 / NASA RP-1046 airspeed tables.
+_QC_RATIO_AT_M1 = 1.2**3.5 - 1.0  # 0.89293, where both branches meet
+
+
+def _qc_over_p(mach: float) -> float:
+    """Impact pressure ratio qc/p for a pitot probe at the given Mach."""
+    if mach <= 1.0:
+        return (1.0 + 0.2 * mach * mach) ** 3.5 - 1.0
+    return 166.9216 * mach**7 / (7.0 * mach * mach - 1.0) ** 2.5 - 1.0
+
+
+def _mach_from_qc_over_p(ratio: float) -> float:
+    """Invert ``_qc_over_p``: closed form subsonic, bisection supersonic."""
+    if ratio <= 0.0:
+        return 0.0
+    if ratio <= _QC_RATIO_AT_M1:
+        return math.sqrt(5.0 * ((ratio + 1.0) ** (2.0 / 7.0) - 1.0))
+    lo, hi = 1.0, 2.0
+    while _qc_over_p(hi) < ratio:  # bracket the root
+        hi *= 2.0
+    for _ in range(80):  # ~1e-24 relative bracket width
+        mid = 0.5 * (lo + hi)
+        if _qc_over_p(mid) < ratio:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+def _cas_to_mach(cas_ms: float, pressure_pa: float) -> float:
+    """Mach number for a calibrated airspeed at static pressure ``p``."""
+    qc = P0 * _qc_over_p(cas_ms / A0)
+    return _mach_from_qc_over_p(qc / pressure_pa)
+
+
+def _mach_to_cas(mach: float, pressure_pa: float) -> float:
+    """Calibrated airspeed (m/s) for a Mach number at static pressure ``p``."""
+    qc = pressure_pa * _qc_over_p(mach)
+    return A0 * _mach_from_qc_over_p(qc / P0)
+
+
+def _density_altitude_m(rho: float) -> float:
+    """Exact ISA density altitude: the height where rho_ISA(h) equals ``rho``.
+
+    Inverts the module's ISA model (``_get_isa_conditions``): in the
+    troposphere rho/rho0 = (T/T0)^(g/(R L) - 1) with T = T0 - L h, and in
+    the isothermal layer above 11 km rho = rho11 * exp(-g (h - 11000) / (R T11)).
+    Densities above sea-level ISA give a negative density altitude.
+    """
+    rho0_isa = P0 / (R_AIR * T0)
+    tropopause = _get_isa_conditions(11000.0)
+    rho11 = tropopause["density_kg_m3"]
+    if rho >= rho11:
+        n = G0 / (R_AIR * LAPSE_RATE) - 1.0  # 4.2559
+        return (T0 / LAPSE_RATE) * (1.0 - (rho / rho0_isa) ** (1.0 / n))
+    t11 = tropopause["temperature_k"]
+    return 11000.0 + (R_AIR * t11 / G0) * math.log(rho11 / rho)
+
+
+def _vapor_pressure_pa(dewpoint_c: float) -> float:
+    """Saturation vapour pressure over water at the dewpoint (Magnus-Tetens)."""
+    return 610.78 * 10.0 ** (7.5 * dewpoint_c / (dewpoint_c + 237.3))
+
+
 def density_altitude_calculator(
     pressure_altitude_ft: float,
     temperature_c: float,
@@ -106,7 +189,12 @@ def density_altitude_calculator(
     Args:
         pressure_altitude_ft: Pressure altitude in feet
         temperature_c: Outside air temperature in Celsius
-        dewpoint_c: Optional dewpoint for humidity correction
+        dewpoint_c: Optional dewpoint for the humidity correction (moist-air
+            density via the virtual temperature)
+
+    The density altitude is found by inverting the ISA density profile
+    exactly (troposphere and the isothermal layer above 11 km) rather than
+    with the 118.8 ft/degC rule of thumb.
 
     Returns:
         Formatted string with density altitude calculation results including
@@ -143,31 +231,31 @@ def density_altitude_calculator(
             p_trop = P0 * (1 - LAPSE_RATE * 11000 / T0) ** (G0 / (R_AIR * LAPSE_RATE))
             p = p_trop * math.exp(-G0 * (pressure_alt_m - 11000) / (R_AIR * 216.65))
 
-        # Calculate actual density
-        rho = p / (R_AIR * temp_k)
+        if temp_k <= 0:
+            return "Error: temperature_c must be above absolute zero"
 
-        # Humidity correction (optional)
-        humidity_correction_ft = 0
+        # Dry-air density from the ideal gas law
+        rho_dry = p / (R_AIR * temp_k)
+        rho = rho_dry
+
+        # Humidity correction (optional): water vapour is lighter than dry
+        # air, so moist air at the same p and T is less dense.  Use the
+        # virtual temperature Tv = T / (1 - (e/p)(1 - eps)), eps = Rd/Rv =
+        # 0.622, with the vapour pressure e at the dewpoint, and evaluate
+        # the density as p / (Rd * Tv).
+        vapor_pressure_pa = None
+        virtual_temp_k = None
         if dewpoint_c is not None:
-            # Approximate humidity correction using dewpoint spread
-            spread = temperature_c - dewpoint_c
-            # Higher humidity (smaller spread) increases density altitude
-            humidity_correction_ft = max(0, (30 - spread) * 3)  # Rough approximation
+            vapor_pressure_pa = _vapor_pressure_pa(dewpoint_c)
+            virtual_temp_k = temp_k / (1.0 - (vapor_pressure_pa / p) * (1.0 - 0.622))
+            rho = p / (R_AIR * virtual_temp_k)
 
-        # Find density altitude by solving for the altitude in the ISA where
-        # the standard density equals the actual density computed above.
-        # Simplified approximation: each 1 deg C above ISA increases density
-        # altitude by approximately 118.8 ft (derived from the ISA lapse rate
-        # and the barometric formula linearization).
-        density_alt_ft = (
-            pressure_altitude_ft + (delta_isa * 118.8) + humidity_correction_ft
-        )
-
-        # Calculate density altitude in meters
-        density_alt_m = density_alt_ft * 0.3048
-
-        # Recalculate ISA conditions at density altitude for verification
-        _isa_at_da = _get_isa_conditions(density_alt_m)
+        # Density altitude: the ISA altitude whose standard density equals
+        # the actual density, found by inverting the ISA density profile
+        # exactly (no 118.8 ft/degC rule of thumb, valid above 11 km too).
+        density_alt_m = _density_altitude_m(rho)
+        density_alt_ft = density_alt_m * M_TO_FT
+        humidity_correction_ft = density_alt_ft - _density_altitude_m(rho_dry) * M_TO_FT
 
         result = {
             "input": {
@@ -184,7 +272,17 @@ def density_altitude_calculator(
             "isa_deviation_c": round(delta_isa, 1),
             "isa_temp_at_pressure_alt_c": round(isa_temp_k - 273.15, 1),
             "humidity_correction_ft": round(humidity_correction_ft, 0),
+            "method": (
+                "exact inversion of ISA density; humidity via virtual temperature"
+            ),
         }
+        if dewpoint_c is not None:
+            result["vapor_pressure_hpa"] = round(vapor_pressure_pa / 100.0, 2)
+            result["virtual_temperature_c"] = round(virtual_temp_k - 273.15, 2)
+
+        dewpoint_str = (
+            f"{dewpoint_c:.1f}°C" if dewpoint_c is not None else "Not specified"
+        )
 
         output = f"""
 DENSITY ALTITUDE CALCULATION
@@ -194,7 +292,7 @@ Input Conditions:
   Temperature: {temperature_c:.1f}°C
   ISA Temperature at PA: {isa_temp_k - 273.15:.1f}°C
   ISA Deviation: {delta_isa:+.1f}°C
-  Dewpoint: {dewpoint_c if dewpoint_c else "Not specified"}°C
+  Dewpoint: {dewpoint_str}
 
 Results:
   Density Altitude: {density_alt_ft:,.0f} ft ({density_alt_m:,.0f} m)
@@ -230,9 +328,16 @@ def true_airspeed_converter(
         temperature_c: Outside air temperature in Celsius (uses ISA if not provided)
         position_error_kts: Position error correction in knots (IAS to CAS)
 
+    All conversions go through Mach number with the compressible ISA pitot
+    relations (qc = P0 * ((1 + 0.2 (CAS/a0)^2)^3.5 - 1), M from qc and the
+    static pressure at the pressure altitude; Rayleigh pitot formula above
+    M 1), then TAS = M * a and EAS = TAS * sqrt(rho / rho0).  A non-ISA
+    ``temperature_c`` changes the density and speed of sound (TAS, EAS for a
+    given CAS/Mach) but not the CAS <-> Mach relation.
+
     Returns:
         Formatted string with all equivalent airspeeds (IAS, CAS, EAS, TAS, Mach),
-        dynamic pressure, and atmospheric conditions.
+        dynamic pressure, impact pressure, and atmospheric conditions.
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings.
@@ -247,9 +352,13 @@ def true_airspeed_converter(
         rho = isa["density_kg_m3"]
         a = isa["speed_of_sound_ms"]
 
-        # Use actual temperature if provided
+        # Use actual temperature if provided (non-ISA day).  Static pressure
+        # still follows from the pressure altitude; only density and the
+        # speed of sound change.
         if temperature_c is not None:
             temp_k = temperature_c + 273.15
+            if temp_k <= 0:
+                return "Error: temperature_c must be above absolute zero"
             # Recalculate density with actual temperature
             rho = p / (R_AIR * temp_k)
             a = math.sqrt(GAMMA * R_AIR * temp_k)
@@ -257,67 +366,50 @@ def true_airspeed_converter(
             temperature_c = isa["temperature_c"]
             temp_k = isa["temperature_k"]
 
-        # Conversion constants
-        kts_to_ms = 0.5144444
-        ms_to_kts = 1.943844
+        if speed_value < 0:
+            return "Error: speed_value must be >= 0"
 
-        # Start with converting to CAS (central reference)
-        if speed_type == "IAS":
+        # Conversion constants
+        kts_to_ms = KTS_TO_MS
+        ms_to_kts = MS_TO_KTS
+
+        # Reduce every input to Mach number first.  CAS <-> Mach uses the
+        # compressible pitot relations (qc from CAS at sea-level ISA, Mach
+        # from qc and the static pressure p at the pressure altitude); these
+        # do not depend on temperature.  TAS = M * a uses the actual (or ISA)
+        # temperature, and EAS = TAS * sqrt(rho / rho0).
+        if speed_type in ("IAS", "CAS"):
             # IAS + position error = CAS
-            cas_kts = speed_value + position_error_kts
-        elif speed_type == "CAS":
-            cas_kts = speed_value
+            cas_in_kts = (
+                speed_value + position_error_kts if speed_type == "IAS" else speed_value
+            )
+            if cas_in_kts < 0:
+                return "Error: IAS + position_error_kts must be >= 0"
+            mach = _cas_to_mach(cas_in_kts * kts_to_ms, p)
         elif speed_type == "EAS":
-            # EAS to CAS (compressibility correction)
-            eas_kts = speed_value
-            eas_ms = eas_kts * kts_to_ms
-            # At low speeds, CAS ≈ EAS * sqrt(p0/p) (simplified)
-            _cas_ms = eas_ms / math.sqrt(P0 / p) if p > 0 else eas_ms  # noqa: F841
-            # For subsonic flow, include compressibility
-            mach_approx = eas_ms / (a * math.sqrt(RHO0 / rho)) if rho > 0 else 0
-            if mach_approx < 0.3:
-                # Low speed - minimal compressibility
-                cas_kts = eas_kts / math.sqrt(rho / RHO0) if rho > 0 else eas_kts
-            else:
-                # Higher speed - include compressibility correction
-                compressibility = 1 + mach_approx**2 / 4 + mach_approx**4 / 40
-                cas_kts = eas_kts / math.sqrt(rho / RHO0) * compressibility
+            # TAS = EAS / sqrt(sigma), sigma from the actual density
+            mach = (speed_value * kts_to_ms) / math.sqrt(rho / RHO0) / a
         elif speed_type == "TAS":
-            # TAS to EAS to CAS
-            tas_kts = speed_value
-            tas_ms = tas_kts * kts_to_ms
-            # EAS = TAS * sqrt(rho/rho0)
-            eas_ms = tas_ms * math.sqrt(rho / RHO0)
-            eas_kts = eas_ms * ms_to_kts
-            # Then EAS to CAS (simplified)
-            cas_kts = eas_kts  # Simplified - compressibility correction small at typical speeds
+            mach = (speed_value * kts_to_ms) / a
         elif speed_type == "MACH":
-            # Mach to TAS to EAS to CAS
             mach = speed_value
-            tas_ms = mach * a
-            tas_kts = tas_ms * ms_to_kts
-            eas_ms = tas_ms * math.sqrt(rho / RHO0)
-            eas_kts = eas_ms * ms_to_kts
-            cas_kts = eas_kts  # Simplified
         else:
             return f"Error: Unknown speed type '{speed_type}'"
 
-        # Now convert CAS to all other speeds
-        _cas_ms = cas_kts * kts_to_ms  # noqa: F841
+        # Mach -> all other speeds
+        tas_ms = mach * a
+        tas_kts = tas_ms * ms_to_kts
+        eas_ms = tas_ms * math.sqrt(rho / RHO0)
+        eas_kts = eas_ms * ms_to_kts
+        cas_kts = _mach_to_cas(mach, p) * ms_to_kts
+        if speed_type in ("IAS", "CAS"):
+            cas_kts = cas_in_kts  # exact round trip for the input value
 
         # CAS to IAS
         ias_kts = cas_kts - position_error_kts
 
-        # CAS to EAS (simplified - exact requires iterative solution)
-        eas_kts = cas_kts * math.sqrt(rho / RHO0) if rho > 0 else cas_kts
-        eas_ms = eas_kts * kts_to_ms
-
-        # EAS to TAS
-        tas_ms = eas_ms / math.sqrt(rho / RHO0) if rho > 0 else eas_ms
-        tas_kts = tas_ms * ms_to_kts
-
-        # TAS to Mach
-        mach = tas_ms / a if a > 0 else 0
+        # Impact pressure (what the pitot-static system measures)
+        qc = p * _qc_over_p(mach)
 
         # Dynamic pressure
         q = 0.5 * rho * tas_ms**2
@@ -339,6 +431,8 @@ def true_airspeed_converter(
             "MACH": round(mach, 4),
             "dynamic_pressure_pa": round(q, 1),
             "dynamic_pressure_psf": round(q * 0.020885, 2),
+            "impact_pressure_pa": round(qc, 1),
+            "method": "compressible ISA pitot relations via Mach",
             "atmospheric_conditions": {
                 "pressure_pa": round(p, 0),
                 "temperature_c": round(temperature_c, 1),
@@ -362,6 +456,7 @@ Equivalent Airspeeds:
   Mach: {mach:>7.4f}
 
 Dynamic Pressure: {q:,.1f} Pa ({q * 0.020885:.2f} psf)
+Impact Pressure (qc): {qc:,.1f} Pa
 
 Atmospheric Conditions:
   Pressure: {p:,.0f} Pa
@@ -406,6 +501,22 @@ def stall_speed_calculator(
         No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
+        # Validate inputs: the lift equation divides by S and CL_max.
+        positive = {
+            "weight_kg": weight_kg,
+            "wing_area_m2": wing_area_m2,
+            "cl_max_clean": cl_max_clean,
+        }
+        if cl_max_takeoff is not None:
+            positive["cl_max_takeoff"] = cl_max_takeoff
+        if cl_max_landing is not None:
+            positive["cl_max_landing"] = cl_max_landing
+        for name, value in positive.items():
+            if not value > 0:
+                return f"Error: {name} must be > 0 (got {value})"
+        if load_factor == 0:
+            return "Error: load_factor must be non-zero"
+
         # Get atmospheric conditions
         altitude_m = altitude_ft * 0.3048
         isa = _get_isa_conditions(altitude_m)
@@ -671,6 +782,10 @@ def weight_and_balance(
             f"\n  CG as %MAC:    {cg_pct_mac:>8.2f}%" if cg_pct_mac is not None else ""
         )
 
+        def limit_str(value: float | None) -> str:
+            """Format an optional limit; a limit of 0 is still a limit."""
+            return "Not specified" if value is None else f"{value}"
+
         output = f"""
 WEIGHT AND BALANCE CALCULATION
 ==============================
@@ -686,9 +801,9 @@ Results:
   CG Position:   {cg_m:>8.4f} m (from datum){mac_str}
 
 Limits Check: {status_str}
-  Max Weight:    {max_takeoff_weight_kg if max_takeoff_weight_kg else "Not specified":>8} kg
-  Forward CG:    {forward_cg_limit_m if forward_cg_limit_m else "Not specified":>8} m
-  Aft CG:        {aft_cg_limit_m if aft_cg_limit_m else "Not specified":>8} m
+  Max Weight:    {limit_str(max_takeoff_weight_kg):>8} kg
+  Forward CG:    {limit_str(forward_cg_limit_m):>8} m
+  Aft CG:        {limit_str(aft_cg_limit_m):>8} m
 
 Warnings: {warnings_str}
 
@@ -699,6 +814,34 @@ Warnings: {warnings_str}
     except Exception as e:
         logger.error(f"Weight and balance calculation error: {str(e)}", exc_info=True)
         return f"Error calculating weight and balance: {str(e)}"
+
+
+def _tas_to_cas_kts(
+    tas_ms: float, speed_of_sound_ms: float, pressure_pa: float
+) -> float:
+    """Calibrated airspeed (kts) for a true airspeed at the given conditions."""
+    return _mach_to_cas(tas_ms / speed_of_sound_ms, pressure_pa) * MS_TO_KTS
+
+
+def _cas_kts_to_tas(
+    cas_kts: float, speed_of_sound_ms: float, pressure_pa: float
+) -> float:
+    """True airspeed (m/s) for a calibrated airspeed at the given conditions."""
+    return _cas_to_mach(cas_kts * KTS_TO_MS, pressure_pa) * speed_of_sound_ms
+
+
+def _round_or_none(value: float | None, ndigits: int = 0) -> float | None:
+    """Round a finite value; map None / inf / NaN to None (valid JSON)."""
+    if value is None or not math.isfinite(value):
+        return None
+    return round(value, ndigits)
+
+
+def _fmt_dist(value_m: float | None) -> str:
+    """Format a distance in m and ft for the text report."""
+    if value_m is None or not math.isfinite(value_m):
+        return "   n/a"
+    return f"{value_m:>6,.0f} m ({value_m * M_TO_FT:,.0f} ft)"
 
 
 def takeoff_performance(
@@ -717,7 +860,25 @@ def takeoff_performance(
 ) -> str:
     """Calculate takeoff field length and V-speeds.
 
-    Uses simplified performance equations for educational purposes.
+    Uses simplified performance equations for educational purposes:
+
+    - V-speeds are reported as calibrated airspeed (KCAS, equal to KIAS for
+      zero instrument/position error) -- the numbers a pilot would see --
+      and, separately, as true airspeed (KTAS).  Stall speed follows from
+      the lift equation at the local density; distances use TAS.
+    - Ground roll: constant-average-force energy method to VLOF = 1.1 VS,
+      with rolling friction set by the runway condition (dry 0.02, wet
+      0.05, contaminated 0.10).
+    - Air distance to the 35 ft screen: Raymer, "Aircraft Design: A
+      Conceptual Approach", sec. 17.8 (takeoff transition): circular
+      transition arc at V_TR = 1.15 VS with load factor n = 1.2, radius
+      R = V_TR^2 / (0.2 g), climb angle sin(gamma) = (T - D) / W at V_TR.
+      If the obstacle is cleared during the arc,
+      S_air = sqrt(R^2 - (R - h_obs)^2); otherwise S_air = R sin(gamma) +
+      (h_obs - h_TR) / tan(gamma) with h_TR = R (1 - cos(gamma)).
+    - Factored distance: 14 CFR 25.113(a)(2), 115 % of the all-engines
+      distance to 35 ft.  The runway condition enters only through the
+      rolling-friction coefficient, not through an extra factor.
 
     Args:
         weight_kg: Takeoff weight in kg
@@ -741,17 +902,30 @@ def takeoff_performance(
         No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
+        for name, value in (
+            ("weight_kg", weight_kg),
+            ("wing_area_m2", wing_area_m2),
+            ("cl_max_takeoff", cl_max_takeoff),
+            ("aspect_ratio", aspect_ratio),
+            ("oswald_e", oswald_e),
+        ):
+            if not value > 0:
+                return f"Error: {name} must be > 0 (got {value})"
+        temp_k = temperature_c + 273.15
+        if temp_k <= 0:
+            return "Error: temperature_c must be above absolute zero"
+
         # Get atmospheric conditions
         altitude_m = pressure_altitude_ft * 0.3048
 
         # Calculate actual temperature effects
         isa = _get_isa_conditions(altitude_m)
-        temp_k = temperature_c + 273.15
-        rho = isa["pressure_pa"] / (R_AIR * temp_k)
+        p = isa["pressure_pa"]
+        rho = p / (R_AIR * temp_k)
+        a = math.sqrt(GAMMA * R_AIR * temp_k)
 
-        # Calculate density altitude effect
-        delta_isa = temp_k - isa["temperature_k"]
-        density_alt_ft = pressure_altitude_ft + delta_isa * 118.8
+        # Exact ISA density altitude for the actual density
+        density_alt_ft = _density_altitude_m(rho) * M_TO_FT
 
         # Weight in Newtons
         W = weight_kg * G0
@@ -762,21 +936,16 @@ def takeoff_performance(
         # Calculate V-speeds
         ms_to_kts = 1.943844
 
-        # VS (stall speed in takeoff config)
+        # VS (stall speed in takeoff config) as TAS at the local density
         vs = math.sqrt((2 * W) / (rho * wing_area_m2 * cl_max_takeoff))
-        vs_kts = vs * ms_to_kts
 
-        # V1 (decision speed) - typically 1.05-1.1 VS
-        v1_kts = vs_kts * 1.05
-
-        # VR (rotation speed) - typically 1.05-1.1 VS
-        vr_kts = vs_kts * 1.08
-
-        # V2 (takeoff safety speed) - minimum 1.13 VS
-        v2_kts = vs_kts * 1.13
-
-        # VLOF (liftoff speed) - typically 1.1 VS
-        vlof_kts = vs_kts * 1.1
+        # V-speed ratios to VS (simplified FAR 25 schedule):
+        # V1 1.05 (decision), VR 1.08 (rotation), VLOF 1.1 (liftoff),
+        # V2 1.13 (takeoff safety speed, minimum 1.13 VSR per 25.107).
+        ratios = {"VS": 1.0, "V1": 1.05, "VR": 1.08, "VLOF": 1.1, "V2": 1.13}
+        v_tas_kts = {k: r * vs * ms_to_kts for k, r in ratios.items()}
+        v_cas_kts = {k: _tas_to_cas_kts(r * vs, a, p) for k, r in ratios.items()}
+        vlof_kts = v_tas_kts["VLOF"]
 
         # Ground roll calculation using energy-balance method (simplified).
         # Rolling friction coefficient depends on runway condition.
@@ -788,7 +957,8 @@ def takeoff_performance(
         # Drag coefficient during ground roll using the drag polar:
         # CD = CD0 + CL^2 / (pi * AR * e)  (parabolic drag polar)
         cl_ground = 0.5 * cl_max_takeoff  # Partial lift during ground roll
-        cd = cd0 + cl_ground**2 / (math.pi * aspect_ratio * oswald_e)
+        k_induced = 1.0 / (math.pi * aspect_ratio * oswald_e)
+        cd = cd0 + cl_ground**2 * k_induced
 
         # Average forces
         L_avg = 0.5 * rho * v_avg**2 * wing_area_m2 * cl_ground
@@ -810,6 +980,7 @@ def takeoff_performance(
         vlof_ms = vlof_kts * 0.5144
         v_ground = vlof_ms - wind_ms  # Ground speed at liftoff
 
+        warnings: list[str] = []
         if F_net > 0:
             # Kinematic equation: s = v^2 / (2*a), where a = F_net / m
             # This assumes approximately constant net force (average conditions).
@@ -817,32 +988,49 @@ def takeoff_performance(
             ground_roll_m = v_ground**2 / (2 * a_avg)
         else:
             ground_roll_m = float("inf")
+            warnings.append("Net accelerating force <= 0: aircraft cannot reach VLOF")
 
-        # Air distance to 35ft (simplified)
-        # Assume constant climb angle
-        _v2_ms = v2_kts * 0.5144  # noqa: F841
-        excess_thrust = T - D_avg
-        climb_gradient = excess_thrust / W if W > 0 else 0
-        if climb_gradient > 0:
-            air_distance_m = 35 * 0.3048 / climb_gradient
+        # Air distance to 35 ft: Raymer transition arc + climb.
+        h_obs_m = 35 * 0.3048
+        v_tr = 1.15 * vs  # transition speed, average of VLOF and V2-ish
+        radius_m = v_tr**2 / (0.2 * G0)  # n = 1.2 pull-up: R = V^2 / (g (n - 1))
+        cl_tr = W / (0.5 * rho * v_tr**2 * wing_area_m2)  # = CLmax / 1.15^2
+        cd_tr = cd0 + cl_tr**2 * k_induced
+        drag_tr = 0.5 * rho * v_tr**2 * wing_area_m2 * cd_tr
+        sin_gamma = (T - drag_tr) / W
+        if sin_gamma > 0:
+            gamma = math.asin(min(sin_gamma, 1.0))
+            h_tr = radius_m * (1 - math.cos(gamma))
+            if h_tr >= h_obs_m:
+                # Screen height reached while still in the transition arc
+                air_distance_m = math.sqrt(radius_m**2 - (radius_m - h_obs_m) ** 2)
+            else:
+                s_tr = radius_m * math.sin(gamma)
+                air_distance_m = s_tr + (h_obs_m - h_tr) / math.tan(gamma)
+            # Climb gradient: height gained per horizontal distance
+            climb_gradient = math.tan(gamma)
         else:
-            air_distance_m = 1000  # Default if can't calculate
+            gamma = 0.0
+            air_distance_m = float("inf")
+            climb_gradient = sin_gamma
+            warnings.append(
+                "Thrust below drag at V_TR: no climb gradient after liftoff"
+            )
 
         # Total takeoff distance
         total_distance_m = ground_roll_m + air_distance_m
 
-        # Apply runway condition factors
-        condition_factors = {"dry": 1.0, "wet": 1.15, "contaminated": 1.25}
-        factored_distance_m = total_distance_m * condition_factors[runway_condition]
-
-        # Convert to feet
-        ground_roll_ft = ground_roll_m * 3.281
-        air_distance_ft = air_distance_m * 3.281
-        total_distance_ft = total_distance_m * 3.281
-        factored_distance_ft = factored_distance_m * 3.281
+        # 14 CFR 25.113(a)(2): takeoff distance = 115% of the all-engines
+        # horizontal distance to 35 ft.  The runway condition is already in
+        # the rolling-friction coefficient, so no second condition factor.
+        condition_factor = 1.15
+        factored_distance_m = total_distance_m * condition_factor
 
         # Climb gradient (%)
         climb_gradient_pct = climb_gradient * 100
+
+        def to_ft(value_m: float) -> float | None:
+            return _round_or_none(value_m * M_TO_FT)
 
         result = {
             "input": {
@@ -853,30 +1041,37 @@ def takeoff_performance(
                 "runway_slope_pct": runway_slope_pct,
                 "runway_condition": runway_condition,
             },
-            "v_speeds_kts": {
-                "VS": round(vs_kts, 1),
-                "V1": round(v1_kts, 1),
-                "VR": round(vr_kts, 1),
-                "VLOF": round(vlof_kts, 1),
-                "V2": round(v2_kts, 1),
-            },
+            "v_speeds_kts": {k: round(v, 1) for k, v in v_cas_kts.items()},
+            "v_speeds_ktas": {k: round(v, 1) for k, v in v_tas_kts.items()},
+            "speed_reference": (
+                "v_speeds_kts are KCAS (= KIAS with zero position error); "
+                "v_speeds_ktas are true airspeeds used for the distances"
+            ),
             "distances_m": {
-                "ground_roll": round(ground_roll_m, 0),
-                "air_distance_to_35ft": round(air_distance_m, 0),
-                "total_distance": round(total_distance_m, 0),
-                "factored_distance": round(factored_distance_m, 0),
+                "ground_roll": _round_or_none(ground_roll_m),
+                "air_distance_to_35ft": _round_or_none(air_distance_m),
+                "total_distance": _round_or_none(total_distance_m),
+                "factored_distance": _round_or_none(factored_distance_m),
             },
             "distances_ft": {
-                "ground_roll": round(ground_roll_ft, 0),
-                "air_distance_to_35ft": round(air_distance_ft, 0),
-                "total_distance": round(total_distance_ft, 0),
-                "factored_distance": round(factored_distance_ft, 0),
+                "ground_roll": to_ft(ground_roll_m),
+                "air_distance_to_35ft": to_ft(air_distance_m),
+                "total_distance": to_ft(total_distance_m),
+                "factored_distance": to_ft(factored_distance_m),
             },
             "performance": {
                 "climb_gradient_pct": round(climb_gradient_pct, 2),
+                "climb_angle_deg": round(math.degrees(gamma), 2),
+                "transition_radius_m": round(radius_m, 0),
                 "density_altitude_ft": round(density_alt_ft, 0),
-                "condition_factor": condition_factors[runway_condition],
+                "rolling_friction": mu,
+                "condition_factor": condition_factor,
             },
+            "method": (
+                "ground roll: energy method; air distance: Raymer transition "
+                "(V_TR = 1.15 VS, n = 1.2); factor: 14 CFR 25.113(a)(2)"
+            ),
+            "warnings": warnings,
         }
 
         output = f"""
@@ -889,21 +1084,21 @@ Conditions:
   Wind: {wind_kts:+.0f} kts {"(headwind)" if wind_kts > 0 else "(tailwind)" if wind_kts < 0 else ""}
   Runway: {runway_slope_pct:+.1f}% slope, {runway_condition}
 
-V-Speeds (KIAS):
-  VS:   {vs_kts:>6.1f} kts  (Stall)
-  V1:   {v1_kts:>6.1f} kts  (Decision)
-  VR:   {vr_kts:>6.1f} kts  (Rotation)
-  VLOF: {vlof_kts:>6.1f} kts  (Liftoff)
-  V2:   {v2_kts:>6.1f} kts  (Safety)
+V-Speeds (KCAS, = KIAS with zero position error; KTAS in brackets):
+  VS:   {v_cas_kts["VS"]:>6.1f} kts [{v_tas_kts["VS"]:.1f}]  (Stall)
+  V1:   {v_cas_kts["V1"]:>6.1f} kts [{v_tas_kts["V1"]:.1f}]  (Decision)
+  VR:   {v_cas_kts["VR"]:>6.1f} kts [{v_tas_kts["VR"]:.1f}]  (Rotation)
+  VLOF: {v_cas_kts["VLOF"]:>6.1f} kts [{v_tas_kts["VLOF"]:.1f}]  (Liftoff)
+  V2:   {v_cas_kts["V2"]:>6.1f} kts [{v_tas_kts["V2"]:.1f}]  (Safety)
 
 Distances:
-  Ground Roll:       {ground_roll_m:>6,.0f} m ({ground_roll_ft:,.0f} ft)
-  Air Distance:      {air_distance_m:>6,.0f} m ({air_distance_ft:,.0f} ft)
-  Total Distance:    {total_distance_m:>6,.0f} m ({total_distance_ft:,.0f} ft)
-  Factored ({runway_condition}):  {factored_distance_m:>6,.0f} m ({factored_distance_ft:,.0f} ft)
+  Ground Roll:       {_fmt_dist(ground_roll_m)}
+  Air Distance:      {_fmt_dist(air_distance_m)}
+  Total Distance:    {_fmt_dist(total_distance_m)}
+  Factored (x1.15):  {_fmt_dist(factored_distance_m)}
 
 Climb Gradient: {climb_gradient_pct:.2f}%
-
+{("Warnings: " + "; ".join(warnings)) if warnings else ""}
 {json.dumps(result, indent=2)}
 """
         return output.strip()
@@ -927,6 +1122,25 @@ def landing_performance(
 ) -> str:
     """Calculate landing distance for given conditions.
 
+    - Speeds: VS0 from the lift equation, reported as KCAS (= KIAS with
+      zero position error) with KTAS alongside; VREF = ``vref_factor`` x
+      VS0 (CAS); VAPP = VREF + wind additive, where the additive is half
+      the steady headwind component, at least 5 kt and at most 20 kt (no
+      additive is taken for a tailwind beyond the 5 kt minimum); VTD =
+      VREF - 5 kt.  The ground roll uses the touchdown TAS.
+    - Ground roll: v_ground^2 / (2 a) with a = mu g + g sin(atan(slope))
+      (slope positive uphill, so an uphill runway shortens the roll) and
+      braking friction mu set by the runway condition (dry 0.4, wet 0.2,
+      contaminated 0.1).
+    - Factored (dispatch) distance -- the runway condition is applied once:
+      dry: 14 CFR 121.195(b), dry landing distance / 0.6 (x1.67);
+      wet: 14 CFR 121.195(d), 115 % of the dry requirement (x1.92 on the
+      *dry* distance, since the regulatory wet factor replaces, rather than
+      adds to, a wet-runway friction model);
+      contaminated: no Part 121 dispatch factor exists; the FAA's
+      recommended 15 % margin on the actual landing distance (SAFO 06012)
+      is applied to the contaminated (low-mu) distance.
+
     Args:
         weight_kg: Landing weight in kg
         pressure_altitude_ft: Airport pressure altitude in feet
@@ -947,11 +1161,25 @@ def landing_performance(
         No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
+        for name, value in (
+            ("weight_kg", weight_kg),
+            ("wing_area_m2", wing_area_m2),
+            ("cl_max_landing", cl_max_landing),
+            ("vref_factor", vref_factor),
+            ("approach_angle_deg", approach_angle_deg),
+        ):
+            if not value > 0:
+                return f"Error: {name} must be > 0 (got {value})"
+        temp_k = temperature_c + 273.15
+        if temp_k <= 0:
+            return "Error: temperature_c must be above absolute zero"
+
         # Get atmospheric conditions
         altitude_m = pressure_altitude_ft * 0.3048
         isa = _get_isa_conditions(altitude_m)
-        temp_k = temperature_c + 273.15
-        rho = isa["pressure_pa"] / (R_AIR * temp_k)
+        p = isa["pressure_pa"]
+        rho = p / (R_AIR * temp_k)
+        a = math.sqrt(GAMMA * R_AIR * temp_k)
 
         # Weight in Newtons
         W = weight_kg * G0
@@ -959,21 +1187,23 @@ def landing_performance(
         # Calculate V-speeds
         ms_to_kts = 1.943844
 
-        # VS0 (stall speed in landing config)
-        vs0 = math.sqrt((2 * W) / (rho * wing_area_m2 * cl_max_landing))
-        vs0_kts = vs0 * ms_to_kts
+        # VS0 (stall speed in landing config): TAS at the local density,
+        # then the calibrated airspeed the pilot sees.
+        vs0_tas = math.sqrt((2 * W) / (rho * wing_area_m2 * cl_max_landing))
+        vs0_kts = _tas_to_cas_kts(vs0_tas, a, p)
 
-        # VREF (approach reference speed)
+        # VREF (approach reference speed), CAS
         vref_kts = vs0_kts * vref_factor
-        _vref_ms = vref_kts / ms_to_kts  # noqa: F841
 
-        # VAPP (approach speed with wind additive)
-        wind_additive = max(0, -wind_kts * 0.5) + 5  # Add for gusts
+        # VAPP (approach speed with wind additive): half the steady headwind
+        # component, minimum 5 kt, maximum 20 kt; nothing extra for tailwind.
+        headwind_kts = max(0.0, wind_kts)
+        wind_additive = min(20.0, max(5.0, 0.5 * headwind_kts))
         vapp_kts = vref_kts + wind_additive
 
         # VTD (touchdown speed) - typically VREF - 5-10 kts
         vtd_kts = vref_kts - 5
-        vtd_ms = vtd_kts / ms_to_kts
+        vtd_ms = _cas_kts_to_tas(vtd_kts, a, p)  # TAS for the ground roll
 
         # Wind effect
         wind_ms = wind_kts * 0.5144
@@ -985,35 +1215,53 @@ def landing_performance(
 
         # Ground roll calculation after touchdown.
         # Braking friction coefficient (mu) varies significantly with runway condition.
-        mu_braking = {"dry": 0.4, "wet": 0.2, "contaminated": 0.1}[runway_condition]
-
-        # Average deceleration: a = mu*g - g*sin(slope)
-        # Positive slope (uphill) aids deceleration; negative (downhill) opposes it.
-        g = G0
-        decel = mu_braking * g - g * math.sin(math.atan(runway_slope_pct / 100))
+        mu_by_condition = {"dry": 0.4, "wet": 0.2, "contaminated": 0.1}
+        mu_braking = mu_by_condition[runway_condition]
 
         # Ground speed at touchdown
         v_ground = vtd_ms - wind_ms
 
-        # Ground roll distance
-        if decel > 0:
-            ground_roll_m = v_ground**2 / (2 * decel)
-        else:
-            ground_roll_m = v_ground * 10  # Default if can't calculate
+        def ground_roll(mu: float) -> float:
+            """Braking distance; a = mu*g + g*sin(slope), uphill (+) helps."""
+            g = G0
+            decel = mu * g + g * math.sin(math.atan(runway_slope_pct / 100))
+            if decel <= 0:
+                return float("inf")  # cannot stop (e.g. steep icy downhill)
+            return v_ground**2 / (2 * decel)
 
-        # Total landing distance
+        ground_roll_m = ground_roll(mu_braking)
+        dry_ground_roll_m = ground_roll(mu_by_condition["dry"])
+
+        # Total (actual, unfactored) landing distance for this runway state
         total_distance_m = air_distance_m + ground_roll_m
+        dry_total_m = air_distance_m + dry_ground_roll_m
 
-        # Apply regulatory safety factors for landing distance.
-        # Wet runway factor 1.43 (per CS 25.125); contaminated factor 1.92 approximate.
-        condition_factors = {"dry": 1.0, "wet": 1.43, "contaminated": 1.92}
-        factored_distance_m = total_distance_m * condition_factors[runway_condition]
+        # Regulatory factored distance; see docstring for the references.
+        dry_factor = 1 / 0.6  # 14 CFR 121.195(b): land within 60% of runway
+        if runway_condition == "dry":
+            condition_factor = dry_factor
+            factored_distance_m = dry_total_m * condition_factor
+            factored_basis = "dry landing distance (14 CFR 121.195(b))"
+        elif runway_condition == "wet":
+            condition_factor = dry_factor * 1.15  # 121.195(d): 115% of dry
+            factored_distance_m = dry_total_m * condition_factor
+            factored_basis = "dry landing distance x 1.15 (14 CFR 121.195(d))"
+        else:
+            condition_factor = 1.15
+            factored_distance_m = total_distance_m * condition_factor
+            factored_basis = (
+                "actual contaminated landing distance + 15% (FAA SAFO 06012)"
+            )
 
-        # Convert to feet
-        air_distance_ft = air_distance_m * 3.281
-        ground_roll_ft = ground_roll_m * 3.281
-        total_distance_ft = total_distance_m * 3.281
-        factored_distance_ft = factored_distance_m * 3.281
+        warnings: list[str] = []
+        if not math.isfinite(ground_roll_m):
+            warnings.append(
+                "Braking deceleration <= 0 (downhill slope exceeds friction): "
+                "aircraft cannot stop"
+            )
+
+        def to_ft(value_m: float) -> float | None:
+            return _round_or_none(value_m * M_TO_FT)
 
         result = {
             "input": {
@@ -1030,22 +1278,37 @@ def landing_performance(
                 "VAPP": round(vapp_kts, 1),
                 "VTD": round(vtd_kts, 1),
             },
+            "v_speeds_ktas": {
+                "VS0": round(vs0_tas * ms_to_kts, 1),
+                "VREF": round(_cas_kts_to_tas(vref_kts, a, p) * ms_to_kts, 1),
+                "VAPP": round(_cas_kts_to_tas(vapp_kts, a, p) * ms_to_kts, 1),
+                "VTD": round(vtd_ms * ms_to_kts, 1),
+            },
+            "speed_reference": (
+                "v_speeds_kts are KCAS (= KIAS with zero position error); "
+                "v_speeds_ktas are true airspeeds used for the distances"
+            ),
             "distances_m": {
-                "air_distance": round(air_distance_m, 0),
-                "ground_roll": round(ground_roll_m, 0),
-                "total_distance": round(total_distance_m, 0),
-                "factored_distance": round(factored_distance_m, 0),
+                "air_distance": _round_or_none(air_distance_m),
+                "ground_roll": _round_or_none(ground_roll_m),
+                "total_distance": _round_or_none(total_distance_m),
+                "dry_total_distance": _round_or_none(dry_total_m),
+                "factored_distance": _round_or_none(factored_distance_m),
             },
             "distances_ft": {
-                "air_distance": round(air_distance_ft, 0),
-                "ground_roll": round(ground_roll_ft, 0),
-                "total_distance": round(total_distance_ft, 0),
-                "factored_distance": round(factored_distance_ft, 0),
+                "air_distance": to_ft(air_distance_m),
+                "ground_roll": to_ft(ground_roll_m),
+                "total_distance": to_ft(total_distance_m),
+                "dry_total_distance": to_ft(dry_total_m),
+                "factored_distance": to_ft(factored_distance_m),
             },
             "performance": {
                 "braking_coefficient": mu_braking,
-                "condition_factor": condition_factors[runway_condition],
+                "condition_factor": round(condition_factor, 4),
+                "factored_basis": factored_basis,
+                "wind_additive_kts": round(wind_additive, 1),
             },
+            "warnings": warnings,
         }
 
         output = f"""
@@ -1058,20 +1321,21 @@ Conditions:
   Wind: {wind_kts:+.0f} kts {"(headwind)" if wind_kts > 0 else "(tailwind)" if wind_kts < 0 else ""}
   Runway: {runway_slope_pct:+.1f}% slope, {runway_condition}
 
-V-Speeds (KIAS):
+V-Speeds (KCAS, = KIAS with zero position error):
   VS0:  {vs0_kts:>6.1f} kts  (Stall, landing config)
   VREF: {vref_kts:>6.1f} kts  (Reference)
-  VAPP: {vapp_kts:>6.1f} kts  (Approach)
+  VAPP: {vapp_kts:>6.1f} kts  (Approach, +{wind_additive:.0f} kt additive)
   VTD:  {vtd_kts:>6.1f} kts  (Touchdown)
 
 Distances:
-  Air Distance:      {air_distance_m:>6,.0f} m ({air_distance_ft:,.0f} ft)
-  Ground Roll:       {ground_roll_m:>6,.0f} m ({ground_roll_ft:,.0f} ft)
-  Total Distance:    {total_distance_m:>6,.0f} m ({total_distance_ft:,.0f} ft)
-  Factored ({runway_condition}):  {factored_distance_m:>6,.0f} m ({factored_distance_ft:,.0f} ft)
+  Air Distance:      {_fmt_dist(air_distance_m)}
+  Ground Roll:       {_fmt_dist(ground_roll_m)}
+  Total Distance:    {_fmt_dist(total_distance_m)}
+  Factored (x{condition_factor:.2f}): {_fmt_dist(factored_distance_m)}
+    basis: {factored_basis}
 
 Braking: μ = {mu_braking} ({runway_condition})
-
+{("Warnings: " + "; ".join(warnings)) if warnings else ""}
 {json.dumps(result, indent=2)}
 """
         return output.strip()
@@ -1081,8 +1345,25 @@ Braking: μ = {mu_braking} ({runway_condition})
         return f"Error calculating landing performance: {str(e)}"
 
 
+# Regulation names accepted for backward compatibility, and what they mean.
+_FUEL_RULE_ALIASES = {
+    "FAR_91": "FAR_91_IFR",
+    "FAR_121": "FAR_121_DOMESTIC",
+}
+
+
 def fuel_reserve_calculator(
-    regulation: Literal["FAR_91", "FAR_121", "JAR_OPS", "ICAO"],
+    regulation: Literal[
+        "FAR_91",
+        "FAR_91_IFR",
+        "FAR_91_VFR_DAY",
+        "FAR_91_VFR_NIGHT",
+        "FAR_121",
+        "FAR_121_DOMESTIC",
+        "FAR_121_FLAG",
+        "JAR_OPS",
+        "ICAO",
+    ],
     trip_fuel_kg: float,
     cruise_fuel_flow_kg_hr: float,
     flight_time_min: float,
@@ -1091,13 +1372,32 @@ def fuel_reserve_calculator(
 ) -> str:
     """Calculate required fuel reserves per aviation regulations.
 
+    Rules implemented (fuel beyond the trip fuel to the destination):
+
+    - ``FAR_91_IFR`` (14 CFR 91.167): alternate (if required) + 45 min at
+      normal cruising speed.  ``FAR_91`` is an alias for this rule.
+    - ``FAR_91_VFR_DAY`` / ``FAR_91_VFR_NIGHT`` (14 CFR 91.151(a)): 30 min
+      (day) or 45 min (night) at normal cruising speed; VFR needs no
+      alternate, so ``alternate_fuel_kg`` is only added if supplied.
+    - ``FAR_121_DOMESTIC`` (14 CFR 121.639): alternate + 45 min at normal
+      cruise fuel consumption.  ``FAR_121`` is an alias for this rule.
+    - ``FAR_121_FLAG`` (14 CFR 121.645(b)): 10 % of the total flight time
+      (``flight_time_min``) at normal cruise fuel consumption + alternate +
+      30 min holding at 1,500 ft above the alternate.
+    - ``JAR_OPS`` / ``ICAO``: 5 % trip contingency (min. 5 min holding) +
+      alternate + 30 min final reserve.
+
+    Holding fuel flow is approximated as 80 % of the cruise fuel flow;
+    ``holding_altitude_ft`` is echoed in the result for reference but does
+    not change the holding fuel flow.
+
     Args:
-        regulation: Regulatory framework - "FAR_91", "FAR_121", "JAR_OPS", or "ICAO"
+        regulation: Regulatory framework (see above)
         trip_fuel_kg: Planned trip fuel in kg
         cruise_fuel_flow_kg_hr: Cruise fuel flow rate in kg/hr
-        flight_time_min: Planned flight time in minutes
+        flight_time_min: Planned flight time in minutes (used by FAR_121_FLAG)
         alternate_fuel_kg: Fuel to fly to alternate airport in kg
-        holding_altitude_ft: Expected holding altitude for reserve calculations
+        holding_altitude_ft: Expected holding altitude (informational only)
 
     Returns:
         Formatted string with fuel reserve breakdown per the selected regulation,
@@ -1107,32 +1407,74 @@ def fuel_reserve_calculator(
         No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
+        for name, value in (
+            ("trip_fuel_kg", trip_fuel_kg),
+            ("cruise_fuel_flow_kg_hr", cruise_fuel_flow_kg_hr),
+            ("flight_time_min", flight_time_min),
+            ("alternate_fuel_kg", alternate_fuel_kg),
+        ):
+            if value < 0:
+                return f"Error: {name} must be >= 0 (got {value})"
+
         reserves = {}
         notes = []
+        rule = _FUEL_RULE_ALIASES.get(regulation, regulation)
+        if rule != regulation:
+            notes.append(f"{regulation} is treated as {rule}")
 
-        if regulation == "FAR_91":
-            # FAR 91.151 - VFR: 30 min day, 45 min night
-            # FAR 91.167 - IFR: 45 min at normal cruise
-            reserves["final_reserve_kg"] = cruise_fuel_flow_kg_hr * (45 / 60)
+        cruise_kg_per_min = cruise_fuel_flow_kg_hr / 60
+        holding_fuel_flow = cruise_fuel_flow_kg_hr * 0.8  # Lower at holding
+
+        if rule == "FAR_91_IFR":
+            # 14 CFR 91.167(a): destination + alternate + 45 min normal cruise
             reserves["contingency_kg"] = 0  # Not required under Part 91
             reserves["alternate_kg"] = alternate_fuel_kg
-            notes.append("FAR 91.167: 45 min fuel at normal cruise")
+            reserves["final_reserve_kg"] = cruise_kg_per_min * 45
+            notes.append(
+                "14 CFR 91.167 (IFR): alternate (if required) + 45 min at "
+                "normal cruising speed"
+            )
 
-        elif regulation == "FAR_121":
-            # FAR 121.639 - Domestic: 45 min at normal cruise
-            # Plus alternate fuel if required
-            # Plus 10% contingency
-            reserves["contingency_kg"] = trip_fuel_kg * 0.10
+        elif rule in ("FAR_91_VFR_DAY", "FAR_91_VFR_NIGHT"):
+            # 14 CFR 91.151(a)(1)/(2): 30 min day, 45 min night
+            minutes = 30 if rule == "FAR_91_VFR_DAY" else 45
+            reserves["contingency_kg"] = 0
             reserves["alternate_kg"] = alternate_fuel_kg
-            reserves["final_reserve_kg"] = cruise_fuel_flow_kg_hr * (45 / 60)
-            notes.append("FAR 121.639: 10% contingency + 45 min reserve")
+            reserves["final_reserve_kg"] = cruise_kg_per_min * minutes
+            period = "day" if minutes == 30 else "night"
+            notes.append(
+                f"14 CFR 91.151(a) (VFR {period}): {minutes} min at normal "
+                "cruising speed; no alternate required"
+            )
 
-        elif regulation == "JAR_OPS":
+        elif rule == "FAR_121_DOMESTIC":
+            # 14 CFR 121.639: destination + most distant alternate + 45 min
+            # at normal cruise fuel consumption.  No percentage contingency.
+            reserves["contingency_kg"] = 0
+            reserves["alternate_kg"] = alternate_fuel_kg
+            reserves["final_reserve_kg"] = cruise_kg_per_min * 45
+            notes.append(
+                "14 CFR 121.639 (domestic): alternate + 45 min at normal "
+                "cruise fuel consumption"
+            )
+
+        elif rule == "FAR_121_FLAG":
+            # 14 CFR 121.645(b): destination + 10% of the total flight time
+            # at normal cruise consumption + alternate + 30 min holding at
+            # 1,500 ft above the alternate.
+            reserves["contingency_kg"] = 0.10 * flight_time_min * cruise_kg_per_min
+            reserves["alternate_kg"] = alternate_fuel_kg
+            reserves["final_reserve_kg"] = holding_fuel_flow * (30 / 60)
+            notes.append(
+                "14 CFR 121.645(b) (flag): 10% of flight time at cruise fuel "
+                "flow + alternate + 30 min holding at 1,500 ft"
+            )
+
+        elif rule == "JAR_OPS":
             # JAR-OPS 1.255
             # 5% trip fuel contingency (or 5 min @ holding)
             # Alternate fuel
             # 30 min final reserve at 1500 ft over alternate
-            holding_fuel_flow = cruise_fuel_flow_kg_hr * 0.8  # Lower at holding
             reserves["contingency_kg"] = max(
                 trip_fuel_kg * 0.05, holding_fuel_flow * (5 / 60)
             )
@@ -1140,12 +1482,11 @@ def fuel_reserve_calculator(
             reserves["final_reserve_kg"] = holding_fuel_flow * (30 / 60)
             notes.append("JAR-OPS: 5% contingency + 30 min final reserve")
 
-        elif regulation == "ICAO":
+        elif rule == "ICAO":
             # ICAO Annex 6
             # 5% trip fuel or 5 min at holding
             # Alternate fuel
             # 30 min final reserve at 1500 ft
-            holding_fuel_flow = cruise_fuel_flow_kg_hr * 0.8
             reserves["contingency_kg"] = max(
                 trip_fuel_kg * 0.05, holding_fuel_flow * (5 / 60)
             )
@@ -1154,7 +1495,17 @@ def fuel_reserve_calculator(
             notes.append("ICAO Annex 6: 5% contingency + 30 min final reserve")
 
         else:
-            return f"Error: Unknown regulation '{regulation}'"
+            return (
+                f"Error: Unknown regulation '{regulation}'. Use one of: FAR_91_IFR, "
+                "FAR_91_VFR_DAY, FAR_91_VFR_NIGHT, FAR_121_DOMESTIC, FAR_121_FLAG, "
+                "JAR_OPS, ICAO (FAR_91 and FAR_121 are aliases)"
+            )
+
+        if rule in ("FAR_121_FLAG", "JAR_OPS", "ICAO"):
+            notes.append(
+                "Holding fuel flow approximated as 80% of cruise fuel flow; "
+                "holding_altitude_ft is informational"
+            )
 
         # Calculate totals
         total_reserves = sum(reserves.values())
@@ -1165,6 +1516,7 @@ def fuel_reserve_calculator(
 
         result = {
             "regulation": regulation,
+            "rule_applied": rule,
             "trip_fuel_kg": round(trip_fuel_kg, 1),
             "reserves": {k: round(v, 1) for k, v in reserves.items()},
             "total_reserves_kg": round(total_reserves, 1),
@@ -1187,7 +1539,7 @@ def fuel_reserve_calculator(
         output = f"""
 FUEL RESERVE CALCULATION
 ========================
-Regulation: {regulation}
+Regulation: {regulation}{f" (as {rule})" if rule != regulation else ""}
 Flight Time: {flight_time_min:.0f} min
 Cruise Fuel Flow: {cruise_fuel_flow_kg_hr:.1f} kg/hr
 

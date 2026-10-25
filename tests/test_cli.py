@@ -426,3 +426,32 @@ class TestMainEntryPoint:
             main()
         captured = capsys.readouterr()
         assert "operational" in captured.out
+
+
+def test_cli_output_survives_a_non_utf8_locale():
+    """Windows pipes use the ANSI code page (e.g. cp1252), which cannot
+    encode the μ/°/⋅ symbols in tool output; the CLI must still print it."""
+    import os
+    import subprocess
+
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252"}
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from aerospace_mcp.cli import main; main()",
+            "run",
+            "lambert_problem_solver",
+            "--r1_m",
+            "[7000000,0,0]",
+            "--r2_m",
+            "[0,7000000,0]",
+            "--tof_s",
+            "3600",
+        ],
+        capture_output=True,
+        env=env,
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stderr.decode("utf-8", "replace")
+    assert "μ = 3.9860e+14" in proc.stdout.decode("utf-8")

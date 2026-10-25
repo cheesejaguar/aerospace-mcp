@@ -16,6 +16,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _append_method_and_warnings(result_lines: list[str], points) -> None:
+    """Add the model name and the distinct warnings of ``points`` to the text."""
+    methods = sorted({m for p in points if (m := getattr(p, "method", None))})
+    if methods:
+        result_lines.append(f"  Method: {', '.join(methods)}")
+    seen = []
+    for p in points:
+        for w in getattr(p, "warnings", None) or []:
+            if w not in seen:
+                seen.append(w)
+    if seen:
+        result_lines.append("Warnings:")
+        result_lines.extend(f"  ⚠ {w}" for w in seen)
+
+
 def wing_vlm_analysis(
     wing_config: dict, flight_conditions: dict, analysis_options: dict | None = None
 ) -> str:
@@ -28,18 +43,24 @@ def wing_vlm_analysis(
             - chord_tip_m: Tip chord in meters (optional, defaults to chord_root_m)
             - sweep_deg: Quarter-chord sweep in degrees (optional, default 0)
             - dihedral_deg: Dihedral angle in degrees (optional, default 0)
-            - twist_deg: Tip twist in degrees (optional, default 0)
-            - airfoil_root: Root airfoil name (optional, default 'NACA2412')
+            - twist_deg: Tip twist in degrees, negative = washout (optional, default 0)
+            - airfoil_root: Root airfoil name (optional, default 'NACA2412';
+              database names or any NACA 4-digit, case-insensitive; unknown
+              names are an error)
             - airfoil_tip: Tip airfoil name (optional, default matches root)
         flight_conditions: Flight conditions with keys:
             - alpha_deg_list: List of angles of attack to analyze (required)
-            - mach: Mach number (optional, default 0.2)
+            - mach: Mach number (optional, default 0.2; must be below 0.9)
             - reynolds: Reynolds number (optional)
+            - x_ref_mac: Moment reference as a fraction of the MAC from its
+              leading edge (optional, default 0.25 = MAC quarter chord)
         analysis_options: Optional analysis settings (currently unused)
 
     Returns:
         Formatted string with aerodynamic analysis results including CL, CD,
-        CM, and L/D ratio at each angle of attack.
+        CM (about x_ref_mac), and L/D ratio at each angle of attack, the
+        method that ran (AeroSandbox VLM or lifting-line/DATCOM estimate)
+        and any warnings.
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings.
@@ -81,9 +102,14 @@ def wing_vlm_analysis(
         alpha_deg_list = flight_conditions.get("alpha_deg_list", [0.0, 2.0, 5.0])
         mach = flight_conditions.get("mach", 0.2)
         reynolds = flight_conditions.get("reynolds", None)
+        extra = {}
+        if flight_conditions.get("x_ref_mac") is not None:
+            extra["x_ref_mac"] = float(flight_conditions["x_ref_mac"])
 
         # Call integration function with correct signature
-        analysis_results = _wing_analysis(geometry, alpha_deg_list, mach, reynolds)
+        analysis_results = _wing_analysis(
+            geometry, alpha_deg_list, mach, reynolds, **extra
+        )
 
         # Format response
         result_lines = ["Wing Aerodynamic Analysis (VLM)", "=" * 50]
@@ -99,9 +125,12 @@ def wing_vlm_analysis(
                 "",
                 "Flight Conditions:",
                 f"  Mach: {mach:.2f}",
-                "",
-                f"{'Alpha (°)':>10} {'CL':>8} {'CD':>8} {'CM':>8} {'L/D':>8}",
+                f"  Moment reference: {extra.get('x_ref_mac', 0.25):.3f} MAC",
             ]
+        )
+        _append_method_and_warnings(result_lines, analysis_results)
+        result_lines.extend(
+            ["", f"{'Alpha (°)':>10} {'CL':>8} {'CD':>8} {'CM':>8} {'L/D':>8}"]
         )
         result_lines.append("-" * 50)
 
@@ -120,6 +149,8 @@ def wing_vlm_analysis(
                 "CM": p.CM,
                 "L_D_ratio": p.L_D_ratio,
                 "span_efficiency": p.span_efficiency,
+                "method": getattr(p, "method", None),
+                "warnings": getattr(p, "warnings", None) or [],
             }
             for p in analysis_results
         ]
@@ -144,13 +175,17 @@ def airfoil_polar_analysis(
     """Generate airfoil polar data (CL, CD, CM vs alpha) using database or advanced methods.
 
     Args:
-        airfoil_name: Airfoil name (e.g., 'NACA2412', 'NACA0012')
-        reynolds_number: Reynolds number
-        mach_number: Mach number
+        airfoil_name: Airfoil name (e.g., 'NACA2412', 'NACA0012'; case-insensitive,
+            database names or any NACA 4-digit; unknown names are an error)
+        reynolds_number: Reynolds number (> 0)
+        mach_number: Mach number (< 0.9)
         alpha_range_deg: Optional angle of attack range, defaults to [-10, 20] deg
 
     Returns:
-        Formatted string with airfoil polar data (CL, CD, CM, L/D vs. alpha).
+        Formatted string with airfoil polar data (CL, CD, CM about c/4, L/D vs.
+        alpha), the method that ran (NeuralFoil or database model) and any
+        warnings. Lift is capped at cl_max; beyond stall the model blends into
+        a flat plate (cl ~ 2 sin a cos a, cd ~ 2 sin^2 a).
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings.
@@ -171,9 +206,11 @@ def airfoil_polar_analysis(
             [
                 f"Reynolds Number: {reynolds_number:.0e}",
                 f"Mach Number: {mach_number:.3f}",
-                "",
-                f"{'Alpha (°)':>8} {'CL':>8} {'CD':>8} {'CM':>8} {'L/D':>8}",
             ]
+        )
+        _append_method_and_warnings(result_lines, polar_results)
+        result_lines.extend(
+            ["", f"{'Alpha (°)':>8} {'CL':>8} {'CD':>8} {'CM':>8} {'L/D':>8}"]
         )
         result_lines.append("-" * 50)
 
@@ -193,6 +230,8 @@ def airfoil_polar_analysis(
                 "cd": p.cd,
                 "cm": p.cm,
                 "cl_cd_ratio": p.cl_cd_ratio,
+                "method": getattr(p, "method", None),
+                "warnings": getattr(p, "warnings", None) or [],
             }
             for p in polar_results
         ]
@@ -222,17 +261,28 @@ def calculate_stability_derivatives(wing_config: dict, flight_conditions: dict) 
             - airfoil_root: Root airfoil name (optional, default 'NACA2412')
             - airfoil_tip: Tip airfoil name (optional)
         flight_conditions: Flight conditions with keys:
-            - alpha_deg: Reference angle of attack (optional, default 2.0)
-            - mach: Mach number (optional, default 0.2)
+            - alpha_deg: Angle of attack at which the slopes are evaluated
+              (optional, default 2.0); near and beyond stall the local slopes
+              drop
+            - mach: Mach number (optional, default 0.2; must be below 0.9)
+            - x_ref_mac: Moment reference (e.g. the CG) as a fraction of the
+              MAC from its leading edge (optional, default 0.25)
 
     Returns:
-        JSON string with stability derivatives:
-        - CL_alpha: Lift curve slope (dCL/dalpha) [1/rad] -- rate of lift
-          change with angle of attack. Positive for conventional aircraft.
-        - CM_alpha: Pitching moment slope (dCM/dalpha) [1/rad] -- must be
-          negative for static longitudinal stability (nose-down restoring moment).
-        - CL_alpha_dot: Unsteady lift derivative due to rate of alpha change.
-        - CM_alpha_dot: Unsteady pitching moment derivative (pitch damping).
+        JSON string with wing-alone stability derivatives:
+        - CL_alpha: Local lift curve slope (dCL/dalpha) [1/rad] at alpha_deg
+          (Helmbold-Diederich below stall). Positive for conventional aircraft.
+        - CM_alpha: Pitching moment slope (dCM/dalpha) [1/rad] about x_ref_mac --
+          must be negative for static longitudinal stability (nose-down
+          restoring moment). With the wing aerodynamic centre at 0.25 MAC,
+          CM_alpha = CL_alpha * (x_ref_mac - 0.25) in attached flow: zero about
+          the default reference, negative for a reference ahead of it. The same
+          reference is used for CM by wing_vlm_analysis.
+        - CL_alpha_dot, CM_alpha_dot: not computed (null). For a conventional
+          aircraft they come mainly from the horizontal tail (downwash lag),
+          which this wing-alone model does not include.
+        - alpha_deg, CL, stalled, x_ref_mac, method, notes: evaluation point
+          and assumptions.
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings.
@@ -263,9 +313,12 @@ def calculate_stability_derivatives(wing_config: dict, flight_conditions: dict) 
         # Extract flight conditions
         alpha_deg = flight_conditions.get("alpha_deg", 2.0)
         mach = flight_conditions.get("mach", 0.2)
+        extra = {}
+        if flight_conditions.get("x_ref_mac") is not None:
+            extra["x_ref_mac"] = float(flight_conditions["x_ref_mac"])
 
-        # Integration function signature: (geometry, alpha_deg, mach)
-        result = _stability(geometry, alpha_deg, mach)
+        # Integration function signature: (geometry, alpha_deg, mach[, x_ref_mac])
+        result = _stability(geometry, alpha_deg, mach, **extra)
 
         # Format output
         output = {
@@ -274,6 +327,9 @@ def calculate_stability_derivatives(wing_config: dict, flight_conditions: dict) 
             "CL_alpha_dot": result.CL_alpha_dot,
             "CM_alpha_dot": result.CM_alpha_dot,
         }
+        for key in ("alpha_deg", "CL", "stalled", "x_ref_mac", "method", "notes"):
+            if hasattr(result, key):
+                output[key] = getattr(result, key)
         return json.dumps(output, indent=2)
 
     except ImportError:

@@ -1,17 +1,34 @@
 ---
 name: aerospace-tools
-description: Discover, search, and explore all 44 aerospace-mcp tools across 11 domains
+description: Discover, search, and explore all 47 aerospace-mcp tools across 11 domains
 ---
 
 # Aerospace Tool Discovery
 
-Meta-skill for discovering and searching across all 44 aerospace-mcp tools organized into 11 domains. Use this when unsure which tool to use for a given task.
+Meta-skill for discovering and searching across all 47 aerospace-mcp tools organized into 11 domains. Use this when unsure which tool to use for a given task.
+
+## Setup
+
+The examples below call `aerospace-mcp-cli`. If that command is not on `PATH`,
+run each one through [uv](https://docs.astral.sh/uv/) instead, which downloads a
+prebuilt package (Linux and macOS, x86_64 and arm64; no Rust or C compiler
+needed) and caches it after the first run:
+
+```bash
+uvx --from aerospace-mcp aerospace-mcp-cli list
+```
+
+Install uv with `curl -LsSf https://astral.sh/uv/install.sh | sh` (Linux/macOS);
+it fetches Python 3.11+ itself if the system has none. `uv tool install
+aerospace-mcp` puts `aerospace-mcp-cli` on `PATH` permanently. When the
+aerospace MCP server is connected, the same tools are also available as MCP
+tools with the same names and parameters.
 
 ## Tool Categories
 
 | Category | Tools | Description |
 |----------|-------|-------------|
-| core | 5 | Flight planning, airport search, distances |
+| core | 8 | Flight planning, airport search, distances, system status |
 | atmosphere | 2 | ISA atmosphere profiles, wind models |
 | frames | 3 | Coordinate frame transformations (ECEF, ECI, geodetic) |
 | aerodynamics | 4 | Wing VLM analysis, airfoil polars, stability derivatives |
@@ -73,7 +90,7 @@ The `aerospace-mcp-cli` command provides four subcommands:
 
 ### `list` — Browse available tools
 ```bash
-aerospace-mcp-cli list                    # All 44 tools
+aerospace-mcp-cli list                    # All 47 tools
 aerospace-mcp-cli list -c core            # Only core tools
 ```
 

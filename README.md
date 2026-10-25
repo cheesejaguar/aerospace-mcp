@@ -24,33 +24,86 @@ For real flight planning, always use certified aviation software and consult off
 
 ## 🚀 Quick Start
 
-### Option 1: UV (Recommended)
+The only prerequisite is [uv](https://docs.astral.sh/uv/), which also fetches
+Python 3.11+ if your system has none. Releases on PyPI ship prebuilt wheels for
+Linux (x86_64 and arm64, glibc 2.28+ and musl), macOS 11+ (Intel and Apple
+Silicon) and Windows x64, so **no Rust toolchain or compiler is needed**.
 
 ```bash
-# Install UV (fast Python package manager)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Clone and setup
-git clone https://github.com/cheesejaguar/aerospace-mcp.git
-cd aerospace-mcp
-uv venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
-uv sync
-
-# Copy env and configure (optional but recommended)
-cp .env.example .env
-# Edit .env as needed (host/port/log level, optional LLM tools)
-
-# Run HTTP server (package entrypoint)
-uv run aerospace-mcp-http
-
-# Alternatively (developer style)
-uvicorn main:app --reload --host 0.0.0.0 --port 8080
-
-# Test the API
-curl "http://localhost:8080/health"
+curl -LsSf https://astral.sh/uv/install.sh | sh   # Linux / macOS
 ```
 
-### Option 2: Docker
+### Claude Code: MCP server + skills in one line
+
+```bash
+claude plugin marketplace add cheesejaguar/aerospace-mcp && claude plugin install aerospace-mcp@aerospace-mcp
+```
+
+Inside a session (Claude Code 2.1.275 or later) the same is
+`/plugin install aerospace-mcp --marketplace cheesejaguar/aerospace-mcp`. The
+plugin starts the MCP server with `uvx aerospace-mcp` and adds the skills in
+[`skills/`](skills/). For the MCP server alone:
+`claude mcp add aerospace -- uvx aerospace-mcp`.
+
+### Skills for other agents (Cursor, Codex, OpenCode, ...)
+
+```bash
+npx skills add cheesejaguar/aerospace-mcp
+```
+
+The skills run tools through `uvx --from aerospace-mcp aerospace-mcp-cli`, so
+they need uv too (and Node.js for `npx`).
+
+### Claude Desktop and other MCP clients
+
+```json
+{
+  "mcpServers": {
+    "aerospace": {
+      "command": "uvx",
+      "args": ["aerospace-mcp"]
+    }
+  }
+}
+```
+
+GUI apps on macOS do not inherit your shell's `PATH`: if the client cannot
+find `uvx`, use the absolute path printed by `which uvx` (usually
+`~/.local/bin/uvx`). The first launch downloads about 300 MB of dependencies;
+run `uvx --from aerospace-mcp aerospace-mcp-cli list` once beforehand so the
+client's server start-up timeout is not spent on the download.
+
+### CLI and HTTP API
+
+```bash
+uvx --from aerospace-mcp aerospace-mcp-cli run hohmann_transfer --r1_m 6778000 --r2_m 42164000
+uvx --from aerospace-mcp aerospace-mcp-http        # http://localhost:8080/docs
+uv tool install aerospace-mcp                      # all three commands on PATH
+```
+
+Optional extras work the same way, e.g. `uvx --from 'aerospace-mcp[llm]'
+aerospace-mcp` for the LLM agent tools (set `LLM_TOOLS_ENABLED=true` and
+`OPENAI_API_KEY`).
+
+### From source (development)
+
+Building from a checkout compiles the native core, so it needs a Rust
+toolchain:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # Rust (rustup)
+git clone https://github.com/cheesejaguar/aerospace-mcp.git
+cd aerospace-mcp
+uv sync                               # builds aerospace_mcp._native
+
+cp .env.example .env                  # optional: host/port/log level, LLM tools
+uv run aerospace-mcp                  # MCP server (stdio)
+uv run aerospace-mcp sse 0.0.0.0 8001 # MCP server (SSE, debugging)
+uv run aerospace-mcp-http             # HTTP API
+uvicorn main:app --reload --port 8080 # HTTP API with auto-reload
+```
+
+### Docker
 
 ```bash
 git clone https://github.com/cheesejaguar/aerospace-mcp.git
@@ -60,37 +113,6 @@ docker run -p 8080:8080 aerospace-mcp
 
 # Test the API
 curl "http://localhost:8080/health"
-```
-
-### Option 3: MCP Client (Claude Desktop)
-
-Add to your Claude Desktop configuration:
-
-```json
-{
-  "mcpServers": {
-    "aerospace": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/aerospace-mcp", "run", "aerospace-mcp"],
-      "env": {
-        "LLM_TOOLS_ENABLED": "true",
-        "OPENAI_API_KEY": "your-openai-api-key-here"
-      }
-    }
-  }
-}
-```
-
-**Note**: The `env` section is optional and only needed if you want to enable the AI-powered agent tools for enhanced user experience.
-
-### MCP via CLI
-
-```bash
-# Start the MCP server (stdio)
-uv run aerospace-mcp
-
-# Start in SSE mode (optional)
-uv run aerospace-mcp sse 0.0.0.0 8001
 ```
 
 ## 📋 Table of Contents
@@ -122,13 +144,13 @@ uv run aerospace-mcp sse 0.0.0.0 8001
 ### Space & Orbital Mechanics Capabilities
 
 - 🛰️ **Orbital Elements & State Vectors**: Convert between Keplerian elements and Cartesian state vectors
-- 🌍 **Orbit Propagation**: Numerical integration with J2 perturbations using RK4 method
+- 🌍 **Orbit Propagation**: Numerical integration with J2 perturbations using RK4 method (native Rust core)
 - 🗺️ **Ground Track Computation**: Calculate satellite ground tracks for mission planning
 - 🔄 **Hohmann Transfers**: Calculate optimal two-impulse orbital transfers
 - 🤝 **Orbital Rendezvous**: Plan multi-maneuver rendezvous sequences
 - 🎯 **Trajectory Optimization**: Genetic algorithms and particle swarm optimization
 - 📊 **Uncertainty Analysis**: Monte Carlo sampling for trajectory robustness assessment
-- 🚀 **Lambert Problem**: Two-body trajectory determination for given time-of-flight
+- 🚀 **Lambert Problem**: Two-body trajectory determination for given time-of-flight (Izzo's 2015 algorithm, multi-revolution and retrograde; native Rust core)
 
 ### Supported Operations
 
@@ -191,152 +213,82 @@ uv run aerospace-mcp sse 0.0.0.0 8001
 
 ### System Requirements
 
-- **Python**: 3.11+ (3.12+ recommended for best performance)
-- **Memory**: 512MB RAM minimum (1GB+ recommended)
-- **Storage**: 200MB free space
-- **Network**: Internet connection for initial setup
+- **uv** (recommended) or **pip** with **Python 3.11+**
+- **Prebuilt wheels**: Linux x86_64/arm64 (glibc 2.28+ or musl 1.2+), macOS 11+
+  (Intel and Apple Silicon), Windows x64. Other platforms install from the
+  source distribution, which needs a [Rust toolchain](https://rustup.rs).
+- **Disk**: about 300 MB for the default install (about 500 MB with `[llm]`)
+- **Network**: for the first install; the airport database and aircraft
+  models ship with the packages and work offline
 
-### Method 1: UV Package Manager (Recommended)
-
-UV is the fastest Python package manager and provides excellent dependency resolution:
+### With uv (no clone)
 
 ```bash
-# Install UV
-curl -LsSf https://astral.sh/uv/install.sh | sh  # Linux/macOS
-# Or: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
-
-# Clone repository
-git clone https://github.com/cheesejaguar/aerospace-mcp.git
-cd aerospace-mcp
-
-# Create virtual environment
-uv venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate     # Windows
-
-# Install dependencies
-uv add fastapi uvicorn[standard] airportsdata geographiclib pydantic python-dotenv
-uv add openap  # Optional: for performance estimates
-uv add mcp     # Optional: for MCP server functionality
-
-# Install optional aerospace analysis dependencies
-uv add --optional-dependencies atmosphere  # Ambiance for enhanced ISA
-uv add --optional-dependencies space      # Astropy for coordinate frames
-uv add --optional-dependencies all        # All optional dependencies
-
-# Install development dependencies (optional)
-uv add --dev pytest httpx black isort mypy pre-commit
-
-# Verify installation
-python -c "import main; print('✅ Installation successful')"
+uvx aerospace-mcp                               # MCP server (stdio), run in place
+uvx --from aerospace-mcp aerospace-mcp-cli list # any command, run in place
+uv tool install aerospace-mcp                   # install the commands on PATH
+uv tool upgrade aerospace-mcp                   # later: upgrade
 ```
 
-### Method 2: Pip (Traditional)
+`uvx` caches the environment after the first run. To pick up a new release
+with `uvx`, run `uvx aerospace-mcp@latest` once.
+
+### With pip
 
 ```bash
-# Clone repository
-git clone https://github.com/cheesejaguar/aerospace-mcp.git
-cd aerospace-mcp
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate     # Windows
-
-# Upgrade pip
-pip install --upgrade pip
-
-# Install core dependencies
-pip install fastapi uvicorn[standard] airportsdata geographiclib pydantic python-dotenv
-
-# Install optional dependencies
-pip install openap  # For performance estimates
-pip install mcp     # For MCP server
-pip install python-dotenv  # For loading .env in local/dev
-
-# Install from pyproject.toml
-pip install -e .
-
-# Verify installation
-python -c "import main; print('✅ Installation successful')"
+python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python -m pip install --upgrade pip                  # old pips miss the manylinux_2_28 / musllinux wheels
+pip install aerospace-mcp                            # or 'aerospace-mcp[llm]', 'aerospace-mcp[all]'
+aerospace-mcp-cli list
 ```
 
-### Method 3: Docker
+Extras: `llm` (LLM agent tools), `atmosphere`, `aircraft`, `rockets`,
+`space`, `gnc`, `all`.
+
+### From source
+
+See [From source (development)](#from-source-development): `uv sync` (or
+`pip install -e .`) in a checkout, with Rust installed via
+[rustup](https://rustup.rs).
+
+### Docker
 
 ```bash
-# Clone repository
 git clone https://github.com/cheesejaguar/aerospace-mcp.git
 cd aerospace-mcp
-
-# Build image
 docker build -t aerospace-mcp .
-
-# Run container
 docker run -d -p 8080:8080 --name aerospace-mcp aerospace-mcp
-
-# Health check
 curl http://localhost:8080/health
-
-# View logs
-docker logs aerospace-mcp
-
-# Stop container
-docker stop aerospace-mcp
 ```
 
-### Method 4: Conda/Mamba
-
-```bash
-# Create conda environment
-conda create -n aerospace-mcp python=3.11
-conda activate aerospace-mcp
-
-# Clone repository
-git clone https://github.com/cheesejaguar/aerospace-mcp.git
-cd aerospace-mcp
-
-# Install dependencies
-conda install fastapi uvicorn pydantic
-pip install airportsdata geographiclib openap mcp
-
-# Verify installation
-python -c "import main; print('✅ Installation successful')"
-```
+The image builds the native core itself (Rust is installed in the build
+stage only) and includes the `llm` extra.
 
 ### Troubleshooting Installation
 
-#### Common Issues
+**The MCP client cannot start the server / `uvx: command not found`**: GUI
+apps (Claude Desktop on macOS in particular) do not see the `PATH` from your
+shell profile. Put the absolute path from `which uvx` in the `command` field.
 
-**OpenAP Installation Problems**:
+**The MCP client times out on first launch**: the first `uvx` run downloads
+the dependencies. Run `uvx --from aerospace-mcp aerospace-mcp-cli list` once
+in a terminal, then restart the client.
+
+**`error: can't find Rust compiler` / `Failed to build aerospace-mcp`**: the
+installer found no wheel for your platform and fell back to the source
+distribution. Upgrade pip (`python -m pip install --upgrade pip`); if your
+platform has no prebuilt wheel (see above), install Rust with
+`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` and retry.
+
+**LLM agent tools report that LiteLLM is not installed**: install the `llm`
+extra (`pip install 'aerospace-mcp[llm]'`, or
+`uvx --from 'aerospace-mcp[llm]' aerospace-mcp`).
+
+**Check an installation**:
+
 ```bash
-# Try these alternatives if OpenAP fails to install
-pip install openap --no-cache-dir
-pip install openap --force-reinstall
-# Or install without OpenAP (performance estimates will be unavailable)
-```
-
-**GeographicLib Issues**:
-```bash
-# Install system dependencies (Ubuntu/Debian)
-sudo apt-get install libproj-dev proj-data proj-bin
-
-# Install system dependencies (macOS)
-brew install proj
-
-# Install system dependencies (Windows)
-# Download from: https://proj.org/download.html
-```
-
-**Import Errors**:
-```bash
-# Verify your Python environment
-python --version  # Should be 3.11+
-pip list | grep -E "(fastapi|openap|airportsdata)"
-
-# Test individual imports
-python -c "import fastapi; print('FastAPI OK')"
-python -c "import airportsdata; print('AirportsData OK')"
-python -c "import openap; print('OpenAP OK')" || echo "OpenAP not available (optional)"
+aerospace-mcp-cli run get_system_status   # optional packages and their versions
+aerospace-mcp-cli run hohmann_transfer --r1_m 6778000 --r2_m 42164000
 ```
 
 ## 🎯 Usage Examples
@@ -497,7 +449,7 @@ class OrbitalMechanicsClient:
         """Propagate satellite orbit with J2 perturbations."""
         response = requests.post(f"{self.base_url}/propagate_orbit_j2", json={
             "initial_state": elements,
-            "time_span_s": duration_hours * 3600,
+            "propagation_time_s": duration_hours * 3600,
             "time_step_s": 300  # 5-minute steps
         })
         return response.json()
@@ -696,6 +648,15 @@ graph TB
    - **In-memory Airport Database**: 7,861 IATA airports loaded at startup
    - **OpenAP Integration**: Aircraft performance models
    - **GeographicLib**: Precise geodesic calculations
+
+5. **Native Core** (`rust/`, imported as `aerospace_mcp._native`)
+   - Rust + PyO3 extension for the numerically heavy code: 3-DOF rocket
+     simulation and performance analysis, the launch-angle and
+     thrust-profile optimizers, Kepler / element conversions, J2 orbit
+     propagation, ground tracks, Hohmann transfers, and Izzo's Lambert solver
+   - Optimizers evaluate every candidate trajectory natively (no Python
+     call per evaluation), roughly 190x faster than the former pure-Python
+     loop; the MCP server, tool wrappers and data models remain Python
 
 ### Design Principles
 
@@ -970,48 +931,48 @@ Error responses include detailed messages:
 | `plan_multi_leg_flight` | Multi-leg journeys through 2-10 waypoints with aggregated totals | `waypoints`, `aircraft` |
 | `get_aircraft_database` | Browse/search available OpenAP aircraft types | `search` |
 | `convert_units` | Length/speed/mass/pressure/temperature/angle conversions | `value`, `from_unit`, `to_unit` |
-| `calculate_distance` | Great-circle distance | `origin`, `destination`, `step_km` |
-| `get_aircraft_performance` | Performance estimates | `aircraft_type`, `distance_km`, `cruise_altitude` |
+| `calculate_distance` | Great-circle distance | `lat1`, `lon1`, `lat2`, `lon2` |
+| `get_aircraft_performance` | Performance estimates | `aircraft_type`, `distance_km`, `cruise_altitude_ft` |
 | `get_atmosphere_profile` | ISA atmosphere conditions | `altitudes_m`, `model_type` |
-| `wind_model_simple` | Wind profile calculation | `altitudes_m`, `surface_wind_mps`, `model` |
-| `transform_frames` | Coordinate transformations | `xyz`, `from_frame`, `to_frame`, `epoch_iso` |
+| `wind_model_simple` | Wind profile calculation | `altitudes_m`, `surface_wind_speed_ms`, `surface_wind_direction_deg`, `model_type`, `roughness_length_m` |
+| `transform_frames` | Coordinate transformations | `coordinates`, `from_frame`, `to_frame`, `epoch_utc` |
 | `geodetic_to_ecef` | Lat/lon to ECEF conversion | `latitude_deg`, `longitude_deg`, `altitude_m` |
-| `ecef_to_geodetic` | ECEF to lat/lon conversion | `x`, `y`, `z` |
-| `wing_vlm_analysis` | Wing aerodynamics analysis (VLM) | `geometry`, `alpha_deg_list`, `mach` |
-| `airfoil_polar_analysis` | Airfoil polar generation | `airfoil_name`, `alpha_deg_list`, `reynolds`, `mach` |
-| `calculate_stability_derivatives` | Stability derivatives calculation | `geometry`, `alpha_deg`, `mach` |
-| `propeller_bemt_analysis` | Propeller performance (BEMT) | `geometry`, `rpm_list`, `velocity_ms`, `altitude_m` |
+| `ecef_to_geodetic` | ECEF to lat/lon conversion | `x_m`, `y_m`, `z_m` |
+| `wing_vlm_analysis` | Wing aerodynamics analysis (VLM) | `wing_config`, `flight_conditions`, `analysis_options` |
+| `airfoil_polar_analysis` | Airfoil polar generation | `airfoil_name`, `reynolds_number`, `mach_number`, `alpha_range_deg` |
+| `calculate_stability_derivatives` | Stability derivatives calculation | `wing_config`, `flight_conditions` |
+| `propeller_bemt_analysis` | Propeller performance (BEMT) | `propeller_geometry`, `operating_conditions`, `analysis_options` |
 | `uav_energy_estimate` | UAV endurance and energy analysis | `uav_config`, `battery_config`, `mission_profile` |
 | `get_airfoil_database` | Available airfoil coefficients | None |
 | `get_propeller_database` | Available propeller data | None |
-| `rocket_3dof_trajectory` | 3DOF rocket trajectory simulation | `geometry`, `dt_s`, `max_time_s`, `launch_angle_deg` |
-| `estimate_rocket_sizing` | Rocket sizing for mission requirements | `target_altitude_m`, `payload_mass_kg`, `propellant_type` |
-| `optimize_launch_angle` | Launch angle optimization | `geometry`, `objective`, `angle_bounds` |
-| `optimize_thrust_profile` | Thrust profile optimization | `geometry`, `burn_time_s`, `total_impulse_target`, `n_segments`, `objective` |
-| `trajectory_sensitivity_analysis` | Parameter sensitivity analysis | `base_geometry`, `parameter_variations`, `objective` |
+| `rocket_3dof_trajectory` | 3DOF rocket trajectory simulation | `rocket_geometry`, `launch_conditions`, `simulation_options` |
+| `estimate_rocket_sizing` | Rocket sizing for mission requirements | `target_altitude_m`, `payload_mass_kg`, `propellant_type`, `design_margin` |
+| `optimize_launch_angle` | Launch angle optimization | `rocket_geometry`, `target_range_m`, `optimize_for`, `angle_bounds_deg` |
+| `optimize_thrust_profile` | Thrust profile optimization | `rocket_geometry`, `burn_time_s`, `total_impulse_target`, `n_segments`, `objective` |
+| `trajectory_sensitivity_analysis` | Parameter sensitivity analysis | `rocket_geometry`, `parameter_variations`, `analysis_options` |
 | `get_system_status` | System health and capabilities | None |
-| `elements_to_state_vector` | Convert orbital elements to state vector | `elements` |
+| `elements_to_state_vector` | Convert orbital elements to state vector | `orbital_elements` |
 | `state_vector_to_elements` | Convert state vector to orbital elements | `state_vector` |
-| `propagate_orbit_j2` | Propagate orbit with J2 perturbations | `initial_state`, `time_span_s`, `time_step_s` |
-| `calculate_ground_track` | Calculate satellite ground track | `orbit_states`, `time_step_s` |
+| `propagate_orbit_j2` | Propagate orbit with J2 perturbations | `initial_state`, `propagation_time_s`, `time_step_s`, `max_points` |
+| `calculate_ground_track` | Calculate satellite ground track | `orbital_state`, `duration_s`, `time_step_s`, `max_points` |
 | `hohmann_transfer` | Calculate Hohmann transfer orbit | `r1_m`, `r2_m` |
-| `orbital_rendezvous_planning` | Plan orbital rendezvous maneuvers | `chaser_elements`, `target_elements` |
-| `genetic_algorithm_optimization` | Trajectory optimization using GA | `initial_trajectory`, `objective`, `constraints` |
-| `particle_swarm_optimization` | Trajectory optimization using PSO | `initial_trajectory`, `objective`, `constraints` |
-| `monte_carlo_uncertainty_analysis` | Monte Carlo trajectory uncertainty analysis | `trajectory`, `uncertainty_params`, `num_samples` |
-| `porkchop_plot_analysis` | Generate porkchop plot for interplanetary transfers | `departure_body`, `arrival_body`, `departure_dates`, `arrival_dates`, `min_tof_days`, `max_tof_days` |
+| `orbital_rendezvous_planning` | Plan orbital rendezvous maneuvers | `chaser_elements`, `target_elements`, `rendezvous_options` |
+| `genetic_algorithm_optimization` | Trajectory optimization using GA | `optimization_problem`, `ga_parameters` |
+| `particle_swarm_optimization` | Trajectory optimization using PSO | `optimization_problem`, `pso_parameters` |
+| `monte_carlo_uncertainty_analysis` | Monte Carlo trajectory uncertainty analysis | `nominal_trajectory`, `uncertainty_parameters`, `n_samples`, `analysis_options` |
+| `porkchop_plot_analysis` | Generate porkchop plot for interplanetary transfers | `departure_body`, `arrival_body`, `departure_date_range`, `arrival_date_range`, `analysis_options` |
 | `search_aerospace_tools` | Search for tools by name, description, or functionality | `query`, `search_type`, `max_results`, `category` |
 | `list_tool_categories` | List all available tool categories with counts | None |
-| `lambert_problem_solver` | Solve Lambert's problem for orbital transfers | `r1_m`, `r2_m`, `tof_s`, `direction`, `central_body` |
-| `density_altitude_calculator` | Calculate density altitude from pressure altitude and temperature | `pressure_altitude_ft`, `temperature_c` |
-| `true_airspeed_converter` | Convert between IAS/CAS/EAS/TAS/Mach | `speed_value`, `speed_type`, `altitude_ft`, `temperature_c` |
-| `stall_speed_calculator` | Calculate stall speeds for different configurations | `weight_kg`, `wing_area_m2`, `cl_max_clean`, `cl_max_landing` |
-| `weight_and_balance` | Calculate aircraft weight and CG position | `basic_empty_weight_kg`, `fuel_kg`, `payload_items` |
-| `takeoff_performance` | Calculate takeoff distances and V-speeds | `weight_kg`, `pressure_altitude_ft`, `temperature_c`, `wind_kts` |
-| `landing_performance` | Calculate landing distances and approach speeds | `weight_kg`, `pressure_altitude_ft`, `temperature_c`, `runway_condition` |
-| `fuel_reserve_calculator` | Calculate required fuel reserves per regulations | `regulation`, `trip_fuel_kg`, `cruise_fuel_flow_kg_hr` |
-| `kalman_filter_state_estimation` | State estimation using Kalman filter | `initial_state`, `measurements`, `process_noise` |
-| `lqr_controller_design` | Design LQR optimal controller | `A_matrix`, `B_matrix`, `Q_matrix`, `R_matrix` |
+| `lambert_problem_solver` | Solve Lambert's problem for orbital transfers | `r1_m`, `r2_m`, `tof_s`, `direction`, `num_revolutions`, `central_body` |
+| `density_altitude_calculator` | Calculate density altitude from pressure altitude and temperature | `pressure_altitude_ft`, `temperature_c`, `dewpoint_c` |
+| `true_airspeed_converter` | Convert between IAS/CAS/EAS/TAS/Mach | `speed_value`, `speed_type`, `altitude_ft`, `temperature_c`, `position_error_kts` |
+| `stall_speed_calculator` | Calculate stall speeds for different configurations | `weight_kg`, `wing_area_m2`, `cl_max_clean`, `cl_max_takeoff`, `cl_max_landing`, `altitude_ft`, `load_factor` |
+| `weight_and_balance` | Calculate aircraft weight and CG position | `basic_empty_weight_kg`, `basic_empty_arm_m`, `fuel_kg`, `fuel_arm_m`, `payload_items`, `forward_cg_limit_m`, `aft_cg_limit_m`, `max_takeoff_weight_kg`, `mac_m`, `lemac_m` |
+| `takeoff_performance` | Calculate takeoff distances and V-speeds | `weight_kg`, `pressure_altitude_ft`, `temperature_c`, `wind_kts`, `runway_slope_pct`, `runway_condition`, `thrust_to_weight`, `cl_max_takeoff`, `wing_area_m2`, `cd0`, `oswald_e`, `aspect_ratio` |
+| `landing_performance` | Calculate landing distances and approach speeds | `weight_kg`, `pressure_altitude_ft`, `temperature_c`, `wind_kts`, `runway_slope_pct`, `runway_condition`, `cl_max_landing`, `wing_area_m2`, `vref_factor`, `approach_angle_deg` |
+| `fuel_reserve_calculator` | Calculate required fuel reserves per regulations | `regulation`, `trip_fuel_kg`, `cruise_fuel_flow_kg_hr`, `flight_time_min`, `alternate_fuel_kg`, `holding_altitude_ft` |
+| `kalman_filter_state_estimation` | State estimation using Kalman filter | `initial_state`, `initial_covariance`, `process_noise`, `measurement_noise`, `measurements`, `dynamics_model`, `dt`, `initial_time` |
+| `lqr_controller_design` | Design LQR optimal controller | `A_matrix`, `B_matrix`, `Q_matrix`, `R_matrix`, `state_names`, `input_names` |
 
 ### Claude Desktop Setup
 
@@ -1022,12 +983,16 @@ Error responses include detailed messages:
 {
   "mcpServers": {
     "aerospace": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/aerospace-mcp", "run", "aerospace-mcp"]
+      "command": "uvx",
+      "args": ["aerospace-mcp"]
     }
   }
 }
 ```
+
+   From a source checkout use `"command": "uv"` with
+   `"args": ["--directory", "/path/to/aerospace-mcp", "run", "aerospace-mcp"]`.
+   If Claude Desktop cannot find `uvx`, give its absolute path (`which uvx`).
 
 3. Restart Claude Desktop
 4. Test with: "Search for airports in Tokyo"
@@ -1137,10 +1102,9 @@ Add to your `config.json`:
 git clone https://github.com/cheesejaguar/aerospace-mcp.git
 cd aerospace-mcp
 
-# Create development environment
-uv venv
+# Create the development environment (needs Rust, see Quick Start)
+uv sync
 source .venv/bin/activate
-uv add --dev pytest httpx black isort mypy pre-commit
 
 # Install pre-commit hooks
 pre-commit install
@@ -1163,7 +1127,13 @@ pytest tests/test_plan.py -v
 
 # Run tool-specific tests
 pytest tests/tools/ -v
+
+# Native core unit tests (no Python needed)
+cd rust && cargo test --no-default-features
 ```
+
+After editing Rust sources, `uv sync` (or `uv run ...`) rebuilds the
+extension automatically; with a plain pip setup run `pip install -e .` again.
 
 ### Code Quality
 
@@ -1176,6 +1146,9 @@ mypy main.py aerospace_mcp/
 
 # Linting
 ruff check .
+
+# Rust formatting and lints
+(cd rust && cargo fmt --check && cargo clippy --no-default-features --all-targets -- -D warnings)
 
 # Pre-commit (runs all checks)
 pre-commit run --all-files
@@ -1208,9 +1181,18 @@ aerospace-mcp/
 │       ├── atmosphere.py  # Vectorized ISA calculations
 │       ├── aero.py        # Vectorized aerodynamics
 │       ├── frames.py      # Vectorized coordinate transforms
-│       ├── rockets.py     # Vectorized trajectory integration
-│       ├── orbits.py      # Orbital mechanics computations
+│       ├── rockets.py     # Rocket data model (simulation in rust/)
+│       ├── trajopt.py     # Trajectory optimization (optimizers in rust/)
+│       ├── orbits.py      # Orbital mechanics (kernels in rust/)
 │       └── propellers.py  # Propeller BEMT analysis
+├── rust/                  # Native core (Rust + PyO3 -> aerospace_mcp._native)
+│   ├── Cargo.toml
+│   └── src/
+│       ├── rocket.rs      # 3-DOF ascent simulation & performance metrics
+│       ├── optimize.rs    # Golden-section, gradient descent, rocket optimizers
+│       ├── orbit.rs       # Kepler, elements <-> state, J2 RK4, ground track
+│       ├── lambert.rs     # Izzo Lambert solver
+│       └── python.rs      # PyO3 bindings
 ├── app/                   # Alternative FastAPI structure
 │   ├── __init__.py
 │   └── main.py
@@ -1252,8 +1234,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for
 
 2. **Setup Development Environment**
    ```bash
-   uv venv && source .venv/bin/activate
-   uv add --dev pytest httpx black isort mypy
+   uv sync && source .venv/bin/activate
    ```
 
 3. **Make Changes**

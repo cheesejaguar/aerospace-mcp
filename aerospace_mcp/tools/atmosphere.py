@@ -17,13 +17,14 @@ logger = logging.getLogger(__name__)
 
 
 def get_atmosphere_profile(
-    altitudes_m: list[float], model_type: Literal["ISA", "enhanced"] = "ISA"
+    altitudes_m: list[float], model_type: Literal["ISA", "COESA"] = "ISA"
 ) -> str:
     """Get atmospheric properties (pressure, temperature, density) at specified altitudes using ISA model.
 
     Args:
-        altitudes_m: List of altitudes in meters
-        model_type: Atmospheric model type ('ISA' for standard, 'enhanced' for extended)
+        altitudes_m: List of geometric altitudes in meters (0-86000 m)
+        model_type: Atmospheric model type ('ISA' or 'COESA', the US Standard
+            Atmosphere 1976; the two are identical below 86 km)
 
     Returns:
         Formatted string with atmospheric profile data including pressure,
@@ -78,7 +79,8 @@ def wind_model_simple(
         surface_wind_speed_ms: Wind speed at 10m reference height in m/s
         surface_wind_direction_deg: Wind direction at surface in degrees (0=North, 90=East)
         model_type: Wind model type ('logarithmic' or 'power_law')
-        roughness_length_m: Surface roughness length in meters
+        roughness_length_m: Surface roughness length in meters (logarithmic
+            model only; must be between 0 and the 10 m reference height)
 
     Returns:
         Formatted string with wind profile data at each requested altitude.
@@ -91,12 +93,14 @@ def wind_model_simple(
         and Engineers", 2000) models wind speed as:
             U(z) = (u* / kappa) * ln(z / z0)
         where u* is friction velocity, kappa ~0.4 is the von Karman constant,
-        and z0 is the aerodynamic roughness length.
+        and z0 is the aerodynamic roughness length. It is normalised so that
+        U(10 m) equals the surface wind, and is zero at and below z0.
 
         The **power-law wind profile** (empirical approximation) models wind as:
             U(z) = U_ref * (z / z_ref) ^ alpha
         where alpha (Hellmann exponent) depends on terrain roughness, typically
-        ~0.14 for open terrain and ~0.40 for urban areas.
+        ~0.14 for open terrain and ~0.40 for urban areas. This tool uses the
+        open-terrain 1/7 law (alpha = 0.143).
     """
     try:
         from ..integrations.atmosphere import wind_model_simple as _wind_model
@@ -104,11 +108,12 @@ def wind_model_simple(
         # Call integration function with correct argument mapping.
         # The integration layer implements the logarithmic or power-law profile
         # equations described above, using 10 m as the standard reference height.
+        # Its name for the power law is "power".
         wind_profile = _wind_model(
             altitudes_m,
             surface_wind_speed_ms,
             0.0,  # surface_altitude_m
-            model_type,
+            "power" if model_type == "power_law" else model_type,
             roughness_length_m,
         )
 

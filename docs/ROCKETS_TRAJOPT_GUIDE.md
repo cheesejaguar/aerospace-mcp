@@ -89,8 +89,10 @@ The 3DOF trajectory simulation uses Euler integration with the following physics
 - Drag: ½ρv²SCD with altitude-dependent atmospheric properties
 
 **Mass Model:**
-- Constant mass flow rate during burn phase
-- Mass decreases from initial to dry mass over burn time
+- Mass flow proportional to thrust (constant effective Isp): the propellant
+  remaining at time t is `m_prop * (1 - I(t) / I_total)`, where `I(t)` is the
+  integral of the interpolated thrust curve
+- Mass reaches dry mass exactly when the thrust curve ends
 
 **Atmosphere Integration:**
 - Uses ISA atmosphere model from Phase 1 tools

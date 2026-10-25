@@ -27,7 +27,7 @@ try:  # Prefer optional dependency without hard requirement
 except Exception:
     pass
 
-from main import app
+from aerospace_mcp.http_app import app
 
 # Re-export the app for use by the package
 __all__ = ["app", "run"]
@@ -57,7 +57,7 @@ def run() -> None:
     reload = os.getenv("AEROSPACE_MCP_ENV", "production").lower() == "development"
 
     uvicorn.run(
-        "main:app",
+        "aerospace_mcp.http_app:app",
         host=host,
         port=port,
         reload=reload,
@@ -65,7 +65,7 @@ def run() -> None:
         access_log=True,
         # Additional production settings
         workers=1 if reload else None,  # Single worker when reloading
-        loop="uvloop" if not reload else "auto",  # Use uvloop for better performance
+        loop="auto",  # uvloop when installed (not on Windows), else asyncio
     )
 
 

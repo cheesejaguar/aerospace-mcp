@@ -206,3 +206,111 @@ def test_uav_energy_recommendations_branches():
         {"capacity_ah": 10.0, "voltage_nominal_v": 22.2, "mass_kg": 1.0},
     )
     assert "Rotor Disk Area" in out4
+
+
+# ---------------------------------------------------------------------------
+# End-to-end tests against the real integration module (no stubs)
+# ---------------------------------------------------------------------------
+
+
+def _use_real_integration():
+    """Drop a stub left in sys.modules so the real module is imported."""
+    for name in (
+        "aerospace_mcp.integrations.propellers",
+        "aerospace_mcp.integrations.atmosphere",
+    ):
+        if getattr(sys.modules.get(name), "__file__", None) is None:
+            sys.modules.pop(name, None)
+
+
+def _json_part(out: str):
+    import json
+
+    return json.loads(out.split("JSON Data:")[1])
+
+
+def test_propeller_bemt_analysis_end_to_end():
+    _use_real_integration()
+    from aerospace_mcp.tools.propellers import propeller_bemt_analysis
+
+    geo = {"diameter_m": 0.254, "pitch_m": 0.1143, "num_blades": 2}
+    # Audit case: 10x4.5 at 10 m/s used to give ~0 N of thrust
+    data = _json_part(
+        propeller_bemt_analysis(geo, {"rpm_list": [5000, 7000], "velocity_ms": 10.0})
+    )
+    for point in data:
+        assert point["thrust_n"] > 0.5
+        assert 0.4 < point["efficiency"] < 0.8
+        ratio = point["advance_ratio"] * point["thrust_coefficient"]
+        assert abs(point["efficiency"] - ratio / point["power_coefficient"]) < 1e-9
+
+    # Static: efficiency 0 (was 0.5); n_elements option is honoured
+    data = _json_part(
+        propeller_bemt_analysis(
+            geo, {"rpm_list": [5000], "velocity_ms": 0.0}, {"n_elements": 20}
+        )
+    )
+    assert data[0]["efficiency"] == 0.0
+    assert data[0]["thrust_n"] > 0
+
+    assert "rpm values must be positive" in propeller_bemt_analysis(
+        geo, {"rpm_list": [-3000], "velocity_ms": 10.0}
+    )
+
+
+def test_uav_energy_estimate_end_to_end():
+    _use_real_integration()
+    from aerospace_mcp.tools.propellers import uav_energy_estimate
+
+    battery = {"capacity_ah": 5.0, "voltage_nominal_v": 14.8, "mass_kg": 0.5}
+
+    # Fixed-wing power depends on mass (it did not when cl_cruise was given)
+    light = _json_part(
+        uav_energy_estimate(
+            {"mass_kg": 2.0, "wing_area_m2": 0.5, "cl_cruise": 0.5},
+            battery,
+            {"velocity_ms": 15.0, "altitude_m": 0.0},
+        )
+    )
+    heavy = _json_part(
+        uav_energy_estimate(
+            {"mass_kg": 5.0, "wing_area_m2": 0.5, "cl_cruise": 0.5},
+            battery,
+            {"velocity_ms": 15.0, "altitude_m": 0.0},
+        )
+    )
+    assert abs(light["power_required_w"] - 45.3) < 0.2
+    assert abs(heavy["power_required_w"] - 53.6) < 0.2
+    assert light["aircraft_type"] == "fixed_wing"
+
+    # Both areas: labelled VTOL, with hover time from the rotors
+    out = uav_energy_estimate(
+        {"mass_kg": 2.0, "wing_area_m2": 0.5, "disk_area_m2": 0.2},
+        battery,
+        {"velocity_ms": 15.0},
+    )
+    assert "VTOL" in out
+    assert _json_part(out)["hover_time_min"] > 0
+
+    # Propeller geometry inside uav_config feeds the BEMT efficiency
+    data = _json_part(
+        uav_energy_estimate(
+            {
+                "mass_kg": 2.0,
+                "wing_area_m2": 0.5,
+                "propeller_geometry": {
+                    "diameter_m": 0.254,
+                    "pitch_m": 0.1143,
+                    "num_blades": 2,
+                },
+            },
+            battery,
+            {"velocity_ms": 15.0},
+        )
+    )
+    assert data["propeller_efficiency"] != 0.8
+
+    # Generic config at zero speed: clear error instead of ZeroDivisionError
+    assert "velocity_ms > 0" in uav_energy_estimate(
+        {"mass_kg": 2.0}, battery, {"velocity_ms": 0.0}
+    )

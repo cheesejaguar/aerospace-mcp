@@ -19,6 +19,11 @@ The optimization problem is formulated as::
 where *J* is the objective (e.g., negative max altitude for maximization)
 and *x* is the design vector (launch angle, thrust multipliers, etc.).
 
+The optimizers and the rocket simulation they drive run in the native Rust
+core (``aerospace_mcp._native``, sources in ``rust/src/optimize.rs``).
+``optimize_launch_angle`` and ``optimize_thrust_profile`` evaluate every
+candidate trajectory natively, without a Python round-trip per evaluation.
+
 References:
     - Betts, J.T., "Practical Methods for Optimal Control and Estimation
       Using Nonlinear Programming" (2nd ed., 2010)
@@ -28,12 +33,18 @@ WARNING: This module is for educational and research purposes only.
 Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
-import math
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
-from .rockets import RocketGeometry, analyze_rocket_performance, rocket_3dof_trajectory
+from .. import _native
+from .rockets import (
+    RocketGeometry,
+    _native_atmosphere,
+    analyze_rocket_performance,
+    rocket_3dof_trajectory,
+    simulate_rocket,
+)
 
 # ===========================================================================
 # Data Classes
@@ -68,6 +79,7 @@ class TrajectoryOptimizationResult:
         converged: Whether the optimizer converged within tolerance.
         trajectory_points: Trajectory at the optimal parameters.
         performance: Performance summary at the optimal parameters.
+        initial_objective: Objective of the starting design, if reported.
     """
 
     optimal_parameters: dict[str, float]
@@ -76,6 +88,9 @@ class TrajectoryOptimizationResult:
     converged: bool
     trajectory_points: list[Any]  # RocketTrajectoryPoint
     performance: Any  # RocketPerformance
+    # Objective of the starting design (same sign convention as
+    # optimal_objective), when the optimizer reports it.
+    initial_objective: float | None = None
 
 
 # ===========================================================================
@@ -112,40 +127,9 @@ def simple_golden_section_search(
     Returns:
         Tuple of ``(optimal_x, optimal_value)``.
     """
-    # Golden ratio constants
-    phi = (1 + math.sqrt(5)) / 2  # ~1.618
-    resphi = 2 - phi  # ~0.382 = 1/phi^2
-
-    # Place two interior probe points
-    x1 = lower_bound + resphi * (upper_bound - lower_bound)
-    x2 = upper_bound - resphi * (upper_bound - lower_bound)
-    f1 = objective_func(x1)
-    f2 = objective_func(x2)
-
-    for _i in range(max_iterations):
-        if abs(upper_bound - lower_bound) < tolerance:
-            break
-
-        if f1 < f2:
-            # f1 is better -- narrow from the right
-            upper_bound = x2
-            x2 = x1
-            f2 = f1
-            x1 = lower_bound + resphi * (upper_bound - lower_bound)
-            f1 = objective_func(x1)
-        else:
-            # f2 is better -- narrow from the left
-            lower_bound = x1
-            x1 = x2
-            f1 = f2
-            x2 = upper_bound - resphi * (upper_bound - lower_bound)
-            f2 = objective_func(x2)
-
-    # Return the better of the two remaining probe points
-    if f1 < f2:
-        return x1, f1
-    else:
-        return x2, f2
+    return _native.golden_section_search(
+        objective_func, lower_bound, upper_bound, tolerance, max_iterations
+    )
 
 
 # ===========================================================================
@@ -167,7 +151,8 @@ def simple_gradient_descent(
 
         dJ/dx_i ~ (J(x + h*e_i) - J(x - h*e_i)) / (2*h)
 
-    where h = 1e-6.  Parameters are projected back onto the box
+    where h = 1e-6 (probes are clamped to the bounds, and the difference is
+    divided by the actual probe spread).  Parameters are projected back onto the box
     constraints after each update step::
 
         x_{k+1} = clip(x_k - alpha * grad, x_lower, x_upper)
@@ -185,51 +170,19 @@ def simple_gradient_descent(
 
     Returns:
         Tuple of ``(optimal_params, optimal_value, iterations, converged)``.
+
+    Raises:
+        ValueError: If ``param_bounds`` does not have one pair per parameter.
     """
-    current_params = initial_params.copy()
-    current_value = objective_func(current_params)
-
-    for iteration in range(max_iterations):
-        # Numerical gradient estimation via central differences
-        gradient = []
-        h = 1e-6  # Finite-difference step size
-
-        for i, param in enumerate(current_params):
-            # Forward perturbation (clamped to bounds)
-            params_plus = current_params.copy()
-            params_plus[i] = min(param_bounds[i][1], param + h)
-            value_plus = objective_func(params_plus)
-
-            # Backward perturbation (clamped to bounds)
-            params_minus = current_params.copy()
-            params_minus[i] = max(param_bounds[i][0], param - h)
-            value_minus = objective_func(params_minus)
-
-            # Central-difference gradient: dJ/dx_i ~ (J+ - J-) / (2h)
-            grad = (value_plus - value_minus) / (2 * h)
-            gradient.append(grad)
-
-        # Gradient descent update with box-constraint projection
-        new_params = []
-        max_change = 0.0
-
-        for i, (param, grad) in enumerate(zip(current_params, gradient, strict=False)):
-            new_param = param - learning_rate * grad
-            # Project onto box constraints [lower, upper]
-            new_param = max(param_bounds[i][0], min(param_bounds[i][1], new_param))
-            new_params.append(new_param)
-            max_change = max(max_change, abs(new_param - param))
-
-        # Convergence check: both parameter and objective changes small
-        new_value = objective_func(new_params)
-
-        if max_change < tolerance and abs(new_value - current_value) < tolerance:
-            return new_params, new_value, iteration + 1, True
-
-        current_params = new_params
-        current_value = new_value
-
-    return current_params, current_value, max_iterations, False
+    params, value, iterations, converged = _native.gradient_descent(
+        objective_func,
+        initial_params,
+        param_bounds,
+        learning_rate,
+        tolerance,
+        max_iterations,
+    )
+    return params, value, iterations, converged
 
 
 # ===========================================================================
@@ -242,50 +195,28 @@ def optimize_launch_angle(
     objective: str = "max_altitude",
     angle_bounds: tuple[float, float] = (80.0, 90.0),
 ) -> TrajectoryOptimizationResult:
-    """
-    Optimize launch angle for maximum altitude or range.
+    """Optimize the launch angle by golden-section search (0.1 deg tolerance).
+
+    Each candidate is simulated with the default trajectory settings
+    (``dt_s=0.1``, ``max_time_s=300``).
 
     Args:
-        geometry: Rocket geometry and properties
-        objective: "max_altitude" or "max_range"
-        angle_bounds: (min_angle_deg, max_angle_deg)
+        geometry: Rocket geometry and properties.
+        objective: ``"max_altitude"``, or ``"max_range"`` (accepted, but
+            downrange is not modelled, so every angle scores zero).
+        angle_bounds: ``(min_angle_deg, max_angle_deg)``.
 
     Returns:
-        Optimization result
+        Optimization result with the trajectory at the optimal angle.
+
+    Raises:
+        ValueError: For an unknown objective, non-finite bounds or invalid
+            geometry.
     """
-
-    def objective_function(angle_deg: float) -> float:
-        """Objective function to minimize (negative for maximization)."""
-        try:
-            trajectory = rocket_3dof_trajectory(geometry, launch_angle_deg=angle_deg)
-            if not trajectory:
-                return float("inf")  # Invalid trajectory
-
-            performance = analyze_rocket_performance(trajectory)
-
-            if objective == "max_altitude":
-                return -performance.max_altitude_m  # Negative for maximization
-            elif objective == "max_range":
-                # Estimate range from final horizontal position (simplified)
-                final_horizontal_distance = (
-                    0.0  # Placeholder - would need 2D integration
-                )
-                return -final_horizontal_distance
-            else:
-                return float("inf")
-        except Exception:
-            return float("inf")
-
-    # Optimize using golden section search
-    optimal_angle, optimal_value = simple_golden_section_search(
-        objective_function,
-        angle_bounds[0],
-        angle_bounds[1],
-        tolerance=0.1,  # 0.1 degree tolerance
-        max_iterations=50,
+    optimal_angle, optimal_value = _native.optimize_launch_angle(
+        geometry, _native_atmosphere(), objective, angle_bounds[0], angle_bounds[1]
     )
 
-    # Generate final trajectory with optimal parameters
     final_trajectory = rocket_3dof_trajectory(geometry, launch_angle_deg=optimal_angle)
     final_performance = analyze_rocket_performance(final_trajectory)
 
@@ -306,117 +237,53 @@ def optimize_thrust_profile(
     n_segments: int = 5,
     objective: str = "max_altitude",
 ) -> TrajectoryOptimizationResult:
-    """
-    Optimize thrust profile for better performance.
+    """Optimize a segmented thrust profile at fixed burn time and total impulse.
+
+    Each of ``n_segments`` equal-length segments gets a constant thrust with
+    a multiplier in ``[0.1, 3.0]`` (relative to the average thrust); the
+    step curve is scaled so it delivers exactly ``total_impulse_target``.
+    The search starts from constant thrust and takes projected steepest
+    descent steps with a backtracking line search on the objective
+    normalized by its starting value, accepting only improvements, so the
+    result is never worse than constant thrust (``initial_objective``).
+    Candidates and the final trajectory use the default simulation settings
+    (``dt_s=0.1``, ``max_time_s=300``), so ``optimal_objective`` is the
+    returned trajectory's metric.
 
     Args:
-        geometry: Base rocket geometry
-        burn_time_s: Total burn time
-        total_impulse_target: Target total impulse
-        n_segments: Number of thrust profile segments
-        objective: "max_altitude", "min_max_q", or "min_gravity_loss"
+        geometry: Base rocket geometry (its thrust curve is replaced).
+        burn_time_s: Total burn time (s), > 0.
+        total_impulse_target: Target total impulse (N*s), > 0.
+        n_segments: Number of thrust profile segments, 1-50.
+        objective: ``"max_altitude"`` (meters), ``"min_max_q"`` (Pa), or
+            ``"min_gravity_loss"`` (approximated as ``g0 * burnout_time``,
+            m/s; nearly constant at a fixed burn time, so usually the
+            constant-thrust start is returned).
 
     Returns:
-        Optimization result
+        Optimization result; ``optimal_parameters`` holds one
+        ``thrust_mult_seg_<i>`` per segment plus the final ``thrust_curve``
+        (``[t, thrust]`` pairs; consecutive segments share a time, a step).
+
+    Raises:
+        ValueError: If the burn time or impulse target is not positive, the
+            segment count is outside 1-50, the objective is unknown, or the
+            geometry is invalid.
     """
-    # Create initial thrust profile (constant thrust)
-    avg_thrust = total_impulse_target / burn_time_s
-    segment_time = burn_time_s / n_segments
-
-    # Initial parameters: thrust multipliers for each segment
-    initial_multipliers = [1.0] * n_segments
-    multiplier_bounds = [(0.1, 3.0)] * n_segments  # 10% to 300% of average
-
-    def objective_function(multipliers: list[float]) -> float:
-        """Objective function for thrust profile optimization."""
-        try:
-            # Create thrust curve from multipliers
-            thrust_curve = []
-            for i, mult in enumerate(multipliers):
-                time_start = i * segment_time
-                time_end = (i + 1) * segment_time
-                thrust_level = avg_thrust * mult
-                thrust_curve.append([time_start, thrust_level])
-                if i == len(multipliers) - 1:  # Last segment
-                    thrust_curve.append([time_end, 0.0])  # End thrust
-
-            # Normalize to maintain total impulse
-            current_impulse = sum(
-                avg_thrust * mult * segment_time for mult in multipliers
-            )
-            if current_impulse <= 0:
-                return float("inf")
-
-            scale_factor = total_impulse_target / current_impulse
-            thrust_curve = [[t, thrust * scale_factor] for t, thrust in thrust_curve]
-
-            # Update geometry with new thrust curve
-            opt_geometry = RocketGeometry(
-                dry_mass_kg=geometry.dry_mass_kg,
-                propellant_mass_kg=geometry.propellant_mass_kg,
-                diameter_m=geometry.diameter_m,
-                length_m=geometry.length_m,
-                cd=geometry.cd,
-                thrust_curve=thrust_curve,
-            )
-
-            # Run trajectory simulation with reasonable parameters
-            trajectory = rocket_3dof_trajectory(
-                opt_geometry, dt_s=0.2, max_time_s=150.0
-            )
-            if not trajectory:
-                return 1e6  # Large penalty instead of inf
-
-            performance = analyze_rocket_performance(trajectory)
-
-            if objective == "max_altitude":
-                # Return negative altitude for minimization, but ensure it's not zero
-                result = -max(
-                    1.0, performance.max_altitude_m
-                )  # At least -1 to avoid zero
-                return result
-            elif objective == "min_max_q":
-                return performance.max_q_pa
-            elif objective == "min_gravity_loss":
-                # Estimate gravity loss (simplified)
-                gravity_loss = 9.80665 * performance.burnout_time_s
-                return gravity_loss
-            else:
-                return 1e6
-
-        except Exception:
-            return 1e6  # Large penalty for failed cases
-
-    # Optimize using gradient descent
-    optimal_multipliers, optimal_value, iterations, converged = simple_gradient_descent(
-        objective_function,
-        initial_multipliers,
-        multiplier_bounds,
-        learning_rate=0.05,
-        tolerance=1e-3,
-        max_iterations=100,
+    if not isinstance(n_segments, int) or not 1 <= n_segments <= 50:
+        raise ValueError("n_segments must be an integer between 1 and 50")
+    multipliers, optimal_value, initial_value, iterations, converged, curve = (
+        _native.optimize_thrust_profile(
+            geometry,
+            _native_atmosphere(),
+            burn_time_s,
+            total_impulse_target,
+            n_segments,
+            objective,
+        )
     )
+    final_thrust_curve = [[t, thrust] for t, thrust in curve]
 
-    # Generate final thrust curve and trajectory
-    final_thrust_curve = []
-    for i, mult in enumerate(optimal_multipliers):
-        time_start = i * segment_time
-        time_end = (i + 1) * segment_time
-        thrust_level = avg_thrust * mult
-        final_thrust_curve.append([time_start, thrust_level])
-        if i == len(optimal_multipliers) - 1:
-            final_thrust_curve.append([time_end, 0.0])
-
-    # Normalize final curve
-    current_impulse = sum(
-        avg_thrust * mult * segment_time for mult in optimal_multipliers
-    )
-    scale_factor = total_impulse_target / current_impulse
-    final_thrust_curve = [
-        [t, thrust * scale_factor] for t, thrust in final_thrust_curve
-    ]
-
-    # Generate final trajectory
     final_geometry = RocketGeometry(
         dry_mass_kg=geometry.dry_mass_kg,
         propellant_mass_kg=geometry.propellant_mass_kg,
@@ -425,25 +292,23 @@ def optimize_thrust_profile(
         cd=geometry.cd,
         thrust_curve=final_thrust_curve,
     )
-
     final_trajectory = rocket_3dof_trajectory(final_geometry)
     final_performance = analyze_rocket_performance(final_trajectory)
 
-    # Prepare optimal parameters
-    optimal_params = {
-        f"thrust_mult_seg_{i + 1}": mult for i, mult in enumerate(optimal_multipliers)
+    optimal_params: dict[str, Any] = {
+        f"thrust_mult_seg_{i + 1}": mult for i, mult in enumerate(multipliers)
     }
     optimal_params["thrust_curve"] = final_thrust_curve
 
+    sign = -1.0 if objective == "max_altitude" else 1.0
     return TrajectoryOptimizationResult(
         optimal_parameters=optimal_params,
-        optimal_objective=(
-            -optimal_value if objective == "max_altitude" else optimal_value
-        ),
+        optimal_objective=sign * optimal_value,
         iterations=iterations,
         converged=converged,
         trajectory_points=final_trajectory,
         performance=final_performance,
+        initial_objective=sign * initial_value,
     )
 
 
@@ -470,10 +335,9 @@ def compare_trajectories(
 
     for _i, (geometry, name) in enumerate(zip(geometries, names, strict=False)):
         try:
-            trajectory = rocket_3dof_trajectory(
+            performance, trajectory = simulate_rocket(
                 geometry, launch_angle_deg=launch_angle_deg
             )
-            performance = analyze_rocket_performance(trajectory)
 
             results[name] = {
                 "geometry": asdict(geometry),
@@ -514,6 +378,23 @@ def compare_trajectories(
     return results
 
 
+# Metrics trajectory_sensitivity_analysis can study, and the geometry
+# parameters it can vary.
+_SENSITIVITY_OBJECTIVES = {
+    "max_altitude": "max_altitude_m",
+    "max_velocity": "max_velocity_ms",
+    "specific_impulse": "specific_impulse_s",
+}
+_SENSITIVITY_PARAMETERS = ("dry_mass_kg", "propellant_mass_kg", "diameter_m", "cd")
+
+
+def _percent_change(value: float, reference: float) -> float | None:
+    """100 * (value - reference) / reference, or None if reference is 0."""
+    if reference == 0:
+        return None
+    return (value - reference) / reference * 100
+
+
 def trajectory_sensitivity_analysis(
     base_geometry: RocketGeometry,
     parameter_variations: dict[str, list[float]],
@@ -522,97 +403,82 @@ def trajectory_sensitivity_analysis(
     """
     Perform sensitivity analysis on trajectory parameters.
 
+    For each variation, ``sensitivity`` is the elasticity
+    ``percent_change_objective / percent_change_param``. Percent changes
+    relative to a zero baseline are undefined and reported as ``None`` (as
+    is the sensitivity then), so the result never contains NaN/Infinity.
+
     Args:
         base_geometry: Baseline rocket geometry
-        parameter_variations: Dict with parameter names and variation values
-        objective: Objective to analyze sensitivity for
+        parameter_variations: Parameter names (``dry_mass_kg``,
+            ``propellant_mass_kg``, ``diameter_m``, ``cd``) mapped to lists
+            of values to try
+        objective: ``"max_altitude"``, ``"max_velocity"`` or
+            ``"specific_impulse"``
 
     Returns:
         Sensitivity analysis results
-    """
-    baseline_trajectory = rocket_3dof_trajectory(base_geometry)
-    baseline_performance = analyze_rocket_performance(baseline_trajectory)
 
-    if objective == "max_altitude":
-        baseline_value = baseline_performance.max_altitude_m
-    elif objective == "max_velocity":
-        baseline_value = baseline_performance.max_velocity_ms
-    elif objective == "specific_impulse":
-        baseline_value = baseline_performance.specific_impulse_s
-    else:
-        baseline_value = baseline_performance.max_altitude_m
+    Raises:
+        ValueError: For an unknown objective or parameter name, or if the
+            baseline geometry cannot be simulated.
+    """
+    if objective not in _SENSITIVITY_OBJECTIVES:
+        raise ValueError(
+            f"Unknown objective {objective!r}; use one of "
+            + ", ".join(_SENSITIVITY_OBJECTIVES)
+        )
+    unknown = [p for p in parameter_variations if p not in _SENSITIVITY_PARAMETERS]
+    if unknown:
+        raise ValueError(
+            f"Unknown parameter(s) {', '.join(map(repr, unknown))}; use "
+            + ", ".join(_SENSITIVITY_PARAMETERS)
+        )
+    metric = _SENSITIVITY_OBJECTIVES[objective]
+
+    baseline_performance, _ = simulate_rocket(base_geometry)
+    baseline_value = getattr(baseline_performance, metric)
 
     sensitivity_results = {}
 
     for param_name, variations in parameter_variations.items():
         param_results = []
+        base_param = getattr(base_geometry, param_name)
 
         for variation in variations:
-            # Create modified geometry
-            modified_geometry = RocketGeometry(
-                dry_mass_kg=base_geometry.dry_mass_kg,
-                propellant_mass_kg=base_geometry.propellant_mass_kg,
-                diameter_m=base_geometry.diameter_m,
-                length_m=base_geometry.length_m,
-                cd=base_geometry.cd,
-                thrust_curve=base_geometry.thrust_curve,
-            )
-
-            # Apply variation
-            if param_name == "dry_mass_kg":
-                modified_geometry.dry_mass_kg = variation
-            elif param_name == "propellant_mass_kg":
-                modified_geometry.propellant_mass_kg = variation
-            elif param_name == "diameter_m":
-                modified_geometry.diameter_m = variation
-            elif param_name == "cd":
-                modified_geometry.cd = variation
+            modified_geometry = replace(base_geometry, **{param_name: variation})
 
             try:
-                trajectory = rocket_3dof_trajectory(modified_geometry)
-                performance = analyze_rocket_performance(trajectory)
-
-                if objective == "max_altitude":
-                    current_value = performance.max_altitude_m
-                elif objective == "max_velocity":
-                    current_value = performance.max_velocity_ms
-                elif objective == "specific_impulse":
-                    current_value = performance.specific_impulse_s
-                else:
-                    current_value = performance.max_altitude_m
-
-                # Calculate sensitivity
-                percent_change_param = (
-                    (variation - getattr(base_geometry, param_name))
-                    / getattr(base_geometry, param_name)
-                    * 100
-                )
-                percent_change_objective = (
-                    (current_value - baseline_value) / baseline_value * 100
-                )
-                sensitivity = (
-                    percent_change_objective / percent_change_param
-                    if percent_change_param != 0
-                    else 0
-                )
-
+                performance, _ = simulate_rocket(modified_geometry)
+            except Exception as e:
                 param_results.append(
                     {
                         "parameter_value": variation,
-                        "objective_value": current_value,
-                        "percent_change_param": percent_change_param,
-                        "percent_change_objective": percent_change_objective,
-                        "sensitivity": sensitivity,
-                    }
-                )
-            except Exception:
-                param_results.append(
-                    {
-                        "parameter_value": variation,
-                        "error": "Simulation failed",
+                        "error": f"Simulation failed: {e}",
                         "sensitivity": None,
                     }
                 )
+                continue
+
+            current_value = getattr(performance, metric)
+            percent_change_param = _percent_change(variation, base_param)
+            percent_change_objective = _percent_change(current_value, baseline_value)
+            if percent_change_param == 0:
+                sensitivity = 0
+            elif percent_change_param is None or percent_change_objective is None:
+                sensitivity = None
+            else:
+                sensitivity = percent_change_objective / percent_change_param
+
+            param_results.append(
+                {
+                    "parameter_value": variation,
+                    "objective_value": current_value,
+                    "percent_change_param": percent_change_param,
+                    "percent_change_objective": percent_change_objective,
+                    "sensitivity": sensitivity,
+                }
+            )
 
         sensitivity_results[param_name] = param_results
 

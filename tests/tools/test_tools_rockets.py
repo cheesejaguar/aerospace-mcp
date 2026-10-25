@@ -1,12 +1,6 @@
 from __future__ import annotations
 
-import sys
-
-from tests.tools.test_tools_common import (
-    StubPerf,
-    StubPoint,
-    make_module,
-)
+from tests.tools.test_tools_common import make_module
 
 
 class RocketGeometry:
@@ -17,34 +11,33 @@ class RocketGeometry:
         self.propellant_mass_kg = kwargs.get("propellant_mass_kg", 5.0)
 
 
+GEOMETRY = {
+    "length_m": 2.0,
+    "diameter_m": 0.2,
+    "dry_mass_kg": 10,
+    "propellant_mass_kg": 5,
+    "thrust_curve": [[0.0, 800.0], [3.0, 800.0], [3.1, 0.0]],
+}
+
+
 def test_rocket_3dof_trajectory_success():
-    class Result:
-        performance = StubPerf()
-        trajectory = [
-            StubPoint(time_s=0, altitude_m=0, velocity_ms=0, acceleration_ms2=0),
-            StubPoint(time_s=10, altitude_m=100, velocity_ms=50, acceleration_ms2=5),
-        ]
-
-    def _traj(geometry, launch_conditions, sim_opts):
-        return Result()
-
-    sys.modules["aerospace_mcp.integrations.rockets"] = make_module(
-        RocketGeometry=RocketGeometry, rocket_3dof_trajectory=_traj
-    )
-
+    """Runs the real (native) simulation through the tool layer."""
     from aerospace_mcp.tools.rockets import rocket_3dof_trajectory
 
     out = rocket_3dof_trajectory(
-        {
-            "length_m": 2.0,
-            "diameter_m": 0.2,
-            "dry_mass_kg": 10,
-            "propellant_mass_kg": 5,
-        },
-        {"launch_angle_deg": 80},
-        {},
+        GEOMETRY, {"launch_angle_deg": 80}, {"dt_s": 0.05, "max_time_s": 120}
     )
-    assert "Rocket Trajectory" in out or "3DOF" in out
+    assert "3DOF Rocket Trajectory Analysis" in out
+    assert "Launch Angle: 80.0" in out
+    assert "Key Trajectory Points" in out
+    assert '"max_altitude_m"' in out
+
+
+def test_rocket_3dof_trajectory_invalid_options():
+    from aerospace_mcp.tools.rockets import rocket_3dof_trajectory
+
+    out = rocket_3dof_trajectory(GEOMETRY, {}, {"dt_s": 0.0})
+    assert "error" in out.lower() and "dt_s" in out
 
 
 def test_rocket_importerror():
@@ -53,6 +46,7 @@ def test_rocket_importerror():
     from aerospace_mcp.tools import rockets as r_tools
 
     sys.modules["aerospace_mcp.integrations.rockets"] = make_module()
+    sys.modules["aerospace_mcp.integrations.trajopt"] = make_module()
     assert "not available" in r_tools.rocket_3dof_trajectory({}, {}).lower()
     assert "not available" in r_tools.estimate_rocket_sizing(1000, 5).lower()
     assert (
@@ -73,14 +67,18 @@ def test_estimate_rocket_sizing_success():
 
 
 def test_optimize_launch_angle_success():
-    sys.modules["aerospace_mcp.integrations.rockets"] = make_module(
-        RocketGeometry=RocketGeometry,
-        optimize_launch_angle=lambda *a, **k: {"ok": True},
-    )
+    """Runs the real (native) optimizer through the tool layer."""
+    import json
+
     from aerospace_mcp.tools.rockets import optimize_launch_angle
 
-    out = optimize_launch_angle({"length_m": 2.0}, None, "altitude", (45.0, 90.0))
-    assert "ok" in out
+    out = json.loads(optimize_launch_angle(GEOMETRY, None, "altitude", (80.0, 90.0)))
+    assert 80.0 <= out["optimal_launch_angle_deg"] <= 90.0
+    assert out["optimal_objective"] == out["performance"]["max_altitude_m"]
+    assert "note" not in out
+
+    ranged = json.loads(optimize_launch_angle(GEOMETRY, None, "range", (80.0, 90.0)))
+    assert "not modelled" in ranged["note"]
 
 
 def test_rockets_exception_branches():
@@ -91,8 +89,14 @@ def test_rockets_exception_branches():
 
     sys.modules["aerospace_mcp.integrations.rockets"] = make_module(
         RocketGeometry=RocketGeometry,
+        RocketTrajectoryPoint=object,
+        analyze_rocket_performance=_boom,
         rocket_3dof_trajectory=_boom,
+        simulate_rocket=_boom,
         estimate_rocket_sizing=_boom,
+    )
+    sys.modules["aerospace_mcp.integrations.trajopt"] = make_module(
+        RocketGeometry=RocketGeometry,
         optimize_launch_angle=_boom,
     )
     from aerospace_mcp.tools.rockets import (

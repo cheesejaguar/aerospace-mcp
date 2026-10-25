@@ -61,9 +61,14 @@ class TestAtmosphereProfile:
 
     def test_altitude_limits(self):
         """Test altitude limits and validation."""
-        # Test maximum altitude (ambiance library limit is 81020m, not 86000m)
+        # The model covers 0-86 km geometric regardless of backend (above
+        # ambiance's 81020 m limit the built-in US76 implementation is used).
         profile = get_atmosphere_profile([81000.0])
         assert len(profile) == 1
+        profile = get_atmosphere_profile([86000.0])
+        assert len(profile) == 1
+        with pytest.raises(ValueError, match="out of ISA range"):
+            get_atmosphere_profile([86001.0])
 
         # Test out of range
         with pytest.raises(ValueError, match="out of ISA range"):
@@ -76,6 +81,20 @@ class TestAtmosphereProfile:
         """Test invalid model type."""
         with pytest.raises(ValueError, match="Unknown model type"):
             get_atmosphere_profile([0.0], "INVALID")
+        with pytest.raises(ValueError, match="Unknown model type"):
+            get_atmosphere_profile([0.0], "enhanced")
+
+    def test_coesa_and_case_insensitive(self):
+        """COESA (US76) equals ISA below 86 km; model names ignore case."""
+        isa = get_atmosphere_profile([0.0, 30000.0, 80000.0], "isa")
+        coesa = get_atmosphere_profile([0.0, 30000.0, 80000.0], "COESA")
+        for a, b in zip(isa, coesa, strict=True):
+            assert a.pressure_pa == pytest.approx(b.pressure_pa, rel=1e-4)
+            assert a.temperature_k == pytest.approx(b.temperature_k, rel=1e-4)
+
+    def test_empty_profile(self):
+        """An empty altitude list returns an empty profile."""
+        assert get_atmosphere_profile([]) == []
 
     def test_atmospheric_properties_convenience(self):
         """Test convenience function for single altitude."""
@@ -92,8 +111,113 @@ class TestAtmosphereProfile:
         assert abs(props["temperature_c"] - (props["temperature_k"] - 273.15)) < 0.001
 
 
+class TestUS76KnownAnswers:
+    """Known-answer checks against the U.S. Standard Atmosphere 1976 tables.
+
+    Reference values (geometric altitude Z) from NOAA/NASA/USAF, "U.S.
+    Standard Atmosphere, 1976", Table I.  Altitudes are geometric, so the
+    model must convert to geopotential altitude H = r0*Z/(r0+Z) first.
+    """
+
+    # (Z [m], T [K], p [Pa], rho [kg/m^3])
+    US76 = [
+        (0.0, 288.150, 1.01325e5, 1.2250),
+        (5000.0, 255.676, 5.4048e4, 0.73643),
+        (11000.0, 216.774, 2.2700e4, 0.36480),
+        (20000.0, 216.650, 5.5293e3, 0.088910),
+        (32000.0, 228.490, 8.8906e2, 0.013555),
+        (50000.0, 270.650, 7.9779e1, 1.0269e-3),
+        (71000.0, 216.846, 4.4795, 7.1966e-5),
+        (80000.0, 198.639, 1.0525, 1.8458e-5),
+        (86000.0, 186.946, 3.7338e-1, 6.958e-6),
+    ]
+
+    @pytest.mark.parametrize("z,T,p,rho", US76)
+    def test_us76_table(self, z, T, p, rho):
+        point = get_atmosphere_profile([z])[0]
+        assert point.temperature_k == pytest.approx(T, abs=0.01)
+        assert point.pressure_pa == pytest.approx(p, rel=2e-4)
+        assert point.density_kg_m3 == pytest.approx(rho, rel=5e-4)
+
+    @pytest.mark.parametrize("z,T,p,rho", US76)
+    def test_us76_table_builtin(self, z, T, p, rho):
+        """Same checks on the built-in (no ambiance) implementation."""
+        p_calc, T_calc, rho_calc = _isa_manual(z)
+        assert T_calc == pytest.approx(T, abs=0.01)
+        assert p_calc == pytest.approx(p, rel=2e-4)
+        assert rho_calc == pytest.approx(rho, rel=5e-4)
+
+    def test_geopotential_conversion(self):
+        """86 km geometric is the 84,852 m geopotential top of the model."""
+        from aerospace_mcp.integrations.atmosphere import geometric_to_geopotential
+
+        assert float(geometric_to_geopotential(86000.0)) == pytest.approx(
+            84852.0, abs=0.1
+        )
+        assert float(geometric_to_geopotential(0.0)) == 0.0
+
+    def test_viscosity_sutherland(self):
+        """Dynamic viscosity is always reported (US76: 1.7894e-5 Pa*s at SL)."""
+        profile = get_atmosphere_profile([0.0, 11000.0, 20000.0])
+        assert profile[0].viscosity_pa_s == pytest.approx(1.7894e-5, rel=1e-3)
+        # US76 Table: 1.4223e-5 at 11 km geometric, 1.4216e-5 at 20 km
+        assert profile[1].viscosity_pa_s == pytest.approx(1.4223e-5, rel=1e-3)
+        assert profile[2].viscosity_pa_s == pytest.approx(1.4216e-5, rel=1e-3)
+
+    def test_large_profile_is_vectorised(self):
+        """A dense profile is computed in one vectorised pass (fast)."""
+        import time
+
+        alts = [i * 40.0 for i in range(2000)]
+        t0 = time.perf_counter()
+        profile = get_atmosphere_profile(alts)
+        assert time.perf_counter() - t0 < 0.5
+        assert len(profile) == 2000
+        assert all(
+            profile[i + 1].pressure_pa < profile[i].pressure_pa for i in range(1999)
+        )
+
+
 class TestWindModel:
     """Test wind profile models."""
+
+    def test_log_law_below_reference_height(self):
+        """The log law applies below z_ref too (no linear ramp).
+
+        U(z) = U_ref ln(z/z0)/ln(z_ref/z0): z0=0.1, z_ref=10, U_ref=10 gives
+        5.00 m/s at 1 m and 8.49 m/s at 5 m.
+        """
+        profile = wind_model_simple([0.05, 0.1, 1.0, 5.0, 10.0], 10.0)
+        speeds = [p.wind_speed_mps for p in profile]
+        assert speeds[0] == 0.0  # below z0
+        assert speeds[1] == 0.0  # at z0
+        assert speeds[2] == pytest.approx(5.0, abs=1e-9)
+        assert speeds[3] == pytest.approx(8.4949, abs=1e-3)
+        assert speeds[4] == pytest.approx(10.0, abs=1e-9)
+
+    def test_power_law_below_reference_height(self):
+        """The 1/7 power law applies below z_ref: U(5) = 10 * 0.5^0.143."""
+        profile = wind_model_simple([0.0, 5.0, 10.0, 100.0], 10.0, model="power")
+        speeds = [p.wind_speed_mps for p in profile]
+        assert speeds[0] == 0.0
+        assert speeds[1] == pytest.approx(10.0 * 0.5**0.143, rel=1e-9)
+        assert speeds[2] == pytest.approx(10.0, rel=1e-9)
+        assert speeds[3] == pytest.approx(10.0 * 10.0**0.143, rel=1e-9)
+
+    def test_power_law_alias(self):
+        """'power_law' (the tool's name for the model) is accepted."""
+        a = wind_model_simple([50.0], 8.0, model="power")
+        b = wind_model_simple([50.0], 8.0, model="power_law")
+        assert a[0].wind_speed_mps == b[0].wind_speed_mps
+
+    def test_roughness_must_be_below_reference_height(self):
+        """z0 >= z_ref used to give infinite or zero wind; now rejected."""
+        with pytest.raises(ValueError, match="smaller than the reference height"):
+            wind_model_simple([5, 50], 10.0, roughness_length_m=10.0)
+        with pytest.raises(ValueError, match="smaller than the reference height"):
+            wind_model_simple([5, 50], 10.0, roughness_length_m=20.0)
+        # The power law does not use z0
+        assert wind_model_simple([50], 10.0, model="power", roughness_length_m=20.0)
 
     def test_logarithmic_wind_profile(self):
         """Test logarithmic wind model."""

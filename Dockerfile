@@ -11,6 +11,11 @@ RUN apt-get update && apt-get install -y \
 # Install UV package manager
 RUN pip install --no-cache-dir uv
 
+# Rust toolchain for the native trajectory/orbit core (rust/, built by maturin)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --profile minimal --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
 # Set working directory
 WORKDIR /app
 
@@ -20,13 +25,16 @@ COPY README.md ./
 COPY LICENSE ./
 COPY aerospace_mcp/ ./aerospace_mcp/
 COPY app/ ./app/
+COPY rust/ ./rust/
 
 # Install dependencies to a virtual environment
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install production dependencies only
-RUN uv pip install --no-cache-dir -e .
+# Install production dependencies only (also compiles the Rust extension
+# into ./aerospace_mcp/_native*.so)
+# The image keeps the optional LLM agent tools (LLM_TOOLS_ENABLED=true)
+RUN uv pip install --no-cache-dir -e ".[llm]"
 
 # Stage 2: Runtime image with minimal footprint
 FROM python:3.11-slim AS runtime
@@ -50,6 +58,9 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Set working directory and copy application code
 WORKDIR /app
 COPY --chown=appuser:appuser . .
+# The editable install points at /app; bring in the compiled extension
+# (*.so files are excluded from the build context by .dockerignore).
+COPY --from=builder --chown=appuser:appuser /app/aerospace_mcp/_native*.so /app/aerospace_mcp/
 
 # Create directories for logs and data with proper permissions
 RUN mkdir -p /app/logs /app/data && \

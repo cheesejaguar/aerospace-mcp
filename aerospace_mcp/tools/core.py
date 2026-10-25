@@ -101,8 +101,10 @@ def plan_flight(
     Args:
         departure: Dict with departure info (city, country, iata)
         arrival: Dict with arrival info (city, country, iata)
-        aircraft: Optional aircraft config (ac_type, cruise_alt_ft, route_step_km)
-        route_options: Optional route options
+        aircraft: Optional aircraft config with ``ac_type`` (default "A320"),
+            ``cruise_alt_ft``, ``mass_kg`` and ``route_step_km``
+        route_options: Optional route options; ``step_km`` sets the polyline
+            spacing when ``aircraft.route_step_km`` is not given
         wind: Optional constant-wind model for cruise estimates, as a dict
             with ``wind_speed_kts`` (float) and ``wind_direction_deg``
             (float, meteorological convention: direction the wind blows
@@ -119,10 +121,16 @@ def plan_flight(
         Internally catches AirportResolutionError and OpenAPError.
     """
     try:
-        # Build request object
-        request_data = {
-            "depart_city": departure["city"],
-            "arrive_city": arrival["city"],
+        departure = departure or {}
+        arrival = arrival or {}
+        aircraft = aircraft or {}
+        route_options = route_options or {}
+
+        # Build request object.  An endpoint may be given by IATA code only;
+        # the code then doubles as the (unused) city label.
+        request_data: dict = {
+            "depart_city": departure.get("city") or departure.get("iata") or "",
+            "arrive_city": arrival.get("city") or arrival.get("iata") or "",
         }
 
         # Add optional fields
@@ -135,16 +143,17 @@ def plan_flight(
         if arrival.get("iata"):
             request_data["prefer_arrive_iata"] = arrival["iata"]
 
-        # Add aircraft options (ac_type is required by PlanRequest)
-        if aircraft and aircraft.get("ac_type"):
-            request_data["ac_type"] = aircraft["ac_type"]
-            if aircraft.get("cruise_alt_ft"):
-                request_data["cruise_alt_ft"] = aircraft["cruise_alt_ft"]
-            if aircraft.get("route_step_km"):
-                request_data["route_step_km"] = aircraft["route_step_km"]
-        else:
-            # Use a default aircraft type if none provided
-            request_data["ac_type"] = "A320"  # Default aircraft type
+        # Aircraft options: copy every supported key that was supplied (even
+        # without ac_type), then default the type separately.
+        request_data["ac_type"] = aircraft.get("ac_type") or "A320"
+        for key in ("cruise_alt_ft", "mass_kg", "route_step_km"):
+            if aircraft.get(key) is not None:
+                request_data[key] = aircraft[key]
+        # route_options.step_km is the advertised way to set the polyline
+        # spacing; aircraft.route_step_km wins if both are given.
+        step_km = route_options.get("step_km", route_options.get("route_step_km"))
+        if step_km is not None and "route_step_km" not in request_data:
+            request_data["route_step_km"] = step_km
 
         # Create and validate request
         try:
@@ -168,6 +177,15 @@ def plan_flight(
             )
         except AirportResolutionError as e:
             return f"Airport resolution error: {str(e)}"
+
+        # Compare the *resolved* airports: the same city name in two
+        # countries is a valid trip, the same airport twice is not.
+        if depart_airport.iata == arrive_airport.iata:
+            return (
+                "Invalid request: departure and arrival both resolve to "
+                f"{depart_airport.iata} ({depart_airport.name}); please specify "
+                "different airports."
+            )
 
         # Calculate route - great_circle_points returns (list[tuple], distance_km)
         from geographiclib.geodesic import Geodesic
@@ -388,9 +406,21 @@ def get_system_status() -> str:
     }
 
     if OPENAP_AVAILABLE:
+        # Every type in OpenAP's property database is plannable: types
+        # without their own kinematic/fuel model fall back to OpenAP's
+        # closest synonym (A20N -> A320, B38M -> B737, ...).
+        try:
+            from ..core import prop
+
+            supported = ", ".join(
+                sorted(str(a).upper() for a in prop.available_aircraft())
+            )
+        except Exception:
+            supported = "see get_aircraft_database"
         status["openap_info"] = {
             "description": "OpenAP aircraft performance modeling available",
-            "supported_aircraft": "A319, A320, A321, A332, A333, A343, A346, A359, A388, B737, B738, B739, B744, B747, B752, B753, B762, B763, B772, B773, B777, B787, and more",
+            "supported_aircraft": supported,
+            "note": "Types without a dedicated OpenAP model use its closest synonym",
         }
     else:
         status["openap_info"] = {
@@ -432,12 +462,16 @@ def plan_multi_leg_flight(
 
     try:
         aircraft = aircraft or {}
+        # Explicit None means "use the default"; bounds are validated by
+        # plan_multi_leg against the same limits as plan_flight.
+        cruise_alt_ft = aircraft.get("cruise_alt_ft")
+        route_step_km = aircraft.get("route_step_km")
         result = plan_multi_leg(
             waypoints,
-            ac_type=aircraft.get("ac_type", "A320"),
-            cruise_alt_ft=int(aircraft.get("cruise_alt_ft", 35000)),
+            ac_type=aircraft.get("ac_type") or "A320",
+            cruise_alt_ft=35000 if cruise_alt_ft is None else cruise_alt_ft,
             mass_kg=aircraft.get("mass_kg"),
-            route_step_km=float(aircraft.get("route_step_km", 25.0)),
+            route_step_km=25.0 if route_step_km is None else route_step_km,
         )
         return json.dumps(result, indent=2)
     except AirportResolutionError as e:

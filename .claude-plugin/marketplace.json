@@ -1,0 +1,15 @@
+{
+  "name": "aerospace-mcp",
+  "description": "Aerospace engineering MCP server and skills",
+  "owner": {
+    "name": "cheesejaguar",
+    "url": "https://github.com/cheesejaguar"
+  },
+  "plugins": [
+    {
+      "name": "aerospace-mcp",
+      "source": ".",
+      "description": "Aerospace MCP server (run with uvx from prebuilt wheels) plus skills for flight planning, atmosphere, aerodynamics, rockets and orbital mechanics"
+    }
+  ]
+}

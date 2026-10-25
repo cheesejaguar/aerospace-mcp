@@ -3,9 +3,15 @@
 Provides 3-DOF (three degrees of freedom) rocket ascent modeling with:
     - Forward Euler numerical integration of the equations of motion
     - Atmospheric drag modeling via ISA density lookup table
-    - Thrust curve interpolation with mass depletion
+    - Thrust curve interpolation with thrust-proportional mass depletion
     - Performance metric extraction (apogee, max-Q, burnout, Isp)
     - Preliminary rocket sizing from target altitude / payload mass
+
+The trajectory integration, thrust interpolation and performance analysis
+run in the native Rust core (``aerospace_mcp._native``, sources in
+``rust/src/rocket.rs``); this module keeps the Python data model, builds the
+atmosphere table (so the ISA / ambiance model stays in Python), and converts
+results back into dataclasses.
 
 The Tsiolkovsky rocket equation underpins the sizing calculations::
 
@@ -13,9 +19,6 @@ The Tsiolkovsky rocket equation underpins the sizing calculations::
 
 where m0 is the initial mass, mf is the final (dry) mass, and Isp is the
 specific impulse.
-
-Uses NumPy for vectorized calculations with CuPy compatibility for GPU
-acceleration via the ``_array_backend`` module.
 
 References:
     - Sutton, G.P. & Biblarz, O., "Rocket Propulsion Elements" (9th ed., 2017)
@@ -25,11 +28,13 @@ WARNING: This module is for educational and research purposes only.
 Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
+import math
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-from ._array_backend import np
+from .. import _native
+from ._array_backend import np, to_numpy
 from .atmosphere import get_atmosphere_profile
 
 # ===========================================================================
@@ -80,7 +85,8 @@ class RocketTrajectoryPoint:
         velocity_ms: Total velocity magnitude (m/s).
         acceleration_ms2: Total acceleration magnitude (m/s^2).
         mass_kg: Current vehicle mass (kg).
-        thrust_n: Current thrust (N).
+        thrust_n: Thrust applied over the step starting at ``time_s`` (N):
+            the thrust curve's mean over that step.
         drag_n: Aerodynamic drag force (N).
         mach: Mach number (dimensionless).
         dynamic_pressure_pa: Dynamic pressure q = 0.5*rho*V^2 (Pa).
@@ -110,8 +116,10 @@ class RocketPerformance:
         burnout_altitude_m: Altitude at motor burnout (m).
         burnout_velocity_ms: Velocity at burnout (m/s).
         burnout_time_s: Time of burnout (s).
-        total_impulse_ns: Total impulse (N*s) via trapezoidal integration.
-        specific_impulse_s: Effective specific impulse Isp = I_total / (m_prop * g0).
+        total_impulse_ns: Total impulse (N*s) applied by the integrator
+            (each sample's thrust held until the next sample).
+        specific_impulse_s: Effective specific impulse
+            Isp = I_total / (m_propellant_consumed * g0).
     """
 
     max_altitude_m: float
@@ -141,29 +149,20 @@ def get_thrust_at_time(thrust_curve: list[list[float]], time_s: float) -> float:
     Returns:
         Thrust in Newtons (0.0 outside the thrust curve bounds).
     """
-    if not thrust_curve:
-        return 0.0
+    return _native.thrust_at_time(thrust_curve, time_s)
 
-    # Convert to NumPy arrays for efficient interpolation
-    thrust_array = np.array(thrust_curve)
-    times = thrust_array[:, 0]
-    thrusts = thrust_array[:, 1]
 
-    # Handle constant thrust (single point)
-    if len(thrust_curve) == 1:
-        return float(thrusts[0]) if time_s <= times[0] else 0.0
-
-    # Before first point or after last point
-    if time_s < times[0] or time_s >= times[-1]:
-        return 0.0
-
-    # Use NumPy interpolation
-    return float(np.interp(time_s, times, thrusts))
+# Top of the rocket atmosphere table (m). The ISA model is valid to 86 km
+# geometric (81 020 m with ambiance), so 80 km works with either backend.
+# Above the table the native simulation continues the top row: density
+# decays with the top interval's scale height (~6 km) and the speed of
+# sound is held (see ``AtmosphereTable`` in ``rust/src/rocket.rs``).
+ATMOSPHERE_TABLE_TOP_M = 80000
 
 
 @lru_cache(maxsize=4)
 def _build_atmosphere_table(
-    max_alt_m: int = 50000, step_m: int = 1000
+    max_alt_m: int = ATMOSPHERE_TABLE_TOP_M, step_m: int = 1000
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Pre-compute an ISA atmosphere lookup table for fast interpolation.
 
@@ -197,6 +196,19 @@ def _build_atmosphere_table(
     return altitudes, densities, speeds_of_sound
 
 
+@lru_cache(maxsize=4)
+def _native_atmosphere(
+    max_alt_m: int = ATMOSPHERE_TABLE_TOP_M,
+) -> "_native.AtmosphereTable":
+    """Atmosphere table in the form the native simulation consumes (cached)."""
+    altitudes, densities, speeds_of_sound = _build_atmosphere_table(max_alt_m)
+    return _native.AtmosphereTable(
+        to_numpy(altitudes).tolist(),
+        to_numpy(densities).tolist(),
+        to_numpy(speeds_of_sound).tolist(),
+    )
+
+
 # ===========================================================================
 # 3-DOF Rocket Trajectory Simulation
 # ===========================================================================
@@ -221,10 +233,16 @@ def rocket_3dof_trajectory(
     Drag force: D = Cd * A_ref * q, where q = 0.5 * rho * V^2 is the
     dynamic pressure and A_ref = pi * (d/2)^2 is the reference area.
 
-    Mass depletion: dm/dt = -m_propellant / t_burn (constant flow rate).
+    Each step applies the thrust curve's mean over the step (the curve is
+    integrated exactly), so the delivered impulse equals the curve's impulse
+    regardless of the time step. Mass flow is proportional to thrust,
+    dm/dt = -F * m_propellant / I_total (constant effective exhaust
+    velocity), so the propellant runs out exactly when the curve ends.
 
-    Uses a pre-computed ISA atmosphere lookup table for density and
-    speed-of-sound interpolation at each time step.
+    Uses a pre-computed ISA atmosphere lookup table (0-80 km) for density
+    and speed-of-sound interpolation at each time step, continued smoothly
+    above the table (see ``ATMOSPHERE_TABLE_TOP_M``). Integration runs
+    natively; see ``rust/src/rocket.rs``.
 
     Args:
         geometry: Rocket geometry and mass properties.
@@ -237,211 +255,63 @@ def rocket_3dof_trajectory(
         List of trajectory points from launch to apogee (or ground impact).
 
     Raises:
-        ValueError: If the time step or duration is out of bounds, or the
-            resulting step count exceeds the safety cap.
+        ValueError: If the time step or duration is out of bounds, the
+            resulting step count exceeds the safety cap, or the geometry is
+            invalid (non-positive masses or size, negative thrust, thrust
+            curve times out of order).
     """
-    if not 0.001 <= dt_s <= 10.0:
-        raise ValueError("dt_s must be between 0.001 and 10 s")
-    if not 0 < max_time_s <= 3600.0:
-        raise ValueError("max_time_s must be > 0 and <= 3600 s")
-    if max_time_s / dt_s > 500_000:
-        raise ValueError("too many integration steps (max 500000); increase dt_s")
-
-    # Initial conditions
-    trajectory = []
-    time = 0.0
-    altitude = 0.0  # m above sea level
-    velocity_vertical = 0.0  # m/s
-    velocity_horizontal = 0.0  # m/s
-    mass = geometry.dry_mass_kg + geometry.propellant_mass_kg
-
-    # Launch angle
-    launch_angle_rad = np.radians(launch_angle_deg)
-    sin_launch = np.sin(launch_angle_rad)
-    cos_launch = np.cos(launch_angle_rad)
-
-    # Reference (cross-sectional) area for drag: A = pi * (d/2)^2
-    drag_area = PI * (geometry.diameter_m / 2) ** 2
-
-    # Pre-compute mass flow rate if thrust curve exists
-    mass_flow_rate = 0.0
-    if geometry.thrust_curve:
-        thrust_array = np.array(geometry.thrust_curve)
-        burn_time_total = float(
-            np.max(thrust_array[thrust_array[:, 1] > 0, 0], initial=1.0)
-        )
-        if burn_time_total > 0:
-            mass_flow_rate = geometry.propellant_mass_kg / burn_time_total
-
-    # Build atmosphere lookup table for fast interpolation
-    max_alt_m = 50000
-    atm_altitudes, atm_densities, atm_speeds_of_sound = _build_atmosphere_table(
-        max_alt_m
+    points = _native.rocket_trajectory(
+        geometry, _native_atmosphere(), dt_s, max_time_s, launch_angle_deg
     )
+    return [RocketTrajectoryPoint(*p) for p in points]
 
-    while time <= max_time_s and altitude >= 0:
-        # Get current thrust
-        thrust = (
-            get_thrust_at_time(geometry.thrust_curve, time)
-            if geometry.thrust_curve
-            else 0.0
-        )
 
-        # Get atmospheric properties via interpolation
-        if 0 <= altitude <= max_alt_m:
-            rho = float(np.interp(altitude, atm_altitudes, atm_densities))
-            speed_of_sound = float(
-                np.interp(altitude, atm_altitudes, atm_speeds_of_sound)
-            )
-        else:
-            # Fallback for extreme altitudes
-            rho = 1.225 * np.exp(-altitude / 8400)
-            speed_of_sound = 343.0 * np.sqrt(
-                max(0.1, (288.15 - 0.0065 * altitude) / 288.15)
-            )
+def simulate_rocket(
+    geometry: RocketGeometry,
+    dt_s: float = 0.1,
+    max_time_s: float = 300.0,
+    launch_angle_deg: float = 90.0,
+) -> tuple[RocketPerformance, "_native.RocketTrajectory"]:
+    """Simulate and analyze in one native call, without per-point objects.
 
-        # Total velocity (NumPy for efficiency)
-        velocity_total = np.sqrt(velocity_vertical**2 + velocity_horizontal**2)
+    Same model and arguments as :func:`rocket_3dof_trajectory`. Use this
+    when only the performance and a few samples are needed: building a
+    ``RocketTrajectoryPoint`` per step dominates the cost of small time
+    steps (22 000 points at ``dt_s=0.001``).
 
-        # Mach number
-        mach = velocity_total / speed_of_sound if speed_of_sound > 0 else 0.0
+    Returns:
+        ``(performance, trajectory)``; ``trajectory`` supports ``len()``,
+        indexing (negative indices count from the end) yielding tuples in
+        ``RocketTrajectoryPoint`` field order, and ``points()`` for all of
+        them.
 
-        # Dynamic pressure
-        dynamic_pressure = 0.5 * rho * velocity_total**2
-
-        # Drag force
-        drag_force = geometry.cd * drag_area * dynamic_pressure
-
-        # Drag acceleration components
-        if velocity_total > 0:
-            drag_accel_vertical = (
-                -drag_force * (velocity_vertical / velocity_total) / mass
-            )
-            drag_accel_horizontal = (
-                -drag_force * (velocity_horizontal / velocity_total) / mass
-            )
-        else:
-            drag_accel_vertical = 0.0
-            drag_accel_horizontal = 0.0
-
-        # Thrust acceleration (in launch direction initially, then vertical)
-        if time < 5.0:  # First 5 seconds follow launch angle
-            thrust_accel_vertical = thrust * sin_launch / mass
-            thrust_accel_horizontal = thrust * cos_launch / mass
-        else:  # After 5 seconds, thrust is vertical only
-            thrust_accel_vertical = thrust / mass
-            thrust_accel_horizontal = 0.0
-
-        # Total acceleration
-        accel_vertical = thrust_accel_vertical - G0 + drag_accel_vertical
-        accel_horizontal = thrust_accel_horizontal + drag_accel_horizontal
-
-        # Record current state
-        trajectory.append(
-            RocketTrajectoryPoint(
-                time_s=time,
-                altitude_m=altitude,
-                velocity_ms=float(velocity_total),
-                acceleration_ms2=float(
-                    np.sqrt(accel_vertical**2 + accel_horizontal**2)
-                ),
-                mass_kg=mass,
-                thrust_n=thrust,
-                drag_n=drag_force,
-                mach=float(mach),
-                dynamic_pressure_pa=dynamic_pressure,
-            )
-        )
-
-        # Forward Euler integration: v_{n+1} = v_n + a*dt,  h_{n+1} = h_n + v*dt
-        velocity_vertical += accel_vertical * dt_s
-        velocity_horizontal += accel_horizontal * dt_s
-        altitude += velocity_vertical * dt_s
-
-        # Update mass
-        if thrust > 0 and mass_flow_rate > 0:
-            mass = max(geometry.dry_mass_kg, mass - mass_flow_rate * dt_s)
-
-        time += dt_s
-
-        # Stop if apogee reached and descending
-        if altitude > 0 and velocity_vertical < -1.0:
-            break
-
-    return trajectory
+    Raises:
+        ValueError: As :func:`rocket_3dof_trajectory`.
+    """
+    trajectory = _native.simulate_rocket(
+        geometry, _native_atmosphere(), dt_s, max_time_s, launch_angle_deg
+    )
+    return RocketPerformance(*trajectory.performance()), trajectory
 
 
 def analyze_rocket_performance(
     trajectory: list[RocketTrajectoryPoint],
 ) -> RocketPerformance:
-    """
-    Analyze rocket performance from trajectory data using NumPy.
+    """Extract apogee, max-Q, burnout and impulse metrics from a trajectory.
+
+    Burnout is the sample right after the last one with thrust above 100 N.
+    Total impulse sums each sample's thrust over the interval to the next
+    sample (the impulse the forward-Euler integrator applies), and Isp is
+    ``I_total / (m_propellant_consumed * g0)`` over the same samples.
 
     Args:
-        trajectory: List of trajectory points
+        trajectory: List of trajectory points (any objects with the
+            ``RocketTrajectoryPoint`` attributes).
 
     Returns:
-        RocketPerformance summary
+        RocketPerformance summary (all zeros for an empty trajectory).
     """
-    if not trajectory:
-        return RocketPerformance(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-
-    # Convert trajectory to NumPy arrays for vectorized analysis
-    n = len(trajectory)
-    times = np.array([p.time_s for p in trajectory])
-    altitudes = np.array([p.altitude_m for p in trajectory])
-    velocities = np.array([p.velocity_ms for p in trajectory])
-    machs = np.array([p.mach for p in trajectory])
-    dynamic_pressures = np.array([p.dynamic_pressure_pa for p in trajectory])
-    thrusts = np.array([p.thrust_n for p in trajectory])
-
-    # Find key performance metrics using NumPy
-    max_altitude = float(np.max(altitudes))
-    max_velocity = float(np.max(velocities))
-    max_mach = float(np.max(machs))
-    max_q = float(np.max(dynamic_pressures))
-
-    # Find apogee time
-    apogee_idx = int(np.argmax(altitudes))
-    apogee_time = float(times[apogee_idx])
-
-    # Find burnout point (when thrust drops to near zero)
-    thrust_active = thrusts > 100
-    if np.any(thrust_active):
-        # Find last index where thrust is active, then next point is burnout
-        last_thrust_idx = int(np.max(np.where(thrust_active)[0]))
-        burnout_idx = min(last_thrust_idx + 1, n - 1)
-    else:
-        burnout_idx = n - 1
-
-    burnout_point = trajectory[burnout_idx]
-
-    # Calculate total impulse using trapezoidal integration
-    if n > 1:
-        dt = np.diff(times)
-        avg_thrusts = (thrusts[:-1] + thrusts[1:]) / 2
-        total_impulse = float(np.sum(avg_thrusts * dt))
-    else:
-        total_impulse = 0.0
-
-    # Estimate specific impulse
-    initial_prop_mass = trajectory[0].mass_kg - burnout_point.mass_kg
-    specific_impulse = (
-        total_impulse / (initial_prop_mass * G0) if initial_prop_mass > 0 else 0.0
-    )
-
-    return RocketPerformance(
-        max_altitude_m=max_altitude,
-        apogee_time_s=apogee_time,
-        max_velocity_ms=max_velocity,
-        max_mach=max_mach,
-        max_q_pa=max_q,
-        burnout_altitude_m=burnout_point.altitude_m,
-        burnout_velocity_ms=burnout_point.velocity_ms,
-        burnout_time_s=burnout_point.time_s,
-        total_impulse_ns=total_impulse,
-        specific_impulse_s=specific_impulse,
-    )
+    return RocketPerformance(*_native.analyze_performance(trajectory))
 
 
 # ===========================================================================
@@ -450,95 +320,153 @@ def analyze_rocket_performance(
 
 
 def estimate_rocket_sizing(
-    target_altitude_m: float, payload_mass_kg: float, propellant_type: str = "solid"
+    target_altitude_m: float,
+    payload_mass_kg: float,
+    propellant_type: str = "solid",
+    design_margin: float = 1.0,
 ) -> dict[str, Any]:
-    """Estimate rocket sizing for a given target altitude and payload.
+    """Estimate single-stage rocket sizing for a target altitude and payload.
 
     Uses the Tsiolkovsky rocket equation for mass breakdown::
 
         delta_V = Isp * g0 * ln(m0 / mf)
         mass_ratio = exp(delta_V / (Isp * g0))
 
-    Delta-V requirement is estimated from the energy needed to reach the
-    target altitude, multiplied by a 1.8x factor to account for gravity
-    losses, drag losses, and steering losses.
+    The delta-V requirement is estimated from the energy needed to reach the
+    target altitude, ``sqrt(2 * g0 * h)``, multiplied by a 1.8x factor for
+    gravity, drag and steering losses, and then by ``design_margin``.
 
-    Geometry is estimated from propellant volume assuming a length-to-
-    diameter ratio of 10.
+    The margin is applied to the delta-V budget rather than to the resulting
+    masses because delta-V is the uncertain quantity here (the loss factor
+    is a crude estimate) and a delta-V reserve is the usual way to carry
+    margin in preliminary sizing: it propagates through the rocket equation,
+    so the extra propellant also brings the structure needed to carry it and
+    the vehicle still closes. Scaling the propellant mass afterwards would
+    not.
+
+    With propellant mass ``m_p``, structure ``eps * m_p`` and payload
+    ``m_pl``, the rocket equation gives
+    ``m_p = (R - 1) * m_pl / (1 + eps - R * eps)`` for mass ratio ``R``. A
+    single stage cannot reach ``R >= (1 + eps) / eps``; such missions are
+    reported as infeasible (``feasible: False``, masses and geometry
+    ``None``) together with the largest delta-V a single stage can deliver.
+
+    Geometry is estimated from propellant volume (bulk density per
+    propellant type, propellant filling 70% of the body) assuming a
+    length-to-diameter ratio of 10.
 
     Args:
-        target_altitude_m: Desired apogee altitude above sea level (m).
-        payload_mass_kg: Payload mass (kg).
-        propellant_type: ``"solid"`` or ``"liquid"`` -- sets Isp and
-            structural ratio.
+        target_altitude_m: Desired apogee altitude above sea level (m), > 0.
+        payload_mass_kg: Payload mass (kg), > 0.
+        propellant_type: ``"solid"`` or ``"liquid"`` -- sets Isp, structural
+            ratio, thrust-to-weight and propellant density.
+        design_margin: Multiplier on the delta-V requirement, >= 1
+            (1.0 = no margin).
 
     Returns:
         Dictionary with mass breakdown, thrust requirement, geometry
-        estimates, and feasibility flag.
+        estimates, the delta-V budget and margin, and a feasibility flag.
+        All numbers are finite (or ``None``), so the result is valid JSON.
+
+    Raises:
+        ValueError: If an input is out of range or the propellant type is
+            unknown.
     """
-    # Propellant-type-dependent performance parameters
+    if not (math.isfinite(target_altitude_m) and target_altitude_m > 0):
+        raise ValueError("target_altitude_m must be > 0")
+    if not (math.isfinite(payload_mass_kg) and payload_mass_kg > 0):
+        raise ValueError("payload_mass_kg must be > 0")
+    if not (math.isfinite(design_margin) and design_margin >= 1.0):
+        raise ValueError("design_margin must be >= 1 (1.0 = no margin)")
+
+    # Propellant-type-dependent parameters: specific impulse (s), structural
+    # ratio eps = m_struct / m_prop, initial thrust-to-weight, and bulk
+    # propellant density (kg/m^3).
     if propellant_type == "solid":
-        isp_s = 250.0  # Specific impulse (s) -- typical APCP
-        structural_ratio = 0.15  # epsilon = m_struct / m_prop
-        thrust_to_weight = 5.0  # Initial thrust-to-weight ratio
+        # APCP composite: Isp ~250 s, density ~1600-1800 kg/m^3.
+        isp_s, structural_ratio, thrust_to_weight, density = 250.0, 0.15, 5.0, 1600.0
     elif propellant_type == "liquid":
-        isp_s = 300.0  # Specific impulse (s) -- LOX/RP-1 class
-        structural_ratio = 0.12  # Liquid stages are more mass-efficient
-        thrust_to_weight = 4.0
+        # LOX/RP-1 class: Isp ~300 s; mixed bulk density ~1030 kg/m^3 at
+        # O/F 2.56 (LOX 1141, RP-1 810 kg/m^3).
+        isp_s, structural_ratio, thrust_to_weight, density = 300.0, 0.12, 4.0, 1030.0
     else:
-        isp_s = 250.0
-        structural_ratio = 0.15
-        thrust_to_weight = 5.0
+        raise ValueError(
+            f"Unknown propellant_type {propellant_type!r}; use 'solid' or 'liquid'"
+        )
 
-    # Estimate required delta-V from energy balance:
-    # V_ideal = sqrt(2 * g * h), then multiply by 1.8 for losses.
-    potential_energy_per_kg = G0 * target_altitude_m
-    delta_v_req = np.sqrt(2 * potential_energy_per_kg) * 1.8
+    # Energy balance: V_ideal = sqrt(2 * g * h), times 1.8 for losses, times
+    # the design margin.
+    delta_v_without_margin = math.sqrt(2 * G0 * target_altitude_m) * 1.8
+    delta_v_req = delta_v_without_margin * design_margin
+    exhaust_velocity = isp_s * G0
 
-    # Tsiolkovsky rocket equation: mass_ratio = exp(dV / (Isp * g0))
-    mass_ratio = float(np.exp(delta_v_req / (isp_s * G0)))
+    # The largest mass ratio a single stage with this structural ratio can
+    # reach (zero payload) is (1 + eps) / eps.
+    max_mass_ratio = (1 + structural_ratio) / structural_ratio
+    max_delta_v = exhaust_velocity * math.log(max_mass_ratio)
 
-    # Mass breakdown: solve for propellant mass from the structural ratio
-    # and mass ratio.  If denominator <= 0, single-stage is infeasible.
+    result: dict[str, Any] = {
+        "payload_mass_kg": payload_mass_kg,
+        "propellant_type": propellant_type,
+        "specific_impulse_s": isp_s,
+        "structural_ratio": structural_ratio,
+        "thrust_to_weight": thrust_to_weight,
+        "design_margin": design_margin,
+        "delta_v_without_margin_ms": delta_v_without_margin,
+        "delta_v_ms": delta_v_req,
+        "max_single_stage_delta_v_ms": max_delta_v,
+    }
+
+    exponent = delta_v_req / exhaust_velocity
+    mass_ratio = math.exp(exponent) if exponent < 700 else math.inf
     denominator = 1 + structural_ratio - mass_ratio * structural_ratio
     if denominator <= 0:
         # Single-stage solution impossible -- multi-staging required.
-        propellant_mass = float("inf")
-    else:
-        propellant_mass = (mass_ratio - 1) * payload_mass_kg / denominator
+        result.update(
+            {
+                "feasible": False,
+                "reason": (
+                    f"Required delta-V {delta_v_req:.0f} m/s exceeds the "
+                    f"{max_delta_v:.0f} m/s a single {propellant_type} stage "
+                    "can deliver; multi-staging is required"
+                ),
+                "mass_ratio": mass_ratio if math.isfinite(mass_ratio) else None,
+                "total_mass_kg": None,
+                "propellant_mass_kg": None,
+                "structure_mass_kg": None,
+                "thrust_n": None,
+                "diameter_m": None,
+                "length_m": None,
+            }
+        )
+        return result
 
+    # Mass breakdown from the structural ratio and mass ratio.
+    propellant_mass = (mass_ratio - 1) * payload_mass_kg / denominator
     structure_mass = structural_ratio * propellant_mass
     total_mass = payload_mass_kg + structure_mass + propellant_mass
 
     # Thrust requirement
     thrust_n = thrust_to_weight * total_mass * G0
 
-    # Rough geometry estimates
-    density_propellant = 1600.0  # kg/m³ typical solid propellant
-    propellant_volume = propellant_mass / density_propellant
-
-    # Assume propellant takes 70% of rocket volume
-    total_volume = propellant_volume / 0.7
-
-    # L/D ratio of 10
+    # Rough geometry: propellant takes 70% of the volume, L/D = 10.
+    total_volume = propellant_mass / density / 0.7
     ld_ratio = 10.0
-    diameter = float((4 * total_volume / (PI * ld_ratio)) ** (1 / 3))
-    length = ld_ratio * diameter
+    diameter = (4 * total_volume / (PI * ld_ratio)) ** (1 / 3)
 
-    return {
-        "total_mass_kg": total_mass,
-        "propellant_mass_kg": propellant_mass,
-        "structure_mass_kg": structure_mass,
-        "payload_mass_kg": payload_mass_kg,
-        "thrust_n": thrust_n,
-        "specific_impulse_s": isp_s,
-        "mass_ratio": mass_ratio,
-        "delta_v_ms": float(delta_v_req),
-        "diameter_m": diameter,
-        "length_m": length,
-        "thrust_to_weight": thrust_to_weight,
-        "feasible": propellant_mass < float("inf"),
-    }
+    result.update(
+        {
+            "feasible": True,
+            "mass_ratio": mass_ratio,
+            "total_mass_kg": total_mass,
+            "propellant_mass_kg": propellant_mass,
+            "structure_mass_kg": structure_mass,
+            "thrust_n": thrust_n,
+            "diameter_m": float(diameter),
+            "length_m": float(ld_ratio * diameter),
+        }
+    )
+    return result
 
 
 # Update availability

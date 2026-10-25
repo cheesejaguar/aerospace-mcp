@@ -92,7 +92,7 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         parameters={
             "departure": "Departure airport info (city, country, iata)",
             "arrival": "Arrival airport info (city, country, iata)",
-            "aircraft": "Aircraft config (ac_type, cruise_alt_ft, mass_kg)",
+            "aircraft": "Aircraft config (ac_type, cruise_alt_ft, mass_kg, route_step_km)",
             "route_options": "Route options (step_km)",
         },
         keywords=[
@@ -217,8 +217,8 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         description="Calculate atmospheric conditions at various altitudes using ISA model",
         category="atmosphere",
         parameters={
-            "altitudes_m": "List of altitudes in meters",
-            "model_type": "Atmospheric model type - 'isa' or 'enhanced'",
+            "altitudes_m": "List of geometric altitudes in meters (0-86000)",
+            "model_type": "Atmospheric model type - 'ISA' or 'COESA' (US Standard Atmosphere 1976)",
         },
         keywords=[
             "atmosphere",
@@ -248,11 +248,10 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         description="Transform coordinates between reference frames (ECEF, ECI, ITRF, GCRS, GEODETIC)",
         category="frames",
         parameters={
-            "position": "Position vector [x, y, z] in source frame",
-            "velocity": "Optional velocity vector [vx, vy, vz]",
-            "source_frame": "Source reference frame",
-            "target_frame": "Target reference frame",
-            "epoch_utc": "UTC epoch for time-dependent transformations",
+            "coordinates": "Position {x, y, z} in meters (or {latitude_deg, longitude_deg, altitude_m} for GEODETIC)",
+            "from_frame": "Source reference frame",
+            "to_frame": "Target reference frame",
+            "epoch_utc": "Optional UTC epoch for ECI/GCRS transformations (default J2000.0)",
         },
         keywords=[
             "coordinate",
@@ -442,7 +441,8 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         parameters={
             "target_altitude_m": "Target altitude in meters",
             "payload_mass_kg": "Payload mass in kg",
-            "propellant_type": "Type of propellant",
+            "propellant_type": "Type of propellant ('solid' or 'liquid')",
+            "design_margin": "Multiplier (>= 1) on the delta-V requirement, default 1.2",
         },
         keywords=[
             "rocket",
@@ -516,8 +516,9 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         category="orbits",
         parameters={
             "initial_state": "Initial orbital elements or state vector",
-            "time_span_s": "Propagation time span in seconds",
+            "propagation_time_s": "Propagation time span in seconds",
             "time_step_s": "Time step for propagation in seconds",
+            "max_points": "Maximum states returned (2-5000, default 200), evenly spaced",
         },
         keywords=[
             "orbit",
@@ -536,7 +537,8 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         parameters={
             "orbital_state": "Orbital state (elements or state vector)",
             "duration_s": "Duration for ground track calculation",
-            "step_s": "Time step for ground track points",
+            "time_step_s": "Time step for ground track points",
+            "max_points": "Maximum points returned (2-5000, default 200), evenly spaced",
         },
         keywords=[
             "ground",
@@ -628,10 +630,8 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         description="Perform genetic algorithm-based trajectory optimization",
         category="optimization",
         parameters={
-            "objective_function": "Objective function to optimize",
-            "constraints": "Optimization constraints",
-            "population_size": "GA population size",
-            "generations": "Number of generations",
+            "optimization_problem": "{trajectory: [waypoints], objective, constraints}",
+            "ga_parameters": "Optional {population_size, generations, mutation_rate, crossover_rate, elite_size, seed}",
         },
         keywords=[
             "genetic",
@@ -647,10 +647,8 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         description="Perform particle swarm optimization for trajectory design",
         category="optimization",
         parameters={
-            "objective_function": "Objective function to optimize",
-            "constraints": "Optimization constraints",
-            "swarm_size": "Number of particles in swarm",
-            "iterations": "Number of iterations",
+            "optimization_problem": "{trajectory: [waypoints], objective, constraints}",
+            "pso_parameters": "Optional {num_particles, max_iterations, w, c1, c2, convergence_tolerance, seed}",
         },
         keywords=["particle", "swarm", "pso", "optimization", "trajectory", "global"],
     ),
@@ -679,9 +677,10 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         description="Perform Monte Carlo uncertainty quantification on trajectories",
         category="optimization",
         parameters={
-            "baseline_trajectory": "Baseline trajectory",
-            "uncertainty_parameters": "Parameters with uncertainty distributions",
-            "num_samples": "Number of Monte Carlo samples",
+            "nominal_trajectory": "{trajectory: [waypoints]}",
+            "uncertainty_parameters": "1-sigma errors {position_m: {std}, velocity_ms: {std}, thrust_n: {std}}",
+            "n_samples": "Number of Monte Carlo samples (2-50,000)",
+            "analysis_options": "Optional {seed}",
         },
         keywords=[
             "monte",
@@ -724,8 +723,10 @@ TOOL_REGISTRY: list[ToolMetadata] = [
             "initial_covariance": "Initial state covariance matrix (P0)",
             "process_noise": "Process noise covariance matrix (Q)",
             "measurement_noise": "Measurement noise covariance matrix (R)",
-            "measurements": "Time-series of sensor measurements",
-            "dynamics_model": "Dynamics model type: constant_velocity, constant_acceleration, orbital",
+            "measurements": "Time-series of measurements {z, time?, H?}; H (m x n) required when len(z) != n",
+            "dynamics_model": "Dynamics model type: constant_velocity, constant_acceleration, orbital, static",
+            "dt": "Default time step (s) for measurements without a time",
+            "initial_time": "Optional time of the initial state (default: dt before the first measurement)",
         },
         keywords=[
             "kalman",
@@ -906,7 +907,11 @@ TOOL_REGISTRY: list[ToolMetadata] = [
         description="Calculate required fuel reserves per aviation regulations (FAR/JAR/ICAO)",
         category="performance",
         parameters={
-            "regulation": "Regulatory framework: FAR_91, FAR_121, JAR_OPS, or ICAO",
+            "regulation": (
+                "Regulatory framework: FAR_91_IFR, FAR_91_VFR_DAY, FAR_91_VFR_NIGHT, "
+                "FAR_121_DOMESTIC, FAR_121_FLAG, JAR_OPS, or ICAO "
+                "(FAR_91 = FAR_91_IFR, FAR_121 = FAR_121_DOMESTIC)"
+            ),
             "trip_fuel_kg": "Planned trip fuel in kg",
             "cruise_fuel_flow_kg_hr": "Cruise fuel flow rate in kg/hr",
             "flight_time_min": "Planned flight time in minutes",

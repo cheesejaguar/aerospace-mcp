@@ -7,6 +7,9 @@ Tests the rockets.py module functionality including:
 - Rocket sizing estimation
 """
 
+import json
+import math
+
 import pytest
 
 from aerospace_mcp.integrations.rockets import (
@@ -278,6 +281,72 @@ class TestRocketSizing:
                 sizing["mass_ratio"]
                 > 2.5  # More realistic threshold for challenging mission
             )  # Very high mass ratio indicates difficulty
+
+    def test_design_margin_scales_the_delta_v_budget(self):
+        """The margin multiplies delta-V and is carried through the rocket
+        equation, so propellant grows faster than linearly."""
+        base = estimate_rocket_sizing(30000.0, 10.0, "solid")
+        margined = estimate_rocket_sizing(30000.0, 10.0, "solid", design_margin=1.2)
+
+        assert base["design_margin"] == 1.0
+        assert margined["design_margin"] == 1.2
+        assert margined["delta_v_without_margin_ms"] == base["delta_v_ms"]
+        assert margined["delta_v_ms"] == pytest.approx(1.2 * base["delta_v_ms"])
+        # Tsiolkovsky with the margined delta-V.
+        assert margined["mass_ratio"] == pytest.approx(
+            math.exp(margined["delta_v_ms"] / (250.0 * 9.80665))
+        )
+        assert margined["propellant_mass_kg"] > 1.2 * base["propellant_mass_kg"]
+        # The vehicle still closes: payload + structure + propellant.
+        total = (
+            margined["payload_mass_kg"]
+            + margined["structure_mass_kg"]
+            + margined["propellant_mass_kg"]
+        )
+        assert total == pytest.approx(margined["total_mass_kg"])
+        assert margined["total_mass_kg"] / (
+            margined["total_mass_kg"] - margined["propellant_mass_kg"]
+        ) == pytest.approx(margined["mass_ratio"])
+
+    @pytest.mark.parametrize(
+        "args, match",
+        [
+            ((30000.0, 10.0, "solid", 0.9), "design_margin"),
+            ((30000.0, 10.0, "solid", float("nan")), "design_margin"),
+            ((0.0, 10.0, "solid", 1.2), "target_altitude_m"),
+            ((30000.0, -1.0, "solid", 1.2), "payload_mass_kg"),
+            ((30000.0, 10.0, "hybrid", 1.2), "propellant_type"),
+        ],
+    )
+    def test_sizing_rejects_invalid_inputs(self, args, match):
+        with pytest.raises(ValueError, match=match):
+            estimate_rocket_sizing(*args)
+
+    def test_infeasible_single_stage_has_no_infinities(self):
+        """Used to return propellant_mass_kg = inf (JSON 'Infinity')."""
+        sizing = estimate_rocket_sizing(500000.0, 10.0, "solid", design_margin=1.2)
+
+        assert sizing["feasible"] is False
+        assert "multi-staging" in sizing["reason"]
+        assert sizing["propellant_mass_kg"] is None
+        assert sizing["total_mass_kg"] is None
+        assert sizing["delta_v_ms"] > sizing["max_single_stage_delta_v_ms"]
+        json.dumps(sizing, allow_nan=False)
+
+    def test_liquid_uses_liquid_propellant_density(self):
+        solid = estimate_rocket_sizing(30000.0, 10.0, "solid")
+        liquid = estimate_rocket_sizing(30000.0, 10.0, "liquid")
+
+        def body_volume(s):
+            return math.pi * s["diameter_m"] ** 2 / 4 * s["length_m"]
+
+        # 70% of the body volume is propellant at the type's bulk density.
+        assert solid["propellant_mass_kg"] / (0.7 * body_volume(solid)) == (
+            pytest.approx(1600.0)
+        )
+        assert liquid["propellant_mass_kg"] / (0.7 * body_volume(liquid)) == (
+            pytest.approx(1030.0)
+        )
 
     def test_sizing_parameter_relationships(self):
         """Test relationships between sizing parameters."""

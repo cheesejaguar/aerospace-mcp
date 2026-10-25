@@ -60,17 +60,25 @@ def optimize_thrust_profile(
 
         return json.dumps(
             {
-                "optimization_result": result.optimization_result,
+                "objective": objective,
+                "iterations": result.iterations,
+                "converged": result.converged,
                 "optimal_objective": result.optimal_objective,
+                # Same objective for constant thrust (the starting profile);
+                # the optimum is never worse.
+                "initial_objective": result.initial_objective,
                 "optimal_parameters": result.optimal_parameters,
                 "performance": {
                     "max_altitude_m": result.performance.max_altitude_m,
                     "max_velocity_ms": result.performance.max_velocity_ms,
+                    "max_q_pa": result.performance.max_q_pa,
                     "total_impulse_ns": result.performance.total_impulse_ns,
                     "apogee_time_s": result.performance.apogee_time_s,
+                    "burnout_time_s": result.performance.burnout_time_s,
                 },
             },
             indent=2,
+            allow_nan=False,
         )
 
     except ImportError:
@@ -89,8 +97,10 @@ def trajectory_sensitivity_analysis(
 
     Args:
         rocket_geometry: Baseline rocket geometry
-        parameter_variations: Parameters to vary and their ranges
-        analysis_options: Optional analysis settings
+        parameter_variations: Parameters to vary (dry_mass_kg,
+            propellant_mass_kg, diameter_m, cd) mapped to lists of values
+        analysis_options: Optional analysis settings: ``objective`` is one of
+            "max_altitude" (default), "max_velocity", "specific_impulse"
 
     Returns:
         JSON string with sensitivity analysis results showing how each parameter
@@ -109,9 +119,10 @@ def trajectory_sensitivity_analysis(
 
         geometry = RocketGeometry(**rocket_geometry)
 
-        result = _sensitivity(geometry, parameter_variations, analysis_options or {})
+        objective = (analysis_options or {}).get("objective", "max_altitude")
+        result = _sensitivity(geometry, parameter_variations, objective=objective)
 
-        return json.dumps(result, indent=2)
+        return json.dumps(result, indent=2, allow_nan=False)
 
     except ImportError:
         return "Sensitivity analysis not available - install optimization packages"
@@ -126,30 +137,54 @@ def genetic_algorithm_optimization(
     """Optimize spacecraft trajectory using genetic algorithm.
 
     Args:
-        optimization_problem: Problem definition (objective, constraints, variables)
-        ga_parameters: Optional GA parameters (population_size, generations, etc.)
+        optimization_problem: Problem definition::
+
+            {
+              "trajectory": [waypoint, ...],          # required, see below
+              "objective": "minimize_fuel",           # or minimize_delta_v,
+                                                      # minimize_time,
+                                                      # maximize_payload
+              "constraints": {                        # all optional
+                "max_thrust_n": 10000, "min_altitude_m": 200000,
+                "max_delta_v_ms": 5000, "max_acceleration_ms2": 50,
+                "time_bounds_s": [0, 86400]
+              }
+            }
+
+            Each waypoint is ``{"time_s": float, "position_m": [x, y, z],
+            "velocity_ms": [vx, vy, vz], "thrust_n": [Fx, Fy, Fz]
+            (optional), "mass_kg": float (optional, default 1000)}`` in SI
+            units (s, m, m/s, N, kg) with Earth-centred positions (the
+            altitude constraint uses |r| - 6378.137 km); 2-100 waypoints
+            with strictly increasing times.
+        ga_parameters: Optional GA parameters: population_size (3-200,
+            default 50), generations (1-500, default 100), mutation_rate
+            (0-1, default 0.1), crossover_rate (0-1, default 0.8),
+            elite_size (default 5), seed (int, for reproducible runs).
+            population_size x generations x waypoints is capped at 500,000.
 
     Returns:
-        JSON string with optimization results including best solution found,
-        convergence history, and final objective value.
+        JSON string with optimization results: optimal_cost (and the
+        initial trajectory's cost for comparison), delta-V, fuel mass,
+        iterations (generations actually run), converged (True when the
+        best cost stagnated for 20 generations) and the optimal trajectory.
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings.
 
     Note:
-        The GA operates on a population of candidate solutions through:
-        1. **Selection**: Tournament or roulette-wheel selection of parents.
-        2. **Crossover**: Combining parent chromosomes (e.g., single-point or
-           uniform crossover) to produce offspring that inherit traits from both.
-        3. **Mutation**: Random perturbation of offspring genes with probability
-           p_mutation to maintain diversity and avoid premature convergence.
-        Each generation evaluates fitness, selects the best, and breeds the
-        next generation until convergence or max generations reached.
+        Only the thrust vectors are optimised; times, positions, velocities
+        and masses come from the input trajectory, so ``minimize_time`` only
+        reacts to constraint penalties.  The GA operates on a population of
+        candidate thrust profiles through:
+        1. **Selection**: tournament selection (size 3) of parents.
+        2. **Crossover**: single-point crossover at a random waypoint.
+        3. **Mutation**: random scaling (0.8-1.2x) and re-pointing of thrust
+           with probability mutation_rate.
+        4. **Elitism**: the best elite_size individuals survive unchanged.
     """
     try:
-        from ..integrations.trajopt import (
-            genetic_algorithm_optimization as _ga_optimize,
-        )
+        from ..integrations.gnc import run_genetic_algorithm as _ga_optimize
 
         result = _ga_optimize(optimization_problem, ga_parameters or {})
 
@@ -168,18 +203,35 @@ def particle_swarm_optimization(
     """Optimize spacecraft trajectory using particle swarm optimization.
 
     Args:
-        optimization_problem: Problem definition (objective, constraints, variables)
-        pso_parameters: Optional PSO parameters (n_particles, iterations, etc.)
+        optimization_problem: Problem definition, same schema as
+            ``genetic_algorithm_optimization``: ``{"trajectory": [waypoint,
+            ...], "objective": str, "constraints": {...}}``.
+            Each waypoint is ``{"time_s": float, "position_m": [x, y, z],
+            "velocity_ms": [vx, vy, vz], "thrust_n": [Fx, Fy, Fz]
+            (optional), "mass_kg": float (optional, default 1000)}`` in SI
+            units (s, m, m/s, N, kg) with Earth-centred positions (the
+            altitude constraint uses |r| - 6378.137 km); 2-100 waypoints
+            with strictly increasing times.
+        pso_parameters: Optional PSO parameters: num_particles (alias
+            n_particles; 1-200, default 30), max_iterations (alias
+            iterations; 1-500, default 100), w (inertia, default 0.7), c1 /
+            c2 (default 1.5), convergence_tolerance (default 1e-6), seed
+            (int, for reproducible runs).  num_particles x max_iterations x
+            waypoints is capped at 500,000.
 
     Returns:
-        JSON string with optimization results including best position found
-        and convergence metrics.
+        JSON string with optimization results: optimal_cost (and the
+        initial trajectory's cost), delta-V, fuel mass, iterations actually
+        run, converged (True when the global best improved by less than
+        convergence_tolerance over 10 iterations) and the optimal trajectory.
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings.
 
     Note:
-        PSO updates each particle's velocity and position at every iteration:
+        Each particle is a thrust profile [Fx0, Fy0, Fz0, Fx1, ...] on the
+        input trajectory's times/positions/velocities/masses.  PSO updates
+        each particle's velocity and position at every iteration:
             v_i(t+1) = w*v_i(t) + c1*r1*(p_best_i - x_i) + c2*r2*(g_best - x_i)
             x_i(t+1) = x_i(t) + v_i(t+1)
         where w is the inertia weight (balances exploration vs exploitation),
@@ -188,7 +240,7 @@ def particle_swarm_optimization(
         is the global best found by any particle in the swarm.
     """
     try:
-        from ..integrations.trajopt import particle_swarm_optimization as _pso_optimize
+        from ..integrations.gnc import run_particle_swarm as _pso_optimize
 
         result = _pso_optimize(optimization_problem, pso_parameters or {})
 
@@ -215,9 +267,10 @@ def porkchop_plot_analysis(
     Args:
         departure_body: Departure celestial body name
         arrival_body: Arrival celestial body name
-        departure_date_range: Range of departure dates (ISO format)
-        arrival_date_range: Range of arrival dates (ISO format)
-        analysis_options: Optional analysis settings
+        departure_date_range: Departure dates to evaluate (ISO format)
+        arrival_date_range: Arrival dates to evaluate (ISO format)
+        analysis_options: Optional analysis settings: ``min_tof_days``
+            (default 100) and ``max_tof_days`` (default 400)
 
     Returns:
         JSON string with porkchop plot data (departure date vs arrival date
@@ -227,17 +280,19 @@ def porkchop_plot_analysis(
         No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
-        from ..integrations.trajopt import porkchop_plot_analysis as _porkchop
+        from ..integrations.orbits import porkchop_plot_analysis as _porkchop
 
+        options = analysis_options or {}
         result = _porkchop(
             departure_body,
             arrival_body,
-            departure_date_range,
-            arrival_date_range,
-            analysis_options or {},
+            departure_dates=departure_date_range or None,
+            arrival_dates=arrival_date_range or None,
+            min_tof_days=options.get("min_tof_days", 100),
+            max_tof_days=options.get("max_tof_days", 400),
         )
 
-        return json.dumps(result, indent=2)
+        return json.dumps(result, indent=2, allow_nan=False)
 
     except ImportError:
         return (
@@ -257,32 +312,39 @@ def monte_carlo_uncertainty_analysis(
     """Perform Monte Carlo uncertainty analysis on spacecraft trajectory.
 
     Args:
-        nominal_trajectory: Nominal trajectory parameters
-        uncertainty_parameters: Parameters with uncertainty distributions
-        n_samples: Number of Monte Carlo samples
-        analysis_options: Optional analysis settings
+        nominal_trajectory: ``{"trajectory": [waypoint, ...]}``.  Each
+            waypoint is ``{"time_s": float, "position_m": [x, y, z],
+            "velocity_ms": [vx, vy, vz], "thrust_n": [Fx, Fy, Fz]
+            (optional), "mass_kg": float (optional, default 1000)}`` in SI
+            units; 1-100 waypoints with strictly increasing times.
+        uncertainty_parameters: 1-sigma Gaussian errors per vector
+            component, e.g. ``{"position_m": {"std": 100.0},
+            "velocity_ms": {"std": 1.0}, "thrust_n": {"std": 50.0}}`` (a
+            bare number may replace ``{"std": ...}``).  Missing keys mean no
+            uncertainty in that quantity.
+        n_samples: Number of Monte Carlo samples (2-50,000; samples x
+            waypoints is capped at 250,000)
+        analysis_options: Optional settings: ``seed`` (int) for
+            reproducible sampling
 
     Returns:
-        JSON string with uncertainty analysis results including statistical
-        summaries (mean, std, percentiles) of trajectory metrics.
+        JSON string with uncertainty analysis results: mean, sample std,
+        min/max and 2.5/97.5 percentiles of total delta-V, flight time and
+        the final-waypoint position and velocity error magnitudes.
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings.
 
     Note:
-        Monte Carlo analysis samples uncertain parameters from their specified
-        distributions (e.g., Gaussian, uniform) and runs n_samples trajectory
-        simulations. Statistical analysis of the results provides:
-        - Mean and standard deviation of key performance metrics.
-        - Confidence intervals (e.g., 95th percentile bounds).
-        - Dispersion ellipses for correlated output parameters.
-        Latin Hypercube Sampling (LHS) may be used for efficient coverage of
-        the parameter space with fewer samples than pure random sampling.
+        Errors are drawn independently for every waypoint and component
+        (plain random sampling) and no dynamics are propagated: the delta-V
+        dispersion comes from the thrust errors (dv = |F| / m * dt per
+        segment), and the position/velocity statistics describe the errors
+        injected at the final waypoint.  The 95% intervals are empirical
+        percentiles, not mean +/- 1.96 sigma.
     """
     try:
-        from ..integrations.trajopt import (
-            monte_carlo_uncertainty_analysis as _monte_carlo,
-        )
+        from ..integrations.gnc import run_monte_carlo as _monte_carlo
 
         result = _monte_carlo(
             nominal_trajectory,

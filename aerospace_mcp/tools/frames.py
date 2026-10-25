@@ -15,6 +15,9 @@ from typing import Literal
 
 logger = logging.getLogger(__name__)
 
+# Inertial frames: transformations touching these depend on the epoch.
+_INERTIAL = ("ECI", "GCRS")
+
 
 def transform_frames(
     coordinates: dict,
@@ -25,23 +28,63 @@ def transform_frames(
     """Transform coordinates between reference frames (ECEF, ECI, ITRF, GCRS, GEODETIC).
 
     Args:
-        coordinates: Dict with coordinate data (format depends on frame)
+        coordinates: Position in the source frame, as
+            ``{"x": .., "y": .., "z": ..}`` in meters (a ``[x, y, z]`` list
+            is also accepted).  For ``from_frame="GEODETIC"`` pass
+            ``{"latitude_deg": .., "longitude_deg": .., "altitude_m": ..}``.
         from_frame: Source reference frame
         to_frame: Target reference frame
-        epoch_utc: Optional epoch for time-dependent transformations (ISO format)
+        epoch_utc: Optional epoch for time-dependent transformations (ISO
+            format, UTC).  Only conversions involving ECI/GCRS depend on it;
+            defaults to J2000.0 (2000-01-01T12:00:00).
 
     Returns:
-        JSON string with transformed coordinates in the target frame.
+        JSON string with transformed coordinates in the target frame:
+        ``{"x", "y", "z"}`` in meters for Cartesian frames, or
+        ``{"latitude_deg", "longitude_deg", "altitude_m"}`` for GEODETIC.
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings.
         ImportError is caught when required frame transformation packages are missing.
+
+    Note:
+        Without astropy, ECI <-> ECEF applies IAU-1976 precession and a GMST
+        rotation (nutation, UT1-UTC and polar motion neglected, ~1 km at LEO
+        radius); GCRS is treated as ECI and ITRF as ECEF.
     """
     try:
         from ..integrations.frames import transform_frames as _transform
 
+        # epoch_utc=None selects the integration's J2000.0 default
         result = _transform(coordinates, from_frame, to_frame, epoch_utc)
-        return json.dumps(result, indent=2)
+
+        if to_frame == "GEODETIC":
+            output = {
+                "latitude_deg": result.x,
+                "longitude_deg": result.y,
+                "altitude_m": result.z,
+            }
+            units = {
+                "latitude": "degrees",
+                "longitude": "degrees",
+                "altitude": "meters",
+            }
+        else:
+            output = {"x": result.x, "y": result.y, "z": result.z}
+            units = {"position": "meters"}
+
+        time_dependent = from_frame in _INERTIAL or to_frame in _INERTIAL
+        return json.dumps(
+            {
+                "from_frame": from_frame,
+                "to_frame": to_frame,
+                "epoch_utc": result.epoch if time_dependent else None,
+                "input": coordinates,
+                "output": output,
+                "units": units,
+            },
+            indent=2,
+        )
 
     except ImportError as e:
         return f"Frame transformation not available - missing dependency: {str(e)}"
@@ -92,9 +135,9 @@ def geodetic_to_ecef(
                     "altitude_m": altitude_m,
                 },
                 "output": {
-                    "x_m": result["x_m"],
-                    "y_m": result["y_m"],
-                    "z_m": result["z_m"],
+                    "x_m": result.x,
+                    "y_m": result.y,
+                    "z_m": result.z,
                 },
                 "reference_frame": "WGS84 ECEF",
                 "units": {"position": "meters"},
@@ -132,9 +175,9 @@ def ecef_to_geodetic(x_m: float, y_m: float, z_m: float) -> str:
             {
                 "input": {"x_m": x_m, "y_m": y_m, "z_m": z_m},
                 "output": {
-                    "latitude_deg": result["latitude_deg"],
-                    "longitude_deg": result["longitude_deg"],
-                    "altitude_m": result["altitude_m"],
+                    "latitude_deg": result.latitude_deg,
+                    "longitude_deg": result.longitude_deg,
+                    "altitude_m": result.altitude_m,
                 },
                 "reference_frame": "WGS84 Geodetic",
                 "units": {

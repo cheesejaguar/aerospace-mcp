@@ -1,0 +1,28 @@
+{
+  "name": "aerospace-mcp",
+  "version": "0.1.0",
+  "description": "Aerospace engineering tools for Claude: flight planning, atmosphere, aerodynamics, propellers, rockets, orbital mechanics, GNC and aircraft performance. Educational and research use only.",
+  "author": {
+    "name": "Aaron",
+    "url": "https://github.com/cheesejaguar"
+  },
+  "homepage": "https://aeroastro.org",
+  "repository": "https://github.com/cheesejaguar/aerospace-mcp",
+  "license": "MIT",
+  "keywords": [
+    "aerospace",
+    "aviation",
+    "flight-planning",
+    "orbital-mechanics",
+    "rockets",
+    "mcp"
+  ],
+  "mcpServers": {
+    "aerospace": {
+      "command": "uvx",
+      "args": [
+        "aerospace-mcp"
+      ]
+    }
+  }
+}

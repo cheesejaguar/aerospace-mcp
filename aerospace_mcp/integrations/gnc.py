@@ -10,6 +10,9 @@ Key capabilities:
       crossover, and elitism
     - Particle Swarm Optimization (PSO) with inertia-weight velocity update
     - Monte Carlo uncertainty analysis for dispersion characterization
+    - A dictionary API (``run_genetic_algorithm``, ``run_particle_swarm``,
+      ``run_monte_carlo``) with input validation and size limits, used by
+      the MCP optimization tools
 
 References:
     - Goldberg, D.E., "Genetic Algorithms in Search, Optimization, and
@@ -22,8 +25,11 @@ WARNING: This module is for educational and research purposes only.
 Do NOT use for real flight planning, navigation, or spacecraft operations.
 """
 
+import dataclasses
 import math
 import random
+import statistics
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -317,6 +323,35 @@ def evaluate_trajectory_cost(
     return cost
 
 
+def trajectory_delta_v_and_fuel(
+    trajectory: list[TrajectoryWaypoint], isp_s: float = 300.0
+) -> tuple[float, float]:
+    """Total thrust delta-V and fuel mass of a trajectory.
+
+    Uses the same per-segment model as :func:`evaluate_trajectory_cost`:
+    the thrust at waypoint *i* acts over the segment (i-1, i), giving
+    ``dv = |F| / m * dt`` and ``dm = |F| * dt / (Isp * g0)``.
+
+    Args:
+        trajectory: Trajectory waypoints.
+        isp_s: Assumed specific impulse in seconds.
+
+    Returns:
+        Tuple ``(delta_v_ms, fuel_kg)``.
+    """
+    delta_v_total = 0.0
+    fuel_mass = 0.0
+    for i in range(1, len(trajectory)):
+        if trajectory[i].thrust_n:
+            thrust_mag = vector_magnitude(trajectory[i].thrust_n)
+            dt = trajectory[i].time_s - trajectory[i - 1].time_s
+            if trajectory[i].mass_kg > 0:
+                delta_v_total += thrust_mag / trajectory[i].mass_kg * dt
+                if thrust_mag > 0:
+                    fuel_mass += thrust_mag * dt / (isp_s * 9.80665)
+    return delta_v_total, fuel_mass
+
+
 # ===========================================================================
 # Genetic Algorithm (GA) Optimizer
 # ===========================================================================
@@ -335,54 +370,80 @@ class GeneticAlgorithm:
         - **Elitism**: preserve the top ``elite_size`` individuals
           unchanged each generation.
         - **Early stopping**: halt when no improvement is seen for 20
-          consecutive generations.
+          consecutive generations (reported as ``converged=True``).
 
     Attributes:
         params: GA configuration parameters.
         population: Current generation of candidate trajectories.
         fitness_scores: Cost function values for each individual.
+        rng: Random number source (the ``random`` module unless a seeded
+            ``random.Random`` is passed in).
     """
 
-    def __init__(self, params: GeneticAlgorithmParams):
+    #: Generations without improvement that trigger early stopping.
+    STAGNATION_LIMIT = 20
+
+    def __init__(self, params: GeneticAlgorithmParams, rng: Any = None):
         self.params = params
         self.population = []
         self.fitness_scores = []
+        self.rng = rng if rng is not None else random
+
+    def _random_thrust(self, max_thrust_n: float) -> list[float]:
+        """Random thrust vector; in-plane magnitude uniform in [0, max_thrust_n]."""
+        thrust_mag = self.rng.uniform(0, max_thrust_n)
+        thrust_dir = self.rng.uniform(0, 2 * math.pi)
+        return [
+            thrust_mag * math.cos(thrust_dir),
+            thrust_mag * math.sin(thrust_dir),
+            self.rng.uniform(-thrust_mag / 2, thrust_mag / 2),
+        ]
 
     def random_trajectory(
-        self, n_waypoints: int, constraints: OptimizationConstraints
+        self,
+        n_waypoints: int,
+        constraints: OptimizationConstraints,
+        template: list[TrajectoryWaypoint] | None = None,
     ) -> list[TrajectoryWaypoint]:
-        """Generate a random feasible trajectory for population initialization.
+        """Generate a random trajectory for population initialization.
 
-        Positions are sampled in spherical coordinates around low-Earth orbit,
-        velocities approximate circular orbital speed with perturbations, and
-        thrust vectors are random within the constraint bounds.
+        With a ``template`` (the user's trajectory) only the thrust vectors
+        are randomised; times, positions, velocities and masses are kept, so
+        every individual describes the same mission.  Without a template,
+        times are evenly spaced over ``constraints.time_bounds_s``, positions
+        are sampled in spherical coordinates around low-Earth orbit, and
+        velocities approximate circular orbital speed with perturbations.
 
         Args:
             n_waypoints: Number of waypoints in the trajectory.
             constraints: Optimization constraints for bound enforcement.
+            template: Optional trajectory whose structure is reused.
 
         Returns:
             Randomly generated trajectory.
         """
+        if template is not None:
+            return [
+                dataclasses.replace(
+                    wp, thrust_n=self._random_thrust(constraints.max_thrust_n)
+                )
+                for wp in template
+            ]
+
         trajectory = []
+        t0, t1 = constraints.time_bounds_s
 
         for i in range(n_waypoints):
-            # Random time
-            t = (
-                random.uniform(
-                    constraints.time_bounds_s[0], constraints.time_bounds_s[1]
-                )
-                * i
-                / (n_waypoints - 1)
-            )
+            # Evenly spaced, strictly increasing times over the time bounds
+            t = t0 + (t1 - t0) * i / (n_waypoints - 1) if n_waypoints > 1 else t0
 
             # Random position (around Earth orbit)
-            r = random.uniform(
+            r = self.rng.uniform(
                 constraints.min_altitude_m + 6.378137e6,
                 constraints.min_altitude_m + 6.378137e6 + 1e6,
             )
-            theta = random.uniform(0, 2 * math.pi)
-            phi = random.uniform(0, math.pi)
+            theta = self.rng.uniform(0, 2 * math.pi)
+            phi = self.rng.uniform(0, math.pi)
 
             pos = [
                 r * math.sin(phi) * math.cos(theta),
@@ -392,21 +453,12 @@ class GeneticAlgorithm:
 
             # Random velocity near circular orbital speed: v_circ = sqrt(mu/r)
             # Perturbed by +/- 20% to explore non-circular trajectories
-            v_mag = math.sqrt(3.986004418e14 / r) * random.uniform(0.8, 1.2)
-            v_theta = random.uniform(0, 2 * math.pi)
+            v_mag = math.sqrt(3.986004418e14 / r) * self.rng.uniform(0.8, 1.2)
+            v_theta = self.rng.uniform(0, 2 * math.pi)
             vel = [
                 v_mag * math.cos(v_theta),
                 v_mag * math.sin(v_theta),
-                random.uniform(-1000, 1000),
-            ]
-
-            # Random thrust
-            thrust_mag = random.uniform(0, constraints.max_thrust_n)
-            thrust_dir = random.uniform(0, 2 * math.pi)
-            thrust = [
-                thrust_mag * math.cos(thrust_dir),
-                thrust_mag * math.sin(thrust_dir),
-                random.uniform(-thrust_mag / 2, thrust_mag / 2),
+                self.rng.uniform(-1000, 1000),
             ]
 
             trajectory.append(
@@ -414,8 +466,8 @@ class GeneticAlgorithm:
                     time_s=t,
                     position_m=pos,
                     velocity_ms=vel,
-                    thrust_n=thrust,
-                    mass_kg=random.uniform(500, 2000),
+                    thrust_n=self._random_thrust(constraints.max_thrust_n),
+                    mass_kg=self.rng.uniform(500, 2000),
                 )
             )
 
@@ -436,11 +488,11 @@ class GeneticAlgorithm:
         Returns:
             Child trajectory combining segments of both parents.
         """
-        if len(parent1) != len(parent2):
-            return parent1  # Return first parent if lengths don't match
+        if len(parent1) != len(parent2) or len(parent1) < 2:
+            return parent1  # Nothing to splice (length mismatch or 1 waypoint)
 
         child = []
-        crossover_point = random.randint(1, len(parent1) - 1)
+        crossover_point = self.rng.randint(1, len(parent1) - 1)
 
         for i in range(len(parent1)):
             if i < crossover_point:
@@ -457,7 +509,8 @@ class GeneticAlgorithm:
 
         Each waypoint is mutated with probability ``self.params.mutation_rate``.
         Mutation randomly scales the thrust magnitude by 0.8-1.2x and
-        randomizes the thrust direction.
+        randomizes the thrust direction.  A waypoint without thrust
+        (``thrust_n=None``) is treated as zero thrust.
 
         Args:
             trajectory: Input trajectory to mutate.
@@ -469,27 +522,23 @@ class GeneticAlgorithm:
         mutated = []
 
         for waypoint in trajectory:
-            if random.random() < self.params.mutation_rate:
+            if self.rng.random() < self.params.mutation_rate:
                 # Mutate thrust
-                thrust_mag = vector_magnitude(waypoint.thrust_n)
-                thrust_mag *= random.uniform(0.8, 1.2)
+                thrust_mag = (
+                    vector_magnitude(waypoint.thrust_n) if waypoint.thrust_n else 0.0
+                )
+                thrust_mag *= self.rng.uniform(0.8, 1.2)
                 thrust_mag = clamp(thrust_mag, 0, constraints.max_thrust_n)
 
-                thrust_dir = random.uniform(0, 2 * math.pi)
+                thrust_dir = self.rng.uniform(0, 2 * math.pi)
                 new_thrust = [
                     thrust_mag * math.cos(thrust_dir),
                     thrust_mag * math.sin(thrust_dir),
-                    random.uniform(-thrust_mag / 2, thrust_mag / 2),
+                    self.rng.uniform(-thrust_mag / 2, thrust_mag / 2),
                 ]
 
-                new_waypoint = TrajectoryWaypoint(
-                    time_s=waypoint.time_s,
-                    position_m=waypoint.position_m,
-                    velocity_ms=waypoint.velocity_ms,
-                    thrust_n=new_thrust,
-                    mass_kg=waypoint.mass_kg,
-                )
-                mutated.append(new_waypoint)
+                # Keep every other field (including acceleration_ms2)
+                mutated.append(dataclasses.replace(waypoint, thrust_n=new_thrust))
             else:
                 mutated.append(waypoint)
 
@@ -504,8 +553,9 @@ class GeneticAlgorithm:
         """Execute the full GA optimization loop.
 
         Algorithm:
-            1. Initialize population with random trajectories (seed with
-               initial guess at index 0).
+            1. Initialize the population with random thrust profiles on the
+               initial trajectory's time/position/velocity/mass structure
+               (the initial guess itself is individual 0).
             2. For each generation: evaluate fitness, apply elitism,
                tournament selection, crossover, and mutation.
             3. Stop on convergence (20 generations without improvement)
@@ -519,24 +569,41 @@ class GeneticAlgorithm:
 
         Returns:
             Optimization result with best trajectory and metrics.
+            ``converged`` is True when the run stopped because the best
+            cost stagnated, and ``iterations`` is the number of generations
+            actually evaluated.
+
+        Raises:
+            ValueError: If the population settings are inconsistent.
         """
-        import time
+        if self.params.population_size < 1:
+            raise ValueError("population_size must be at least 1")
+        if not 0 <= self.params.elite_size <= self.params.population_size:
+            raise ValueError("elite_size must be between 0 and population_size")
+        if not initial_trajectory:
+            raise ValueError("initial_trajectory must contain at least one waypoint")
 
         start_time = time.time()
 
         # Initialize population
         n_waypoints = len(initial_trajectory)
         self.population = [
-            self.random_trajectory(n_waypoints, constraints)
+            self.random_trajectory(
+                n_waypoints, constraints, template=initial_trajectory
+            )
             for _ in range(self.params.population_size)
         ]
         self.population[0] = initial_trajectory  # Include initial guess
+        tournament = min(3, self.params.population_size)
 
         best_cost = float("inf")
         best_trajectory = initial_trajectory
         generations_without_improvement = 0
+        generations_run = 0
+        converged = False
 
         for _generation in range(self.params.generations):
+            generations_run += 1
             # Evaluate fitness
             self.fitness_scores = [
                 evaluate_trajectory_cost(traj, objective, constraints)
@@ -557,7 +624,8 @@ class GeneticAlgorithm:
                 generations_without_improvement += 1
 
             # Check convergence
-            if generations_without_improvement > 20:
+            if generations_without_improvement > self.STAGNATION_LIMIT:
+                converged = True
                 break
 
             # Selection and reproduction
@@ -574,11 +642,11 @@ class GeneticAlgorithm:
             while len(new_population) < self.params.population_size:
                 # Tournament selection
                 parent1_idx = min(
-                    random.sample(range(len(self.population)), 3),
+                    self.rng.sample(range(len(self.population)), tournament),
                     key=lambda i: self.fitness_scores[i],
                 )
                 parent2_idx = min(
-                    random.sample(range(len(self.population)), 3),
+                    self.rng.sample(range(len(self.population)), tournament),
                     key=lambda i: self.fitness_scores[i],
                 )
 
@@ -586,10 +654,10 @@ class GeneticAlgorithm:
                 parent2 = self.population[parent2_idx]
 
                 # Crossover
-                if random.random() < self.params.crossover_rate:
+                if self.rng.random() < self.params.crossover_rate:
                     child = self.crossover(parent1, parent2)
                 else:
-                    child = parent1 if random.random() < 0.5 else parent2
+                    child = parent1 if self.rng.random() < 0.5 else parent2
 
                 # Mutation
                 child = self.mutate(child, constraints)
@@ -599,32 +667,15 @@ class GeneticAlgorithm:
             self.population = new_population
 
         computation_time = time.time() - start_time
-
-        # Calculate final metrics
-        delta_v_total = 0.0
-        fuel_mass = 0.0
-
-        for i in range(1, len(best_trajectory)):
-            if best_trajectory[i].thrust_n:
-                thrust_mag = vector_magnitude(best_trajectory[i].thrust_n)
-                dt = best_trajectory[i].time_s - best_trajectory[i - 1].time_s
-                if best_trajectory[i].mass_kg > 0:
-                    dv = thrust_mag / best_trajectory[i].mass_kg * dt
-                    delta_v_total += dv
-
-                    # Fuel consumption estimate
-                    if thrust_mag > 0:
-                        isp = 300.0
-                        dm = thrust_mag * dt / (isp * 9.80665)
-                        fuel_mass += dm
+        delta_v_total, fuel_mass = trajectory_delta_v_and_fuel(best_trajectory)
 
         return OptimizationResult(
             optimal_trajectory=best_trajectory,
             optimal_cost=best_cost,
             delta_v_total_ms=delta_v_total,
             fuel_mass_kg=fuel_mass,
-            converged=generations_without_improvement <= 20,
-            iterations=self.params.generations,
+            converged=converged,
+            iterations=generations_run,
             computation_time_s=computation_time,
             algorithm="Genetic Algorithm",
         )
@@ -660,16 +711,25 @@ class ParticleSwarmOptimizer:
         personal_best_scores: Best cost for each particle.
         global_best: Best position found by any particle.
         global_best_score: Best cost found by any particle.
+        best_score_history: Global best cost after each iteration.
+        rng: Random number source (the ``random`` module unless a seeded
+            ``random.Random`` is passed in).
     """
 
-    def __init__(self, params: ParticleSwarmParams):
+    #: Number of iterations over which the global best must improve by more
+    #: than ``convergence_tolerance`` to keep going.
+    CONVERGENCE_WINDOW = 10
+
+    def __init__(self, params: ParticleSwarmParams, rng: Any = None):
         self.params = params
+        self.rng = rng if rng is not None else random
         self.particles = []
         self.velocities = []
         self.personal_best = []
         self.personal_best_scores = []
         self.global_best = None
         self.global_best_score = float("inf")
+        self.best_score_history: list[float] = []
 
     def optimize(
         self,
@@ -682,7 +742,13 @@ class ParticleSwarmOptimizer:
         Each particle encodes a complete thrust profile as a flat vector
         of thrust components [Fx0, Fy0, Fz0, Fx1, ...].  The initial
         trajectory structure (times, positions, velocities, masses) is
-        preserved; only the thrust vectors are optimized.
+        preserved; only the thrust vectors are optimized.  Particle 0
+        starts at the initial trajectory's thrust profile; particle
+        positions are kept within +/- ``max_thrust_n`` per component.
+
+        The run stops early (``converged=True``) when the global best cost
+        improved by less than ``convergence_tolerance`` over the last
+        ``CONVERGENCE_WINDOW`` iterations.
 
         Args:
             initial_trajectory: Reference trajectory defining the
@@ -692,32 +758,48 @@ class ParticleSwarmOptimizer:
 
         Returns:
             Optimization result with the best trajectory found.
+
+        Raises:
+            ValueError: If the swarm settings are inconsistent.
         """
-        import time
+        if self.params.num_particles < 1:
+            raise ValueError("num_particles must be at least 1")
+        if self.params.max_iterations < 1:
+            raise ValueError("max_iterations must be at least 1")
+        if not initial_trajectory:
+            raise ValueError("initial_trajectory must contain at least one waypoint")
 
         start_time = time.time()
 
-        # Initialize particles (simplified - optimize thrust magnitudes)
         n_waypoints = len(initial_trajectory)
         n_dimensions = n_waypoints * 3  # 3 thrust components per waypoint
+        bound = constraints.max_thrust_n
 
-        # Initialize particles as thrust profiles
+        # Fresh state for every run (an optimizer instance may be reused)
         self.particles = []
         self.velocities = []
+        self.global_best = None
+        self.global_best_score = float("inf")
+        self.best_score_history = []
 
-        for _ in range(self.params.num_particles):
-            # Random thrust profile
-            particle = []
-            velocity = []
-
-            for _ in range(n_dimensions):
-                particle.append(
-                    random.uniform(-constraints.max_thrust_n, constraints.max_thrust_n)
-                )
-                velocity.append(random.uniform(-100, 100))
-
+        # Initialize particles as thrust profiles; particle 0 is the
+        # initial guess (missing thrust = zero).
+        initial_particle = []
+        for wp in initial_trajectory:
+            initial_particle.extend(
+                clamp(float(c), -bound, bound) for c in (wp.thrust_n or [0.0] * 3)
+            )
+        for k in range(self.params.num_particles):
+            if k == 0:
+                particle = list(initial_particle)
+            else:
+                particle = [
+                    self.rng.uniform(-bound, bound) for _ in range(n_dimensions)
+                ]
             self.particles.append(particle)
-            self.velocities.append(velocity)
+            self.velocities.append(
+                [self.rng.uniform(-100, 100) for _ in range(n_dimensions)]
+            )
 
         # Initialize personal bests
         self.personal_best = [p.copy() for p in self.particles]
@@ -725,8 +807,11 @@ class ParticleSwarmOptimizer:
 
         best_cost = float("inf")
         best_trajectory = initial_trajectory
+        converged = False
+        iterations_run = 0
 
-        for iteration in range(self.params.max_iterations):
+        for _iteration in range(self.params.max_iterations):
+            iterations_run += 1
             for i, particle in enumerate(self.particles):
                 # Convert particle to trajectory
                 trajectory = []
@@ -746,14 +831,9 @@ class ParticleSwarmOptimizer:
                         thrust = [t * scale for t in thrust]
 
                     # Use initial trajectory structure with new thrust
-                    waypoint = TrajectoryWaypoint(
-                        time_s=initial_trajectory[j].time_s,
-                        position_m=initial_trajectory[j].position_m,
-                        velocity_ms=initial_trajectory[j].velocity_ms,
-                        thrust_n=thrust,
-                        mass_kg=initial_trajectory[j].mass_kg,
+                    trajectory.append(
+                        dataclasses.replace(initial_trajectory[j], thrust_n=thrust)
                     )
-                    trajectory.append(waypoint)
 
                 # Evaluate fitness
                 cost = evaluate_trajectory_cost(trajectory, objective, constraints)
@@ -764,17 +844,35 @@ class ParticleSwarmOptimizer:
                     self.personal_best[i] = particle.copy()
 
                 # Update global best
-                if cost < self.global_best_score:
+                if cost < self.global_best_score or self.global_best is None:
                     self.global_best_score = cost
                     self.global_best = particle.copy()
                     best_cost = cost
                     best_trajectory = trajectory
 
+            self.best_score_history.append(self.global_best_score)
+
+            # Check convergence: improvement of the global best over the
+            # last CONVERGENCE_WINDOW iterations.
+            window = self.CONVERGENCE_WINDOW
+            if len(self.best_score_history) > window:
+                previous = self.best_score_history[-window - 1]
+                if math.isinf(self.global_best_score):
+                    # Cost is inf only for structurally invalid trajectories
+                    # (non-increasing times), which thrust cannot fix.
+                    break
+                if (
+                    previous - self.global_best_score
+                    < self.params.convergence_tolerance
+                ):
+                    converged = True
+                    break
+
             # Update particle velocities and positions using the PSO equations
             for i in range(len(self.particles)):
                 for j in range(n_dimensions):
                     # Random coefficients for stochastic exploration
-                    r1, r2 = random.random(), random.random()
+                    r1, r2 = self.rng.random(), self.rng.random()
 
                     # Cognitive term: attraction toward personal best position
                     cognitive = (
@@ -794,44 +892,21 @@ class ParticleSwarmOptimizer:
                         self.params.w * self.velocities[i][j] + cognitive + social
                     )
 
-                    # Position update: x = x + v
-                    self.particles[i][j] += self.velocities[i][j]
-
-            # Check convergence
-            if iteration > 10:
-                recent_scores = [self.global_best_score] * 10
-                if (
-                    max(recent_scores) - min(recent_scores)
-                    < self.params.convergence_tolerance
-                ):
-                    break
+                    # Position update: x = x + v, kept inside the search box
+                    self.particles[i][j] = clamp(
+                        self.particles[i][j] + self.velocities[i][j], -bound, bound
+                    )
 
         computation_time = time.time() - start_time
-
-        # Calculate final metrics
-        delta_v_total = 0.0
-        fuel_mass = 0.0
-
-        for i in range(1, len(best_trajectory)):
-            if best_trajectory[i].thrust_n:
-                thrust_mag = vector_magnitude(best_trajectory[i].thrust_n)
-                dt = best_trajectory[i].time_s - best_trajectory[i - 1].time_s
-                if best_trajectory[i].mass_kg > 0:
-                    dv = thrust_mag / best_trajectory[i].mass_kg * dt
-                    delta_v_total += dv
-
-                    if thrust_mag > 0:
-                        isp = 300.0
-                        dm = thrust_mag * dt / (isp * 9.80665)
-                        fuel_mass += dm
+        delta_v_total, fuel_mass = trajectory_delta_v_and_fuel(best_trajectory)
 
         return OptimizationResult(
             optimal_trajectory=best_trajectory,
             optimal_cost=best_cost,
             delta_v_total_ms=delta_v_total,
             fuel_mass_kg=fuel_mass,
-            converged=True,
-            iterations=iteration + 1,
+            converged=converged,
+            iterations=iterations_run,
             computation_time_s=computation_time,
             algorithm="Particle Swarm Optimization",
         )
@@ -842,155 +917,574 @@ class ParticleSwarmOptimizer:
 # ===========================================================================
 
 
+def _percentile(sorted_values: list[float], q: float) -> float:
+    """Linear-interpolation percentile (NumPy's default method) of sorted data."""
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    pos = (len(sorted_values) - 1) * q / 100.0
+    lo = math.floor(pos)
+    hi = min(lo + 1, len(sorted_values) - 1)
+    return sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * (pos - lo)
+
+
+def _summary(values: list[float], unit: str) -> dict[str, float]:
+    """Mean, sample std, min, max and the 2.5/97.5 percentiles of a sample."""
+    ordered = sorted(values)
+    return {
+        f"mean_{unit}": statistics.fmean(values),
+        f"std_{unit}": statistics.stdev(values),
+        f"min_{unit}": ordered[0],
+        f"max_{unit}": ordered[-1],
+        f"p2_5_{unit}": _percentile(ordered, 2.5),
+        f"p97_5_{unit}": _percentile(ordered, 97.5),
+    }
+
+
 def monte_carlo_uncertainty_analysis(
     nominal_trajectory: list[TrajectoryWaypoint],
     uncertainty_params: dict[str, dict[str, float]],
     n_samples: int = 1000,
+    rng: Any = None,
 ) -> dict[str, Any]:
     """Perform Monte Carlo uncertainty analysis on a trajectory.
 
-    Each sample perturbs the nominal trajectory by adding Gaussian noise
-    to position, velocity, and thrust vectors, then recomputes the
-    performance metrics.  Results include mean, standard deviation,
-    and 95% confidence intervals (mean +/- 1.96*sigma).
+    Each sample perturbs every waypoint of the nominal trajectory by
+    independent zero-mean Gaussian errors on each component of position,
+    velocity, and thrust, then recomputes the metrics.  No dynamics are
+    propagated: the delta-V dispersion comes from the thrust errors, and the
+    final position/velocity errors are the errors injected at the last
+    waypoint.  Results include mean, sample standard deviation, extremes and
+    empirical 95% intervals (2.5th-97.5th percentiles).
 
     Args:
         nominal_trajectory: Nominal (unperturbed) trajectory.
         uncertainty_params: Dictionary mapping parameter names to
             ``{"std": value}`` dictionaries specifying 1-sigma
-            uncertainties.  Supported keys: ``"position_m"``,
-            ``"velocity_ms"``, ``"thrust_n"``.
-        n_samples: Number of Monte Carlo samples to draw.
+            uncertainties per vector component.  Supported keys:
+            ``"position_m"``, ``"velocity_ms"``, ``"thrust_n"``.  A missing
+            key means no uncertainty in that quantity.
+        n_samples: Number of Monte Carlo samples to draw (at least 2).
+        rng: Optional random source (e.g. a seeded ``random.Random``);
+            defaults to the ``random`` module.
 
     Returns:
-        Dictionary with delta-V, flight time, and position error
-        statistics, plus 95% confidence intervals.
+        Dictionary with delta-V, flight time, final position and velocity
+        error statistics, plus 95% intervals.
     """
-    results = {
-        "delta_v_samples": [],
-        "final_position_samples": [],
-        "final_velocity_samples": [],
-        "flight_time_samples": [],
+    rng = rng if rng is not None else random
+    if n_samples < 2:
+        return {"error": "Insufficient data for statistics", "n_samples": n_samples}
+    if not nominal_trajectory:
+        return {"error": "nominal_trajectory is empty", "n_samples": n_samples}
+
+    unknown = set(uncertainty_params) - {"position_m", "velocity_ms", "thrust_n"}
+    if unknown:
+        raise ValueError(
+            f"Unsupported uncertainty parameters {sorted(unknown)}; expected "
+            "position_m, velocity_ms, thrust_n"
+        )
+    sigma = {
+        key: float(uncertainty_params.get(key, {"std": 0.0})["std"])
+        for key in ("position_m", "velocity_ms", "thrust_n")
     }
+    if any(not math.isfinite(s) or s < 0 for s in sigma.values()):
+        raise ValueError("uncertainty std values must be finite and non-negative")
+
+    delta_v_samples = []
+    flight_time_samples = []
+    final_pos_errors = []
+    final_vel_errors = []
+    nominal_dv, _ = trajectory_delta_v_and_fuel(nominal_trajectory)
 
     for _ in range(n_samples):
-        # Perturb parameters
         perturbed_trajectory = []
 
         for waypoint in nominal_trajectory:
-            # Apply uncertainties
-            pos_uncertainty = uncertainty_params.get("position_m", {"std": 100.0})[
-                "std"
-            ]
-            vel_uncertainty = uncertainty_params.get("velocity_ms", {"std": 10.0})[
-                "std"
-            ]
-            thrust_uncertainty = uncertainty_params.get("thrust_n", {"std": 50.0})[
-                "std"
-            ]
-
-            # Generate random perturbations
-            pos_perturbation = [random.gauss(0, pos_uncertainty) for _ in range(3)]
-            vel_perturbation = [random.gauss(0, vel_uncertainty) for _ in range(3)]
-            thrust_perturbation = [
-                random.gauss(0, thrust_uncertainty) for _ in range(3)
-            ]
-
-            perturbed_pos = [
-                waypoint.position_m[i] + pos_perturbation[i] for i in range(3)
-            ]
-            perturbed_vel = [
-                waypoint.velocity_ms[i] + vel_perturbation[i] for i in range(3)
-            ]
+            pos_err = [rng.gauss(0, sigma["position_m"]) for _ in range(3)]
+            vel_err = [rng.gauss(0, sigma["velocity_ms"]) for _ in range(3)]
             perturbed_thrust = (
-                [waypoint.thrust_n[i] + thrust_perturbation[i] for i in range(3)]
+                [c + rng.gauss(0, sigma["thrust_n"]) for c in waypoint.thrust_n]
                 if waypoint.thrust_n
                 else None
             )
-
-            perturbed_waypoint = TrajectoryWaypoint(
-                time_s=waypoint.time_s,
-                position_m=perturbed_pos,
-                velocity_ms=perturbed_vel,
-                thrust_n=perturbed_thrust,
-                mass_kg=waypoint.mass_kg,
+            perturbed_trajectory.append(
+                dataclasses.replace(
+                    waypoint,
+                    position_m=[
+                        p + e for p, e in zip(waypoint.position_m, pos_err, strict=True)
+                    ],
+                    velocity_ms=[
+                        v + e
+                        for v, e in zip(waypoint.velocity_ms, vel_err, strict=True)
+                    ],
+                    thrust_n=perturbed_thrust,
+                )
             )
-            perturbed_trajectory.append(perturbed_waypoint)
 
-        # Calculate metrics for this sample
-        total_delta_v = 0.0
-        for i in range(1, len(perturbed_trajectory)):
-            if perturbed_trajectory[i].thrust_n:
-                thrust_mag = vector_magnitude(perturbed_trajectory[i].thrust_n)
-                dt = perturbed_trajectory[i].time_s - perturbed_trajectory[i - 1].time_s
-                if perturbed_trajectory[i].mass_kg > 0:
-                    dv = thrust_mag / perturbed_trajectory[i].mass_kg * dt
-                    total_delta_v += dv
-
-        results["delta_v_samples"].append(total_delta_v)
-        results["final_position_samples"].append(perturbed_trajectory[-1].position_m)
-        results["final_velocity_samples"].append(perturbed_trajectory[-1].velocity_ms)
-        results["flight_time_samples"].append(
+        total_delta_v, _ = trajectory_delta_v_and_fuel(perturbed_trajectory)
+        delta_v_samples.append(total_delta_v)
+        flight_time_samples.append(
             perturbed_trajectory[-1].time_s - perturbed_trajectory[0].time_s
         )
+        # pos_err / vel_err still hold the errors drawn for the last waypoint
+        final_pos_errors.append(vector_magnitude(pos_err))
+        final_vel_errors.append(vector_magnitude(vel_err))
 
-    # Calculate statistics
-    import statistics
+    dv = _summary(delta_v_samples, "ms")
+    pos = _summary(final_pos_errors, "m")
+    return {
+        "n_samples": n_samples,
+        "uncertainty_std": sigma,
+        "nominal_delta_v_ms": nominal_dv,
+        "delta_v_statistics": dv,
+        "flight_time_statistics": _summary(flight_time_samples, "s"),
+        "position_error_statistics": pos,
+        "velocity_error_statistics": _summary(final_vel_errors, "ms"),
+        "confidence_intervals": {
+            # Empirical 2.5th-97.5th percentiles
+            "delta_v_95_ms": [dv["p2_5_ms"], dv["p97_5_ms"]],
+            "position_95_m": [pos["p2_5_m"], pos["p97_5_m"]],
+        },
+        "notes": [
+            "Errors are independent per waypoint and per component; no "
+            "dynamics are propagated",
+            "Final position/velocity errors are the magnitudes of the "
+            "errors injected at the last waypoint",
+        ],
+    }
 
+
+# ===========================================================================
+# Dictionary API used by the MCP optimization tools
+# ===========================================================================
+
+#: Upper bounds that keep a single tool call bounded in time and memory.
+MAX_WAYPOINTS = 100
+MAX_POPULATION = 200
+MAX_GENERATIONS = 500
+MAX_PARTICLES = 200
+MAX_PSO_ITERATIONS = 500
+MAX_MC_SAMPLES = 50_000
+#: Cap on (individuals x generations x waypoints) cost-function work.
+MAX_OPTIMIZER_WORK = 500_000
+#: Cap on (samples x waypoints) for Monte Carlo.
+MAX_MC_WORK = 250_000
+
+_OBJECTIVES = ("minimize_fuel", "minimize_time", "minimize_delta_v", "maximize_payload")
+
+
+def _vec3(value: Any, name: str) -> list[float]:
+    """Validate a 3-vector of finite numbers."""
+    if not isinstance(value, list | tuple) or len(value) != 3:
+        raise ValueError(f"{name} must be a list of 3 numbers")
     try:
-        delta_v_mean = statistics.mean(results["delta_v_samples"])
-        delta_v_std = statistics.stdev(results["delta_v_samples"])
+        out = [float(v) for v in value]
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be a list of 3 numbers") from None
+    if not all(math.isfinite(v) for v in out):
+        raise ValueError(f"{name} must be finite")
+    return out
 
-        flight_time_mean = statistics.mean(results["flight_time_samples"])
-        flight_time_std = statistics.stdev(results["flight_time_samples"])
 
-        # Final position statistics
-        final_pos_errors = [
-            vector_magnitude(
-                [
-                    results["final_position_samples"][i][j]
-                    - nominal_trajectory[-1].position_m[j]
-                    for j in range(3)
-                ]
+def trajectory_from_dicts(
+    waypoints: Any, name: str = "trajectory"
+) -> list[TrajectoryWaypoint]:
+    """Build and validate a trajectory from a list of waypoint dicts.
+
+    Each waypoint is ``{"time_s": float, "position_m": [x, y, z],
+    "velocity_ms": [vx, vy, vz], "thrust_n": [Fx, Fy, Fz] (optional),
+    "mass_kg": float (optional, default 1000), "acceleration_ms2": [..]
+    (optional)}``.  Times must be strictly increasing.
+
+    Raises:
+        ValueError: On missing keys, bad values or too many waypoints.
+    """
+    if not isinstance(waypoints, list) or not waypoints:
+        raise ValueError(f"{name} must be a non-empty list of waypoint dicts")
+    if len(waypoints) > MAX_WAYPOINTS:
+        raise ValueError(
+            f"{name} has {len(waypoints)} waypoints; at most {MAX_WAYPOINTS}"
+        )
+    allowed = {
+        "time_s",
+        "position_m",
+        "velocity_ms",
+        "thrust_n",
+        "mass_kg",
+        "acceleration_ms2",
+    }
+    out = []
+    for i, wp in enumerate(waypoints):
+        if not isinstance(wp, dict):
+            raise ValueError(f"{name}[{i}] must be a dict")
+        missing = {"time_s", "position_m", "velocity_ms"} - set(wp)
+        if missing:
+            raise ValueError(f"{name}[{i}] is missing {sorted(missing)}")
+        extra = set(wp) - allowed
+        if extra:
+            raise ValueError(f"{name}[{i}] has unknown keys {sorted(extra)}")
+        try:
+            t = float(wp["time_s"])
+            mass = float(wp.get("mass_kg", 1000.0))
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"{name}[{i}].time_s and mass_kg must be numbers"
+            ) from None
+        if not math.isfinite(t):
+            raise ValueError(f"{name}[{i}].time_s must be finite")
+        if not (math.isfinite(mass) and mass > 0):
+            raise ValueError(f"{name}[{i}].mass_kg must be positive")
+        if out and t <= out[-1].time_s:
+            raise ValueError(f"{name} times must be strictly increasing (waypoint {i})")
+        out.append(
+            TrajectoryWaypoint(
+                time_s=t,
+                position_m=_vec3(wp["position_m"], f"{name}[{i}].position_m"),
+                velocity_ms=_vec3(wp["velocity_ms"], f"{name}[{i}].velocity_ms"),
+                acceleration_ms2=(
+                    _vec3(wp["acceleration_ms2"], f"{name}[{i}].acceleration_ms2")
+                    if wp.get("acceleration_ms2") is not None
+                    else None
+                ),
+                thrust_n=(
+                    _vec3(wp["thrust_n"], f"{name}[{i}].thrust_n")
+                    if wp.get("thrust_n") is not None
+                    else None
+                ),
+                mass_kg=mass,
             )
-            for i in range(n_samples)
-        ]
+        )
+    return out
 
-        pos_error_mean = statistics.mean(final_pos_errors)
-        pos_error_std = statistics.stdev(final_pos_errors)
 
-        return {
-            "n_samples": n_samples,
-            "delta_v_statistics": {
-                "mean_ms": delta_v_mean,
-                "std_ms": delta_v_std,
-                "min_ms": min(results["delta_v_samples"]),
-                "max_ms": max(results["delta_v_samples"]),
-            },
-            "flight_time_statistics": {
-                "mean_s": flight_time_mean,
-                "std_s": flight_time_std,
-                "min_s": min(results["flight_time_samples"]),
-                "max_s": max(results["flight_time_samples"]),
-            },
-            "position_error_statistics": {
-                "mean_m": pos_error_mean,
-                "std_m": pos_error_std,
-                "max_m": max(final_pos_errors),
-            },
-            "confidence_intervals": {
-                "delta_v_95_ms": [
-                    delta_v_mean - 1.96 * delta_v_std,
-                    delta_v_mean + 1.96 * delta_v_std,
-                ],
-                "position_95_m": [
-                    pos_error_mean - 1.96 * pos_error_std,
-                    pos_error_mean + 1.96 * pos_error_std,
-                ],
-            },
+def _json_safe(obj: Any) -> Any:
+    """Recursively replace non-finite floats (inf/NaN) with None."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list | tuple):
+        return [_json_safe(v) for v in obj]
+    return obj
+
+
+def _parse_problem(
+    problem: dict,
+) -> tuple[list[TrajectoryWaypoint], OptimizationObjective, OptimizationConstraints]:
+    """Parse the ``optimization_problem`` dict (see the tool docstrings)."""
+    if not isinstance(problem, dict):
+        raise ValueError("optimization_problem must be a dict")
+    extra = set(problem) - {"trajectory", "objective", "constraints"}
+    if extra:
+        raise ValueError(f"optimization_problem has unknown keys {sorted(extra)}")
+    if "trajectory" not in problem:
+        raise ValueError(
+            "optimization_problem needs a 'trajectory': a list of waypoints "
+            "{time_s, position_m, velocity_ms, thrust_n?, mass_kg?}"
+        )
+    trajectory = trajectory_from_dicts(problem["trajectory"])
+    if len(trajectory) < 2:
+        raise ValueError("trajectory needs at least 2 waypoints")
+
+    objective = problem.get("objective", "minimize_fuel")
+    if isinstance(objective, dict):
+        objective = objective.get("type", "minimize_fuel")
+    if objective not in _OBJECTIVES:
+        raise ValueError(
+            f"objective must be one of {list(_OBJECTIVES)}, got {objective!r}"
+        )
+
+    c = dict(problem.get("constraints") or {})
+    fields = {f.name for f in dataclasses.fields(OptimizationConstraints)}
+    extra = set(c) - fields
+    if extra:
+        raise ValueError(
+            f"constraints has unknown keys {sorted(extra)}; expected {sorted(fields)}"
+        )
+    if "time_bounds_s" in c:
+        c["time_bounds_s"] = tuple(float(v) for v in c["time_bounds_s"])
+        if len(c["time_bounds_s"]) != 2:
+            raise ValueError("constraints.time_bounds_s must be [start, end]")
+    for key in fields - {"time_bounds_s"}:
+        if key in c:
+            c[key] = float(c[key])
+            if not math.isfinite(c[key]) or c[key] < 0:
+                raise ValueError(f"constraints.{key} must be finite and non-negative")
+    return (
+        trajectory,
+        OptimizationObjective(type=objective),
+        OptimizationConstraints(**c),
+    )
+
+
+def _take(params: dict, key: str, aliases: tuple[str, ...], default: Any) -> Any:
+    """Pop ``key`` (or one of its aliases) from ``params``."""
+    for k in (key, *aliases):
+        if k in params:
+            return params.pop(k)
+    return default
+
+
+def _bounded_int(value: Any, name: str, lo: int, hi: int) -> int:
+    """Validate an integer parameter within [lo, hi]."""
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or value != int(value)
+    ):
+        raise ValueError(f"{name} must be an integer")
+    value = int(value)
+    if not lo <= value <= hi:
+        raise ValueError(f"{name} must be between {lo} and {hi}, got {value}")
+    return value
+
+
+def _bounded_float(value: Any, name: str, lo: float, hi: float) -> float:
+    """Validate a float parameter within [lo, hi]."""
+    value = float(value)
+    if not (math.isfinite(value) and lo <= value <= hi):
+        raise ValueError(f"{name} must be between {lo} and {hi}, got {value}")
+    return value
+
+
+def _make_rng(seed: Any) -> Any:
+    """A seeded ``random.Random`` or the shared ``random`` module."""
+    if seed is None:
+        return random
+    return random.Random(_bounded_int(seed, "seed", 0, 2**63 - 1))
+
+
+def _result_to_dict(
+    result: OptimizationResult,
+    initial: list[TrajectoryWaypoint],
+    objective: OptimizationObjective,
+    constraints: OptimizationConstraints,
+    parameters: dict,
+) -> dict[str, Any]:
+    """Serialise an OptimizationResult for the tool layer."""
+    initial_cost = evaluate_trajectory_cost(initial, objective, constraints)
+    initial_dv, initial_fuel = trajectory_delta_v_and_fuel(initial)
+    return _json_safe(
+        {
+            "algorithm": result.algorithm,
+            "objective": objective.type,
+            "parameters": parameters,
+            "converged": result.converged,
+            "iterations": result.iterations,
+            "optimal_cost": result.optimal_cost,
+            "initial_cost": initial_cost,
+            "delta_v_total_ms": result.delta_v_total_ms,
+            "fuel_mass_kg": result.fuel_mass_kg,
+            "initial_delta_v_ms": initial_dv,
+            "initial_fuel_mass_kg": initial_fuel,
+            "computation_time_s": result.computation_time_s,
+            "optimal_trajectory": [
+                dataclasses.asdict(wp) for wp in result.optimal_trajectory
+            ],
+            "notes": [
+                "Only thrust vectors are optimised; waypoint times, positions, "
+                "velocities and masses are kept from the input trajectory",
+                "Cost = objective + 1000 x quadratic constraint penalties; "
+                "fuel uses Isp = 300 s",
+            ],
         }
-    except statistics.StatisticsError:
-        return {"error": "Insufficient data for statistics", "n_samples": n_samples}
+    )
+
+
+def _check_work(units: int, cap: int, what: str) -> None:
+    """Reject runs whose total work exceeds ``cap``."""
+    if units > cap:
+        raise ValueError(
+            f"{what} = {units} exceeds the limit of {cap}; reduce the run size"
+        )
+
+
+def run_genetic_algorithm(problem: dict, params: dict | None = None) -> dict[str, Any]:
+    """Run the GA on an ``optimization_problem`` dict and return a JSON-safe dict.
+
+    Args:
+        problem: ``{"trajectory": [...], "objective": str, "constraints": {...}}``.
+        params: Optional GA settings: population_size (3-200, default 50),
+            generations (1-500, default 100), mutation_rate (0-1, default
+            0.1), crossover_rate (0-1, default 0.8), elite_size (default 5),
+            seed (int, optional).
+
+    Raises:
+        ValueError: On invalid input or a run larger than the limits.
+    """
+    trajectory, objective, constraints = _parse_problem(problem)
+    p = dict(params or {})
+    population = _bounded_int(
+        _take(p, "population_size", ("population",), 50),
+        "population_size",
+        3,
+        MAX_POPULATION,
+    )
+    generations = _bounded_int(
+        _take(p, "generations", ("max_generations",), 100),
+        "generations",
+        1,
+        MAX_GENERATIONS,
+    )
+    mutation = _bounded_float(
+        _take(p, "mutation_rate", (), 0.1), "mutation_rate", 0.0, 1.0
+    )
+    crossover = _bounded_float(
+        _take(p, "crossover_rate", (), 0.8), "crossover_rate", 0.0, 1.0
+    )
+    elite = _bounded_int(
+        _take(p, "elite_size", (), min(5, population)), "elite_size", 0, population
+    )
+    seed = _take(p, "seed", (), None)
+    if p:
+        raise ValueError(f"Unknown GA parameters {sorted(p)}")
+    _check_work(
+        population * generations * len(trajectory),
+        MAX_OPTIMIZER_WORK,
+        "population_size x generations x waypoints",
+    )
+
+    ga_params = GeneticAlgorithmParams(
+        population_size=population,
+        generations=generations,
+        mutation_rate=mutation,
+        crossover_rate=crossover,
+        elite_size=elite,
+    )
+    result = GeneticAlgorithm(ga_params, rng=_make_rng(seed)).optimize(
+        trajectory, objective, constraints
+    )
+    return _result_to_dict(
+        result,
+        trajectory,
+        objective,
+        constraints,
+        {**dataclasses.asdict(ga_params), "seed": seed},
+    )
+
+
+def run_particle_swarm(problem: dict, params: dict | None = None) -> dict[str, Any]:
+    """Run PSO on an ``optimization_problem`` dict and return a JSON-safe dict.
+
+    Args:
+        problem: ``{"trajectory": [...], "objective": str, "constraints": {...}}``.
+        params: Optional PSO settings: num_particles / n_particles (1-200,
+            default 30), max_iterations / iterations (1-500, default 100),
+            w (0-2, default 0.7), c1 / c2 (0-4, default 1.5),
+            convergence_tolerance (default 1e-6), seed (int, optional).
+
+    Raises:
+        ValueError: On invalid input or a run larger than the limits.
+    """
+    trajectory, objective, constraints = _parse_problem(problem)
+    p = dict(params or {})
+    particles = _bounded_int(
+        _take(p, "num_particles", ("n_particles", "swarm_size"), 30),
+        "num_particles",
+        1,
+        MAX_PARTICLES,
+    )
+    iterations = _bounded_int(
+        _take(p, "max_iterations", ("iterations",), 100),
+        "max_iterations",
+        1,
+        MAX_PSO_ITERATIONS,
+    )
+    w = _bounded_float(_take(p, "w", ("inertia_weight",), 0.7), "w", 0.0, 2.0)
+    c1 = _bounded_float(_take(p, "c1", (), 1.5), "c1", 0.0, 4.0)
+    c2 = _bounded_float(_take(p, "c2", (), 1.5), "c2", 0.0, 4.0)
+    tol = _bounded_float(
+        _take(p, "convergence_tolerance", (), 1e-6), "convergence_tolerance", 0.0, 1e12
+    )
+    seed = _take(p, "seed", (), None)
+    if p:
+        raise ValueError(f"Unknown PSO parameters {sorted(p)}")
+    _check_work(
+        particles * iterations * len(trajectory),
+        MAX_OPTIMIZER_WORK,
+        "num_particles x max_iterations x waypoints",
+    )
+
+    pso_params = ParticleSwarmParams(
+        num_particles=particles,
+        max_iterations=iterations,
+        w=w,
+        c1=c1,
+        c2=c2,
+        convergence_tolerance=tol,
+    )
+    result = ParticleSwarmOptimizer(pso_params, rng=_make_rng(seed)).optimize(
+        trajectory, objective, constraints
+    )
+    return _result_to_dict(
+        result,
+        trajectory,
+        objective,
+        constraints,
+        {**dataclasses.asdict(pso_params), "seed": seed},
+    )
+
+
+def run_monte_carlo(
+    nominal_trajectory: dict,
+    uncertainty_parameters: dict,
+    n_samples: int = 1000,
+    options: dict | None = None,
+) -> dict[str, Any]:
+    """Monte Carlo dispersion of a trajectory given as dicts.
+
+    Args:
+        nominal_trajectory: ``{"trajectory": [waypoint dicts]}`` (see
+            :func:`trajectory_from_dicts`).
+        uncertainty_parameters: ``{"position_m": {"std": s}, "velocity_ms":
+            {"std": s}, "thrust_n": {"std": s}}``; a bare number is accepted
+            in place of ``{"std": s}``.  Missing keys mean no uncertainty.
+        n_samples: Number of samples (2-50,000).
+        options: Optional ``{"seed": int}``.
+
+    Raises:
+        ValueError: On invalid input or a run larger than the limits.
+    """
+    if (
+        not isinstance(nominal_trajectory, dict)
+        or "trajectory" not in nominal_trajectory
+    ):
+        raise ValueError(
+            "nominal_trajectory must be {'trajectory': [waypoints]} with waypoints "
+            "{time_s, position_m, velocity_ms, thrust_n?, mass_kg?}"
+        )
+    extra = set(nominal_trajectory) - {"trajectory"}
+    if extra:
+        raise ValueError(f"nominal_trajectory has unknown keys {sorted(extra)}")
+    trajectory = trajectory_from_dicts(nominal_trajectory["trajectory"])
+    n_samples = _bounded_int(n_samples, "n_samples", 2, MAX_MC_SAMPLES)
+    _check_work(n_samples * len(trajectory), MAX_MC_WORK, "n_samples x waypoints")
+
+    if not isinstance(uncertainty_parameters, dict):
+        raise ValueError("uncertainty_parameters must be a dict")
+    sigma = {}
+    for key, value in uncertainty_parameters.items():
+        if isinstance(value, dict):
+            if set(value) != {"std"}:
+                raise ValueError(
+                    f"uncertainty_parameters.{key} must be {{'std': value}}"
+                )
+            sigma[key] = {"std": float(value["std"])}
+        else:
+            sigma[key] = {"std": float(value)}
+
+    opts = dict(options or {})
+    seed = opts.pop("seed", None)
+    if opts:
+        raise ValueError(f"Unknown analysis_options {sorted(opts)}; supported: seed")
+
+    result = monte_carlo_uncertainty_analysis(
+        trajectory, sigma, n_samples, rng=_make_rng(seed)
+    )
+    if "error" in result:
+        raise ValueError(result["error"])
+    result["seed"] = seed
+    return _json_safe(result)
 
 
 # Update availability

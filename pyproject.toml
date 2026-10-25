@@ -1,6 +1,9 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+# The trajectory / orbital-mechanics core is a Rust extension
+# (aerospace_mcp._native, sources in rust/) built with maturin + PyO3.
+# Building from source needs a Rust toolchain (https://rustup.rs).
+requires = ["maturin>=1.9.4,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "aerospace-mcp"
@@ -20,6 +23,12 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering",
 ]
@@ -30,14 +39,22 @@ dependencies = [
     "openap>=1.3.0",
     "airportsdata>=20231201",
     "geographiclib>=2.0",
+    # Used directly (vectorised atmosphere/aero/propellers, Kalman filter,
+    # LQR via scipy.linalg); previously only pulled in transitively by openap.
+    "numpy>=1.26",
+    "scipy>=1.11",
     "pydantic>=2.0.0",
     "fastmcp>=2.11.3",
     "uvloop>=0.19.0; sys_platform != 'win32'",
-    "litellm>=1.76.1",
     "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
+# LLM agent tools (LLM_TOOLS_ENABLED=true); kept optional because LiteLLM
+# roughly doubles the install size.
+llm = [
+    "litellm>=1.76.1",
+]
 dev = [
     "pytest>=7.4.0",
     "httpx>=0.25.0",
@@ -60,7 +77,8 @@ rockets = [
     # "rocketcea>=1.1.0",  # May not be available on all platforms
 ]
 space = [
-    "poliastro>=0.17.0",
+    # Lambert / orbit propagation are native (rust/); poliastro (archived
+    # upstream) is no longer used.
     "astropy>=5.0",
     "spiceypy>=5.0.0",
     "skyfield>=1.45",
@@ -72,7 +90,6 @@ trajopt = [
     # "casadi>=3.6.0",
 ]
 gnc = [
-    "filterpy>=1.4.5",
     "control>=0.9.0",
 ]
 all = [
@@ -81,7 +98,6 @@ all = [
     # "machupx>=2.0.0",  # Not available on PyPI
     "rocketpy>=1.0.0",
     # "rocketcea>=1.1.0",  # May not be available on all platforms
-    "poliastro>=0.17.0",
     "astropy>=5.0",
     "spiceypy>=5.0.0",
     "skyfield>=1.45",
@@ -89,8 +105,8 @@ all = [
     # "openmdao>=3.0",
     # "dymos>=1.0",
     # "casadi>=3.6.0",
-    "filterpy>=1.4.5",
     "control>=0.9.0",
+    "litellm>=1.76.1",
 ]
 
 [project.scripts]
@@ -103,24 +119,33 @@ Homepage = "https://github.com/cheesejaguar/aerospace-mcp"
 Repository = "https://github.com/cheesejaguar/aerospace-mcp"
 Issues = "https://github.com/cheesejaguar/aerospace-mcp/issues"
 
-# Hatchling configuration
-[tool.hatch.build.targets.wheel]
-packages = ["app", "aerospace_mcp"]
-
-[tool.hatch.build.targets.sdist]
+# Maturin configuration: mixed Rust/Python project. The wheel ships the
+# aerospace_mcp and app packages plus the compiled aerospace_mcp._native.
+[tool.maturin]
+manifest-path = "rust/Cargo.toml"
+module-name = "aerospace_mcp._native"
+python-source = "."
+python-packages = ["app"]
 include = [
-    "/app",
-    "/aerospace_mcp",
-    "/tests",
-    "/docs",
-    "/skills",
-    "*.md",
-    "*.toml",
-    "LICENSE",
+    { path = "LICENSE", format = "sdist" },
+    { path = "tests/**/*", format = "sdist" },
+    { path = "docs/**/*", format = "sdist" },
+    { path = "skills/**/*", format = "sdist" },
+]
+exclude = [
+    "**/__pycache__/**",
+    "**/*.pyc",
 ]
 
 # UV configuration
 [tool.uv]
+# Rebuild the native extension (maturin) whenever the Rust sources change.
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "rust/Cargo.toml" },
+    { file = "rust/Cargo.lock" },
+    { file = "rust/src/**/*.rs" },
+]
 dev-dependencies = [
     "pytest>=7.4.0",
     "httpx>=0.25.0",

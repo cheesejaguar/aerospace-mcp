@@ -44,6 +44,45 @@ MU_BODIES = {
     "jupiter": 1.26686534e17,  # m^3/s^2 -- Jupiter
 }
 
+# Sampling limits for propagate_orbit_j2 / calculate_ground_track output:
+# a week at 10 s steps is 60k states (17 MB of JSON, millions of tokens), so
+# these tools return evenly spaced samples instead of every state.
+DEFAULT_MAX_POINTS = 200
+MIN_POINTS = 2
+MAX_POINTS = 5000
+
+
+def _vector(value) -> list[float]:
+    """Accept ``[x, y, z]`` or ``{"x": ..., "y": ..., "z": ...}``."""
+    if isinstance(value, dict):
+        return [float(value["x"]), float(value["y"]), float(value["z"])]
+    return [float(v) for v in value]
+
+
+def _initial_state(orbital_state: dict):
+    """Build a StateVector from a state-vector dict or an orbital-elements dict.
+
+    State vectors use ``position_m`` / ``velocity_ms`` (lists or x/y/z dicts,
+    as returned by ``elements_to_state_vector``); anything else is treated as
+    classical elements (``semi_major_axis_m``, ``eccentricity``, ...).
+    """
+    from ..integrations.orbits import (
+        OrbitElements,
+        StateVector,
+        elements_to_state_vector,
+    )
+
+    epoch = orbital_state.get("epoch_utc", "2000-01-01T12:00:00")
+    if "position_m" in orbital_state:
+        return StateVector(
+            position_m=_vector(orbital_state["position_m"]),
+            velocity_ms=_vector(orbital_state["velocity_ms"]),
+            epoch_utc=epoch,
+            frame=orbital_state.get("frame", "J2000"),
+        )
+    elements = {k: v for k, v in orbital_state.items() if k != "epoch_utc"}
+    return elements_to_state_vector(OrbitElements(**elements, epoch_utc=epoch))
+
 
 def lambert_problem_solver(
     r1_m: list[float],
@@ -77,72 +116,31 @@ def lambert_problem_solver(
     try:
         mu = MU_BODIES.get(central_body.lower(), MU_EARTH)
 
-        # Try to use poliastro if available for accurate solution
+        from ..integrations.orbits import solve_lambert
+
         try:
-            import numpy as np
-            from astropy import units as u
-            from poliastro.iod import izzo
-
-            r1_arr = np.array(r1_m)
-            r2_arr = np.array(r2_m)
-
-            # Solve Lambert's problem using Izzo's algorithm
-            v1_solutions, v2_solutions = izzo.lambert(
-                k=mu * u.m**3 / u.s**2,
-                r0=r1_arr * u.m,
-                r=r2_arr * u.m,
-                tof=tof_s * u.s,
-                M=num_revolutions,
+            solution = solve_lambert(
+                r1_m,
+                r2_m,
+                tof_s,
+                mu,
                 prograde=direction == "prograde",
+                revolutions=num_revolutions,
+            )
+        except (ValueError, RuntimeError) as e:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "v1_ms": [0, 0, 0],
+                    "v2_ms": [0, 0, 0],
+                },
+                indent=2,
             )
 
-            # Get first solution - handle both single solution and array of solutions
-            # poliastro may return a single Quantity or a tuple of Quantities
-            if hasattr(v1_solutions, "__len__") and not isinstance(
-                v1_solutions.value, int | float
-            ):
-                # It's an array-like with multiple elements
-                if len(v1_solutions.shape) > 1:
-                    # Multiple solutions, take first
-                    v1 = v1_solutions[0].to(u.m / u.s).value.tolist()
-                    v2 = v2_solutions[0].to(u.m / u.s).value.tolist()
-                else:
-                    # Single solution as 1D array
-                    v1 = v1_solutions.to(u.m / u.s).value.tolist()
-                    v2 = v2_solutions.to(u.m / u.s).value.tolist()
-            else:
-                # Single scalar (shouldn't happen for velocity vectors)
-                v1 = v1_solutions.to(u.m / u.s).value.tolist()
-                v2 = v2_solutions.to(u.m / u.s).value.tolist()
-
-            # Ensure v1 and v2 are lists
-            if not isinstance(v1, list):
-                v1 = [float(v1)] if isinstance(v1, int | float) else list(v1)
-            if not isinstance(v2, list):
-                v2 = [float(v2)] if isinstance(v2, int | float) else list(v2)
-
-            implementation = "poliastro (Izzo algorithm)"
-
-        except ImportError:
-            # Fallback to manual implementation
-            from ..integrations.orbits import lambert_solver_simple
-
-            result = lambert_solver_simple(r1_m, r2_m, tof_s, mu)
-
-            if not result.get("feasible", True):
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": result.get("reason", "Transfer not feasible"),
-                        "v1_ms": [0, 0, 0],
-                        "v2_ms": [0, 0, 0],
-                    },
-                    indent=2,
-                )
-
-            v1 = result.get("v1_ms", [0, 0, 0])
-            v2 = result.get("v2_ms", [0, 0, 0])
-            implementation = "manual (simplified)"
+        v1 = solution["v1_ms"]
+        v2 = solution["v2_ms"]
+        implementation = "native Izzo (2015) solver"
 
         # Calculate delta-V magnitudes
         def vec_mag(v):
@@ -186,19 +184,8 @@ def lambert_problem_solver(
         i_rad = math.acos(max(-1, min(1, h[2] / h_mag))) if h_mag > 0 else 0
         i_deg = math.degrees(i_rad)
 
-        # Transfer angle
-        cos_dnu = sum(r1_m[i] * r2_m[i] for i in range(3)) / (r1_mag * r2_mag)
-        cos_dnu = max(-1, min(1, cos_dnu))
-        transfer_angle_deg = math.degrees(math.acos(cos_dnu))
-
-        # Determine if short or long way
-        cross = [
-            r1_m[1] * r2_m[2] - r1_m[2] * r2_m[1],
-            r1_m[2] * r2_m[0] - r1_m[0] * r2_m[2],
-            r1_m[0] * r2_m[1] - r1_m[1] * r2_m[0],
-        ]
-        if cross[2] < 0:
-            transfer_angle_deg = 360 - transfer_angle_deg
+        # Transfer angle in the direction of motion (0-360 deg)
+        transfer_angle_deg = solution["transfer_angle_deg"]
 
         # Orbital period from Kepler's third law: T = 2*pi * sqrt(a^3 / mu)
         # Only valid for elliptical orbits (e < 1, a > 0).
@@ -344,7 +331,12 @@ def state_vector_to_elements(state_vector: dict) -> str:
             state_vector_to_elements as _state_to_elements,
         )
 
-        state = StateVector(**state_vector)
+        state = StateVector(
+            position_m=_vector(state_vector["position_m"]),
+            velocity_ms=_vector(state_vector["velocity_ms"]),
+            epoch_utc=state_vector.get("epoch_utc", "2000-01-01T12:00:00"),
+            frame=state_vector.get("frame", "J2000"),
+        )
         result = _state_to_elements(state)
 
         return json.dumps(
@@ -353,7 +345,7 @@ def state_vector_to_elements(state_vector: dict) -> str:
                 "eccentricity": result.eccentricity,
                 "inclination_deg": result.inclination_deg,
                 "raan_deg": result.raan_deg,
-                "arg_perigee_deg": result.arg_perigee_deg,
+                "arg_periapsis_deg": result.arg_periapsis_deg,
                 "true_anomaly_deg": result.true_anomaly_deg,
                 "epoch_utc": result.epoch_utc,
             },
@@ -367,28 +359,80 @@ def state_vector_to_elements(state_vector: dict) -> str:
         return f"State vector to elements error: {str(e)}"
 
 
+def _check_max_points(max_points: int) -> None:
+    """Validate the ``max_points`` sampling limit of the trajectory tools."""
+    if (
+        isinstance(max_points, bool)
+        or not isinstance(max_points, int)
+        or not MIN_POINTS <= max_points <= MAX_POINTS
+    ):
+        raise ValueError(
+            f"max_points must be an integer between {MIN_POINTS} and {MAX_POINTS}"
+        )
+
+
+def _state_json(state) -> dict:
+    return {
+        "epoch_utc": state.epoch_utc,
+        "position_m": state.position_m,
+        "velocity_ms": state.velocity_ms,
+    }
+
+
 def propagate_orbit_j2(
-    initial_state: dict, propagation_time_s: float, time_step_s: float = 60.0
+    initial_state: dict,
+    propagation_time_s: float,
+    time_step_s: float = 60.0,
+    max_points: int = DEFAULT_MAX_POINTS,
 ) -> str:
     """Propagate orbit with J2 perturbations using numerical integration.
 
     Args:
-        initial_state: Initial orbital state (elements or state vector)
+        initial_state: Initial orbital state: a state vector (``position_m``,
+            ``velocity_ms``, optional ``epoch_utc``) or classical elements
         propagation_time_s: Propagation time in seconds
         time_step_s: Integration time step in seconds
+        max_points: Maximum number of states to return (2-5000, default
+            200), evenly spaced and always including the first and last.
+            Integration always uses every step; this only thins the output.
 
     Returns:
-        JSON string with propagated state vectors at each time step.
+        Compact JSON with the initial and final states, the number of
+        integration states, and up to ``max_points`` sampled states (each
+        with ``elapsed_s`` since the start).
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
-        from ..integrations.orbits import propagate_orbit_j2 as _propagate
+        from ..integrations.orbits import propagate_orbit_j2_sampled as _propagate
 
-        result = _propagate(initial_state, propagation_time_s, time_step_s)
+        _check_max_points(max_points)
+        num_states, samples = _propagate(
+            _initial_state(initial_state),
+            propagation_time_s,
+            time_step_s,
+            max_points,
+        )
 
-        return json.dumps(result, indent=2)
+        # Compact separators: these outputs can hold thousands of states.
+        return json.dumps(
+            {
+                "num_states": num_states,
+                "time_step_s": time_step_s,
+                "propagation_time_s": propagation_time_s,
+                "reference_frame": samples[0][1].frame,
+                "initial_state": _state_json(samples[0][1]),
+                "final_state": _state_json(samples[-1][1]),
+                "max_points": max_points,
+                "num_samples": len(samples),
+                "states": [
+                    {"elapsed_s": t, **_state_json(state)} for t, state in samples
+                ],
+            },
+            separators=(",", ":"),
+            allow_nan=False,
+        )
 
     except ImportError:
         return "Orbit propagation not available - install orbital packages"
@@ -398,27 +442,59 @@ def propagate_orbit_j2(
 
 
 def calculate_ground_track(
-    orbital_state: dict, duration_s: float, time_step_s: float = 60.0
+    orbital_state: dict,
+    duration_s: float,
+    time_step_s: float = 60.0,
+    max_points: int = DEFAULT_MAX_POINTS,
 ) -> str:
     """Calculate ground track from orbital state vectors.
 
     Args:
-        orbital_state: Orbital state (elements or state vector)
+        orbital_state: Orbital state: a state vector (``position_m``,
+            ``velocity_ms``, optional ``epoch_utc``) or classical elements
         duration_s: Duration for ground track calculation in seconds
         time_step_s: Time step for ground track points in seconds
+        max_points: Maximum number of ground track points to return (2-5000,
+            default 200), evenly spaced and always including the first and
+            last. The extents are computed over every point.
 
     Returns:
-        JSON string with ground track latitude/longitude coordinates.
+        Compact JSON with the total number of points, latitude / longitude /
+        altitude extents, and up to ``max_points`` sampled points.
 
     Raises:
         No exceptions are raised directly; errors are returned as formatted strings.
     """
     try:
-        from ..integrations.orbits import calculate_ground_track as _ground_track
+        from ..integrations.orbits import ground_track_sampled as _ground_track
 
-        result = _ground_track(orbital_state, duration_s, time_step_s)
+        _check_max_points(max_points)
+        num_points, extents, samples = _ground_track(
+            _initial_state(orbital_state), duration_s, time_step_s, max_points
+        )
 
-        return json.dumps(result, indent=2)
+        return json.dumps(
+            {
+                "num_points": num_points,
+                "time_step_s": time_step_s,
+                "duration_s": duration_s,
+                "extents": extents,
+                "max_points": max_points,
+                "num_samples": len(samples),
+                "ground_track": [
+                    {
+                        "elapsed_s": t,
+                        "time_utc": p.time_utc,
+                        "latitude_deg": p.latitude_deg,
+                        "longitude_deg": p.longitude_deg,
+                        "altitude_m": p.altitude_m,
+                    }
+                    for t, p in samples
+                ],
+            },
+            separators=(",", ":"),
+            allow_nan=False,
+        )
 
     except ImportError:
         return "Ground track calculation not available - install orbital packages"
@@ -470,7 +546,8 @@ def orbital_rendezvous_planning(
     Args:
         chaser_elements: Chaser spacecraft orbital elements
         target_elements: Target spacecraft orbital elements
-        rendezvous_options: Optional rendezvous planning parameters
+        rendezvous_options: Reserved for future planning parameters
+            (currently unused)
 
     Returns:
         JSON string with rendezvous plan including maneuver sequence and delta-V.
@@ -489,7 +566,7 @@ def orbital_rendezvous_planning(
         chaser = OrbitElements(**chaser_elements)
         target = OrbitElements(**target_elements)
 
-        result = _rendezvous(chaser, target, rendezvous_options or {})
+        result = _rendezvous(chaser, target)
 
         return json.dumps(result, indent=2)
 
