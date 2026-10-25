@@ -96,7 +96,14 @@ def check_cli() -> None:
         ),
     ]
     for argv, expected in runs:
-        proc = subprocess.run([cli, *argv], capture_output=True, text=True, timeout=300)
+        proc = subprocess.run(
+            [cli, *argv],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
+        )
         out = proc.stdout + proc.stderr
         assert proc.returncode == 0, out
         assert expected in out and "Traceback" not in out, out
@@ -124,6 +131,8 @@ def check_mcp_stdio() -> None:
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     try:
         init = _rpc(
@@ -180,6 +189,8 @@ def check_http() -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     base = f"http://127.0.0.1:{port}"
     try:

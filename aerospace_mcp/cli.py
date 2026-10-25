@@ -454,8 +454,26 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _use_utf8_output() -> None:
+    """Write UTF-8 even where the locale encoding cannot encode the output.
+
+    Tool output contains symbols such as μ, ° and ⋅. On Windows, a piped
+    stdout (how agents and scripts run the CLI) uses the ANSI code page,
+    e.g. cp1252, where printing them raises UnicodeEncodeError.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower()
+        if encoding.replace("-", "") in ("utf8", "utf8sig"):
+            continue
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main() -> None:
     """CLI entry point — registered as ``aerospace-mcp-cli`` in pyproject.toml."""
+    _use_utf8_output()
     parser = build_parser()
     args = parser.parse_args()
 
