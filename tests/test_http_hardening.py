@@ -5,7 +5,7 @@ import importlib
 import pytest
 from fastapi.testclient import TestClient
 
-import main as main_module
+import aerospace_mcp.http_app as main_module
 
 
 @pytest.fixture(autouse=True)

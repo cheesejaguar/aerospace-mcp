@@ -131,7 +131,7 @@ class TestHTTPAPISmoke:
                 "-c",
                 f"""
 import uvicorn
-from main import app
+from aerospace_mcp.http_app import app
 uvicorn.run(app, host="127.0.0.1", port={port}, log_level="error")
 """,
             ],

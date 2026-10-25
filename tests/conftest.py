@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("RATE_LIMIT_RPM", "0")
 
 from aerospace_mcp.core import OPENAP_AVAILABLE, AirportOut, PlanRequest
-from main import app
+from aerospace_mcp.http_app import app
 
 
 # Test data fixtures
