@@ -9,6 +9,7 @@
     <meta name="author" content="Cheesejaguar">
     <link rel="canonical" href="https://aeroastro.org/">
     <meta name="theme-color" content="#0A1020">
+    <meta name="color-scheme" content="dark">
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
@@ -41,7 +42,9 @@
       "url": "https://aeroastro.org/",
       "license": "https://opensource.org/licenses/MIT",
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-      "codeRepository": "https://github.com/cheesejaguar/aerospace-mcp"
+      "codeRepository": "https://github.com/cheesejaguar/aerospace-mcp",
+      "softwareVersion": "0.1.0",
+      "downloadUrl": "https://pypi.org/project/aerospace-mcp/"
     }
     </script>
 
@@ -55,7 +58,7 @@
             --line-strong: rgba(148, 178, 255, 0.22);
             --ink: #E8EEF9;
             --ink-dim: #A6B4CE;
-            --ink-faint: #6E7F9F;
+            --ink-faint: #7889A8;
             --amber: #FFB547;
             --amber-deep: #C97E10;
             --cyan: #6FD9F2;
@@ -142,6 +145,8 @@
 
         .section { padding: 5.5rem 0; }
         .section-intro { color: var(--ink-dim); max-width: 46rem; margin-bottom: 2.6rem; }
+        .inline-link { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--amber); }
+        .inline-link:hover { color: var(--amber); }
 
         /* ================= Nav ================= */
         .navbar {
@@ -234,6 +239,16 @@
             margin-bottom: 1.8rem;
         }
         .hero-buttons { display: flex; gap: 0.8rem; flex-wrap: wrap; }
+        .hero-install {
+            margin-top: 1.2rem;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            color: var(--ink-faint);
+        }
+        .hero-install code { color: var(--ink); }
+        .hero-install .prompt { color: var(--amber); }
+        .hero-install a { color: var(--ink-dim); text-decoration: none; border-bottom: 1px solid var(--line-strong); }
+        .hero-install a:hover { color: var(--ink); }
 
         .btn {
             display: inline-flex;
@@ -487,17 +502,24 @@
             border-radius: 10px;
             overflow: hidden;
         }
+        /* The copy button sits in the header so it never covers code */
+        .qs-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.55rem 0.7rem 0.55rem 1.2rem;
+            border-bottom: 1px solid var(--line);
+            background: var(--bg-raise);
+        }
         .qs-card h3 {
             font-family: var(--font-mono);
             font-size: 0.78rem;
             letter-spacing: 0.1em;
             text-transform: uppercase;
             color: var(--amber);
-            padding: 0.8rem 1.2rem;
-            border-bottom: 1px solid var(--line);
-            background: var(--bg-raise);
         }
-        .qs-card .body { position: relative; }
+        .qs-head .copy-btn { position: static; }
         .qs-card pre {
             margin: 0;
             padding: 1.1rem 1.2rem;
@@ -602,6 +624,9 @@
             .wrap { padding: 0 1rem; }
             .hero h1 { font-size: 2rem; }
             .hero-buttons .btn { width: 100%; justify-content: center; }
+            /* Wrap long install commands instead of hiding them off-screen;
+               copy still takes the exact text */
+            .qs-card pre { white-space: pre-wrap; overflow-wrap: anywhere; }
             .stat { padding: 0.85rem 0.9rem; }
             .stat-number { font-size: 1.25rem; }
             .route-readout { grid-template-columns: 1fr; }
@@ -679,6 +704,10 @@
                             <a href="#quick-start" class="btn btn-primary">Get started</a>
                             <a href="https://github.com/cheesejaguar/aerospace-mcp" class="btn btn-ghost" target="_blank" rel="noopener">View source ↗</a>
                         </div>
+                        <p class="hero-install">
+                            <span class="prompt">$</span> <code>uvx aerospace-mcp</code> · no Rust needed ·
+                            <a href="https://pypi.org/project/aerospace-mcp/" target="_blank" rel="noopener">PyPI ↗</a>
+                        </p>
                     </div>
 
                     <!-- Signature: real SJC->NRT great-circle, computed with geographiclib -->
@@ -737,7 +766,8 @@
                 <p class="section-intro">
                     Every tool is a typed Python function with an auto-generated MCP schema —
                     discoverable at runtime through the built-in tool search, and callable from
-                    the CLI without an MCP client.
+                    the CLI without an MCP client. Trajectory and orbit math runs in a compiled
+                    Rust core, shipped prebuilt so installs need no toolchain.
                 </p>
                 <div class="cards">
                     <div class="card reveal">
@@ -749,14 +779,14 @@
                     <div class="card reveal">
                         <svg class="icon" aria-hidden="true"><use href="#i-orbit"/></svg>
                         <h3>Orbital mechanics</h3>
-                        <p>Kepler element conversions, J2 propagation, ground tracks, Hohmann transfers, rendezvous, and Lambert solvers.</p>
+                        <p>Kepler element conversions, J2 propagation, ground tracks, Hohmann transfers, rendezvous, and an Izzo Lambert solver, in native Rust.</p>
                         <span class="tools">propagate_orbit_j2 · hohmann_transfer · lambert_problem_solver</span>
                     </div>
                     <div class="card reveal">
                         <svg class="icon" aria-hidden="true"><use href="#i-rocket"/></svg>
                         <h3>Rockets</h3>
-                        <p>3-DOF trajectory simulation with ISA atmosphere, vehicle sizing estimates, and launch-angle optimization.</p>
-                        <span class="tools">rocket_3dof_trajectory · optimize_launch_angle</span>
+                        <p>3-DOF trajectory simulation with ISA atmosphere, vehicle sizing estimates, and launch-angle and thrust-profile optimization, in native Rust.</p>
+                        <span class="tools">rocket_3dof_trajectory · optimize_launch_angle · optimize_thrust_profile</span>
                     </div>
                     <div class="card reveal">
                         <svg class="icon" aria-hidden="true"><use href="#i-wing"/></svg>
@@ -767,7 +797,7 @@
                     <div class="card reveal">
                         <svg class="icon" aria-hidden="true"><use href="#i-atmo"/></svg>
                         <h3>Atmosphere &amp; frames</h3>
-                        <p>ISA atmosphere profiles, wind models, and ECEF/ECI/geodetic transforms with GMST Earth-rotation handling.</p>
+                        <p>US Standard Atmosphere 1976 profiles, wind models, and ECEF/ECI/geodetic transforms with precession and Earth rotation.</p>
                         <span class="tools">get_atmosphere_profile · transform_frames · geodetic_to_ecef</span>
                     </div>
                     <div class="card reveal">
@@ -870,41 +900,64 @@ aerospace-mcp-cli run plan_multi_leg_flight \
             <div class="wrap">
                 <p class="kicker">On the wire</p>
                 <h2>What an agent sees</h2>
-                <p class="section-intro">Representative tool calls and their responses.</p>
+                <p class="section-intro">Real tool calls and their responses, as the MCP server returns them.</p>
                 <div class="tabbed reveal">
                     <div class="tablist" role="tablist" aria-label="Demo outputs">
                         <button class="tab" role="tab" id="tab-d1" aria-controls="panel-d1" aria-selected="true">search_airports</button>
-                        <button class="tab" role="tab" id="tab-d2" aria-controls="panel-d2" aria-selected="false" tabindex="-1">optimize_launch_angle</button>
+                        <button class="tab" role="tab" id="tab-d2" aria-controls="panel-d2" aria-selected="false" tabindex="-1">rocket_3dof_trajectory</button>
                         <button class="tab" role="tab" id="tab-d3" aria-controls="panel-d3" aria-selected="false" tabindex="-1">hohmann_transfer</button>
                     </div>
                     <div class="tabpanel console-body" role="tabpanel" id="panel-d1" aria-labelledby="tab-d1">
 <pre><span class="console-prompt">▸ search_airports</span> {"query": "SJC"}
 <span class="console-out">Found 1 airport(s):
 
-• SJC (KSJC) - Norman Y. Mineta San Jose International Airport
+• SJC (KSJC) - Norman Y Mineta San Jose International Airport
   City: San Jose, US
-  Coordinates: 37.3626, -121.9290
+  Coordinates: 37.3630, -121.9286
   Timezone: America/Los_Angeles</span></pre>
                     </div>
                     <div class="tabpanel console-body" role="tabpanel" id="panel-d2" aria-labelledby="tab-d2" hidden>
-<pre><span class="console-prompt">▸ optimize_launch_angle</span> {"target_range_m": 2000, "dry_mass_kg": 20, "propellant_mass_kg": 80}
-<span class="console-out">Launch Angle Optimization Results:
+<pre><span class="console-prompt">▸ rocket_3dof_trajectory</span> {
+    "rocket_geometry": {"length_m": 2.0, "diameter_m": 0.15, "dry_mass_kg": 10,
+                        "propellant_mass_kg": 5, "cd": 0.4,
+                        "thrust_curve": [[0, 500], [10, 500], [10.1, 0]]},
+    "launch_conditions": {"launch_angle_deg": 85}
+  }
+<span class="console-out">3DOF Rocket Trajectory Analysis
+==================================================
+Rocket: 2.0m long, 0.15m dia
+Mass: 10.0 kg dry + 5.0 kg prop
+Launch Angle: 85.0°
 
-Optimal launch angle: 47.2°
-Achieved range:       2,003 m
-Apogee altitude:      1,247 m
-Flight time:          32.4 s
-Iterations:           14</span></pre>
+Performance Summary:
+  Max Altitude: 2766 m (2.77 km)
+  Max Velocity: 235.8 m/s (Mach 0.70)
+  Apogee Time: 26.1 s
+  Burnout Time: 10.1 s
+  Max Q: 30.2 kPa
+  Total Impulse: 5025 N⋅s
+  Specific Impulse: 102.5 s
+
+Key Trajectory Points:
+Time (s)  Alt (m)  Vel (m/s) Accel (m/s²)
+---------------------------------------------
+     0.0        0        0.0         23.6
+     6.5      529      161.3         23.6
+    13.1     1837      161.9         19.3
+    19.7     2558       67.1         11.3
+    26.2     2766        6.3          9.8
+…</span></pre>
                     </div>
                     <div class="tabpanel console-body" role="tabpanel" id="panel-d3" aria-labelledby="tab-d3" hidden>
-<pre><span class="console-prompt">▸ hohmann_transfer</span> {"r1_km": 6778, "r2_km": 42164}
-<span class="console-out">Hohmann Transfer: LEO (400 km) → GEO
-
-Delta-v burn 1:    2.44 km/s
-Delta-v burn 2:    1.47 km/s
-Total delta-v:     3.91 km/s
-Transfer time:     5.26 h
-Transfer SMA:      24,471 km</span></pre>
+<pre><span class="console-prompt">▸ hohmann_transfer</span> {"r1_m": 6778000, "r2_m": 42164000}
+<span class="console-out">{
+  "delta_v1_ms": 2397.5085699579868,
+  "delta_v2_ms": 1456.5008896284685,
+  "total_delta_v_ms": 3854.0094595864553,
+  "transfer_time_s": 19048.402546893998,
+  "transfer_time_h": 5.291222929692777,
+  "transfer_semi_major_axis_m": 24471000.0
+}</span></pre>
                     </div>
                 </div>
             </div>
@@ -915,11 +968,18 @@ Transfer SMA:      24,471 km</span></pre>
             <div class="wrap">
                 <p class="kicker">Quick start</p>
                 <h2>Running in under a minute</h2>
+                <p class="section-intro">
+                    The only prerequisite is <a class="inline-link" href="https://docs.astral.sh/uv/" target="_blank" rel="noopener">uv</a>,
+                    which fetches Python if you need it. Prebuilt packages cover Linux, macOS and
+                    Windows, so there is no Rust toolchain or compiler to install.
+                </p>
                 <div class="qs-grid">
                     <div class="qs-card reveal">
-                        <h3>Claude Code</h3>
+                        <div class="qs-head">
+                            <h3>Claude Code</h3>
+                            <button class="copy-btn" aria-label="Copy Claude Code commands">copy</button>
+                        </div>
                         <div class="body">
-                            <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
 <pre><code><span class="tok-c"># MCP server + skills, one line</span>
 claude plugin marketplace add cheesejaguar/aerospace-mcp \
   &amp;&amp; claude plugin install aerospace-mcp@aerospace-mcp
@@ -929,9 +989,11 @@ claude mcp add aerospace -- uvx aerospace-mcp</code></pre>
                         </div>
                     </div>
                     <div class="qs-card reveal">
-                        <h3>Any agent (skills)</h3>
+                        <div class="qs-head">
+                            <h3>Any agent (skills)</h3>
+                            <button class="copy-btn" aria-label="Copy skills commands">copy</button>
+                        </div>
                         <div class="body">
-                            <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
 <pre><code><span class="tok-c"># Cursor, Codex, OpenCode, Claude Code, ...</span>
 npx skills add cheesejaguar/aerospace-mcp
 
@@ -940,9 +1002,11 @@ curl -LsSf https://astral.sh/uv/install.sh | sh</code></pre>
                         </div>
                     </div>
                     <div class="qs-card reveal">
-                        <h3>uv (no Rust needed)</h3>
+                        <div class="qs-head">
+                            <h3>uv (no Rust needed)</h3>
+                            <button class="copy-btn" aria-label="Copy uv commands">copy</button>
+                        </div>
                         <div class="body">
-                            <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
 <pre><code><span class="tok-c"># prebuilt wheels: Linux, macOS, Windows</span>
 uv tool install aerospace-mcp
 aerospace-mcp-cli search <span class="tok-s">"orbit transfer"</span>
@@ -952,10 +1016,14 @@ uvx --from aerospace-mcp aerospace-mcp-http</code></pre>
                         </div>
                     </div>
                     <div class="qs-card reveal">
-                        <h3>Docker</h3>
+                        <div class="qs-head">
+                            <h3>Docker</h3>
+                            <button class="copy-btn" aria-label="Copy Docker commands">copy</button>
+                        </div>
                         <div class="body">
-                            <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
-<pre><code>docker build -t aerospace-mcp .
+<pre><code>git clone https://github.com/cheesejaguar/aerospace-mcp
+cd aerospace-mcp
+docker build -t aerospace-mcp .
 docker run -p 8080:8080 aerospace-mcp
 
 <span class="tok-c"># verify</span>
@@ -999,6 +1067,7 @@ curl http://localhost:8080/health</code></pre>
                     <h4>Project</h4>
                     <ul>
                         <li><a href="https://github.com/cheesejaguar/aerospace-mcp" target="_blank" rel="noopener">GitHub</a></li>
+                        <li><a href="https://pypi.org/project/aerospace-mcp/" target="_blank" rel="noopener">PyPI</a></li>
                         <li><a href="https://github.com/cheesejaguar/aerospace-mcp#readme" target="_blank" rel="noopener">Documentation</a></li>
                         <li><a href="https://github.com/cheesejaguar/aerospace-mcp/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a></li>
                         <li><a href="https://github.com/cheesejaguar/aerospace-mcp/issues" target="_blank" rel="noopener">Issues</a></li>
@@ -1009,6 +1078,7 @@ curl http://localhost:8080/health</code></pre>
                     <ul>
                         <li><a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">Model Context Protocol</a></li>
                         <li><a href="https://gofastmcp.com" target="_blank" rel="noopener">FastMCP</a></li>
+                        <li><a href="https://pyo3.rs" target="_blank" rel="noopener">Rust &amp; PyO3</a></li>
                         <li><a href="https://github.com/TUDelft-CNS-ATM/openap" target="_blank" rel="noopener">OpenAP</a></li>
                         <li><a href="https://github.com/mborsetti/airportsdata" target="_blank" rel="noopener">airportsdata</a></li>
                     </ul>
@@ -1096,7 +1166,7 @@ curl http://localhost:8080/health</code></pre>
             /* Copy buttons with visual confirmation */
             document.querySelectorAll(".copy-btn").forEach(function (btn) {
                 btn.addEventListener("click", function () {
-                    var pre = btn.parentElement.querySelector("pre");
+                    var pre = btn.closest(".qs-card, .tabpanel").querySelector("pre");
                     if (!pre) return;
                     navigator.clipboard.writeText(pre.textContent).then(function () {
                         btn.textContent = "copied";
