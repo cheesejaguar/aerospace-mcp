@@ -9,6 +9,23 @@ Core flight planning tools for airport search, route planning, great-circle dist
 
 **Safety disclaimer:** For educational/research purposes only. Never use for real navigation or flight planning.
 
+## Setup
+
+The examples below call `aerospace-mcp-cli`. If that command is not on `PATH`,
+run each one through [uv](https://docs.astral.sh/uv/) instead, which downloads a
+prebuilt package (Linux and macOS, x86_64 and arm64; no Rust or C compiler
+needed) and caches it after the first run:
+
+```bash
+uvx --from aerospace-mcp aerospace-mcp-cli list
+```
+
+Install uv with `curl -LsSf https://astral.sh/uv/install.sh | sh` (Linux/macOS);
+it fetches Python 3.11+ itself if the system has none. `uv tool install
+aerospace-mcp` puts `aerospace-mcp-cli` on `PATH` permanently. When the
+aerospace MCP server is connected, the same tools are also available as MCP
+tools with the same names and parameters.
+
 ## Available Tools
 
 | Tool | Description |
@@ -31,11 +48,11 @@ aerospace-mcp-cli run search_airports --query "London" --country "GB"
 # Calculate distance between two coordinate points
 aerospace-mcp-cli run calculate_distance --lat1 37.36 --lon1 -121.93 --lat2 35.76 --lon2 140.39
 
-# Plan a flight from San Jose to Tokyo on a B777
+# Plan a flight from San Jose to Tokyo on a B77W
 aerospace-mcp-cli run plan_flight \
   --departure '{"city":"San Jose","iata":"SJC"}' \
   --arrival '{"city":"Tokyo","iata":"NRT"}' \
-  --aircraft '{"ac_type":"B777","cruise_alt_ft":39000}'
+  --aircraft '{"ac_type":"B77W","cruise_alt_ft":39000}'
 
 # Get A320 performance for a 2500km flight
 aerospace-mcp-cli run get_aircraft_performance --aircraft_type A320 --distance_km 2500
@@ -57,7 +74,7 @@ print(result)
 result = plan_flight(
     departure={"city": "San Jose", "iata": "SJC"},
     arrival={"city": "Tokyo", "iata": "NRT"},
-    aircraft={"ac_type": "B777", "cruise_alt_ft": 39000},
+    aircraft={"ac_type": "B77W", "cruise_alt_ft": 39000},
 )
 print(result)
 
@@ -86,7 +103,7 @@ print(result)
 - `--lon2` (float, required): Longitude of second point in degrees
 
 ### get_aircraft_performance
-- `--aircraft_type` (str, required): ICAO aircraft type code (e.g., `A320`, `B737`, `B777`)
+- `--aircraft_type` (str, required): ICAO aircraft type code (e.g., `A320`, `B738`, `B77W`)
 - `--distance_km` (float, required): Flight distance in kilometers
 - `--cruise_altitude_ft` (float, default: 35000): Cruise altitude in feet
 

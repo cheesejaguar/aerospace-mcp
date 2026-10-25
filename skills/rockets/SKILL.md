@@ -7,6 +7,23 @@ description: Simulate rocket trajectories, estimate sizing, and optimize launch 
 
 Tools for rocket trajectory simulation (3DOF), rocket sizing estimation, and launch angle optimization.
 
+## Setup
+
+The examples below call `aerospace-mcp-cli`. If that command is not on `PATH`,
+run each one through [uv](https://docs.astral.sh/uv/) instead, which downloads a
+prebuilt package (Linux and macOS, x86_64 and arm64; no Rust or C compiler
+needed) and caches it after the first run:
+
+```bash
+uvx --from aerospace-mcp aerospace-mcp-cli list
+```
+
+Install uv with `curl -LsSf https://astral.sh/uv/install.sh | sh` (Linux/macOS);
+it fetches Python 3.11+ itself if the system has none. `uv tool install
+aerospace-mcp` puts `aerospace-mcp-cli` on `PATH` permanently. When the
+aerospace MCP server is connected, the same tools are also available as MCP
+tools with the same names and parameters.
+
 ## Available Tools
 
 | Tool | Description |
@@ -33,17 +50,17 @@ aerospace-mcp-cli run estimate_rocket_sizing \
 
 # 3DOF trajectory simulation
 aerospace-mcp-cli run rocket_3dof_trajectory \
-  --rocket_geometry '{"length_m":2.0,"diameter_m":0.15,"dry_mass_kg":10,"propellant_mass_kg":5,"thrust_n":500,"burn_time_s":10,"cd":0.4,"reference_area_m2":0.018}' \
-  --launch_conditions '{"launch_angle_deg":85,"launch_altitude_m":0}'
+  --rocket_geometry '{"length_m":2.0,"diameter_m":0.15,"dry_mass_kg":10,"propellant_mass_kg":5,"cd":0.4,"thrust_curve":[[0,500],[10,500],[10.1,0]]}' \
+  --launch_conditions '{"launch_angle_deg":85}'
 
 # Optimize launch angle for max altitude
 aerospace-mcp-cli run optimize_launch_angle \
-  --rocket_geometry '{"length_m":2.0,"diameter_m":0.15,"dry_mass_kg":10,"propellant_mass_kg":5,"thrust_n":500,"burn_time_s":10,"cd":0.4,"reference_area_m2":0.018}' \
+  --rocket_geometry '{"length_m":2.0,"diameter_m":0.15,"dry_mass_kg":10,"propellant_mass_kg":5,"cd":0.4,"thrust_curve":[[0,500],[10,500],[10.1,0]]}' \
   --optimize_for altitude
 
 # Optimize for max range
 aerospace-mcp-cli run optimize_launch_angle \
-  --rocket_geometry '{"length_m":2.0,"diameter_m":0.15,"dry_mass_kg":10,"propellant_mass_kg":5,"thrust_n":500,"burn_time_s":10}' \
+  --rocket_geometry '{"length_m":2.0,"diameter_m":0.15,"dry_mass_kg":10,"propellant_mass_kg":5,"thrust_curve":[[0,500],[10,500],[10.1,0]]}' \
   --target_range_m 50000 \
   --optimize_for range
 ```
@@ -72,10 +89,9 @@ result = rocket_3dof_trajectory(
         "diameter_m": 0.15,
         "dry_mass_kg": 10,
         "propellant_mass_kg": 5,
-        "thrust_n": 500,
-        "burn_time_s": 10,
         "cd": 0.4,
-        "reference_area_m2": 0.018,
+        # [[time_s, thrust_n], ...]: 500 N for 10 s
+        "thrust_curve": [[0, 500], [10, 500], [10.1, 0]],
     },
     launch_conditions={"launch_angle_deg": 85},
 )
@@ -85,8 +101,8 @@ print(result)
 ## Parameter Reference
 
 ### rocket_3dof_trajectory
-- `--rocket_geometry` (dict/JSON, required): `length_m`, `diameter_m`, `dry_mass_kg`, `propellant_mass_kg`, `thrust_n`, `burn_time_s`, `cd`, `reference_area_m2`
-- `--launch_conditions` (dict/JSON, required): `launch_angle_deg`, `launch_altitude_m`
+- `--rocket_geometry` (dict/JSON, required): `length_m`, `diameter_m`, `dry_mass_kg`, `propellant_mass_kg`, optional `cd` (default 0.3) and `thrust_curve` as `[[time_s, thrust_n], ...]`; the reference area is the body cross-section from `diameter_m`
+- `--launch_conditions` (dict/JSON, required): `launch_angle_deg` (default 90)
 - `--simulation_options` (dict/JSON, optional): `dt_s`, `max_time_s`
 
 ### estimate_rocket_sizing
@@ -97,6 +113,6 @@ print(result)
 
 ### optimize_launch_angle
 - `--rocket_geometry` (dict/JSON, required): Rocket geometry parameters
-- `--target_range_m` (float, optional): Target range for range optimization
+- `--target_range_m` (float, optional): Target range; accepted but not used yet (downrange distance is not modelled)
 - `--optimize_for` (one of: altitude, range; default: altitude)
 - `--angle_bounds_deg` (list/JSON, default: [45.0, 90.0]): Bounds for launch angle search

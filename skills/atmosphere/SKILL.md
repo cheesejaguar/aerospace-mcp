@@ -7,6 +7,23 @@ description: Calculate atmospheric profiles and wind models at various altitudes
 
 Tools for atmospheric modeling including ISA standard atmosphere profiles and wind profile models at various altitudes.
 
+## Setup
+
+The examples below call `aerospace-mcp-cli`. If that command is not on `PATH`,
+run each one through [uv](https://docs.astral.sh/uv/) instead, which downloads a
+prebuilt package (Linux and macOS, x86_64 and arm64; no Rust or C compiler
+needed) and caches it after the first run:
+
+```bash
+uvx --from aerospace-mcp aerospace-mcp-cli list
+```
+
+Install uv with `curl -LsSf https://astral.sh/uv/install.sh | sh` (Linux/macOS);
+it fetches Python 3.11+ itself if the system has none. `uv tool install
+aerospace-mcp` puts `aerospace-mcp-cli` on `PATH` permanently. When the
+aerospace MCP server is connected, the same tools are also available as MCP
+tools with the same names and parameters.
+
 ## Available Tools
 
 | Tool | Description |
