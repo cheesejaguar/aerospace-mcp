@@ -24,36 +24,86 @@ For real flight planning, always use certified aviation software and consult off
 
 ## 🚀 Quick Start
 
-### Option 1: UV (Recommended)
+The only prerequisite is [uv](https://docs.astral.sh/uv/), which also fetches
+Python 3.11+ if your system has none. Releases on PyPI ship prebuilt wheels for
+Linux (x86_64 and arm64, glibc 2.28+ and musl), macOS 11+ (Intel and Apple
+Silicon) and Windows x64, so **no Rust toolchain or compiler is needed**.
 
 ```bash
-# Install UV (fast Python package manager)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Install a Rust toolchain (builds the native trajectory/orbit core)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Clone and setup
-git clone https://github.com/cheesejaguar/aerospace-mcp.git
-cd aerospace-mcp
-uv venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
-uv sync
-
-# Copy env and configure (optional but recommended)
-cp .env.example .env
-# Edit .env as needed (host/port/log level, optional LLM tools)
-
-# Run HTTP server (package entrypoint)
-uv run aerospace-mcp-http
-
-# Alternatively (developer style)
-uvicorn main:app --reload --host 0.0.0.0 --port 8080
-
-# Test the API
-curl "http://localhost:8080/health"
+curl -LsSf https://astral.sh/uv/install.sh | sh   # Linux / macOS
 ```
 
-### Option 2: Docker
+### Claude Code: MCP server + skills in one line
+
+```bash
+claude plugin marketplace add cheesejaguar/aerospace-mcp && claude plugin install aerospace-mcp@aerospace-mcp
+```
+
+Inside a session (Claude Code 2.1.275 or later) the same is
+`/plugin install aerospace-mcp --marketplace cheesejaguar/aerospace-mcp`. The
+plugin starts the MCP server with `uvx aerospace-mcp` and adds the skills in
+[`skills/`](skills/). For the MCP server alone:
+`claude mcp add aerospace -- uvx aerospace-mcp`.
+
+### Skills for other agents (Cursor, Codex, OpenCode, ...)
+
+```bash
+npx skills add cheesejaguar/aerospace-mcp
+```
+
+The skills run tools through `uvx --from aerospace-mcp aerospace-mcp-cli`, so
+they need uv too (and Node.js for `npx`).
+
+### Claude Desktop and other MCP clients
+
+```json
+{
+  "mcpServers": {
+    "aerospace": {
+      "command": "uvx",
+      "args": ["aerospace-mcp"]
+    }
+  }
+}
+```
+
+GUI apps on macOS do not inherit your shell's `PATH`: if the client cannot
+find `uvx`, use the absolute path printed by `which uvx` (usually
+`~/.local/bin/uvx`). The first launch downloads about 300 MB of dependencies;
+run `uvx --from aerospace-mcp aerospace-mcp-cli list` once beforehand so the
+client's server start-up timeout is not spent on the download.
+
+### CLI and HTTP API
+
+```bash
+uvx --from aerospace-mcp aerospace-mcp-cli run hohmann_transfer --r1_m 6778000 --r2_m 42164000
+uvx --from aerospace-mcp aerospace-mcp-http        # http://localhost:8080/docs
+uv tool install aerospace-mcp                      # all three commands on PATH
+```
+
+Optional extras work the same way, e.g. `uvx --from 'aerospace-mcp[llm]'
+aerospace-mcp` for the LLM agent tools (set `LLM_TOOLS_ENABLED=true` and
+`OPENAI_API_KEY`).
+
+### From source (development)
+
+Building from a checkout compiles the native core, so it needs a Rust
+toolchain:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # Rust (rustup)
+git clone https://github.com/cheesejaguar/aerospace-mcp.git
+cd aerospace-mcp
+uv sync                               # builds aerospace_mcp._native
+
+cp .env.example .env                  # optional: host/port/log level, LLM tools
+uv run aerospace-mcp                  # MCP server (stdio)
+uv run aerospace-mcp sse 0.0.0.0 8001 # MCP server (SSE, debugging)
+uv run aerospace-mcp-http             # HTTP API
+uvicorn main:app --reload --port 8080 # HTTP API with auto-reload
+```
+
+### Docker
 
 ```bash
 git clone https://github.com/cheesejaguar/aerospace-mcp.git
@@ -63,37 +113,6 @@ docker run -p 8080:8080 aerospace-mcp
 
 # Test the API
 curl "http://localhost:8080/health"
-```
-
-### Option 3: MCP Client (Claude Desktop)
-
-Add to your Claude Desktop configuration:
-
-```json
-{
-  "mcpServers": {
-    "aerospace": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/aerospace-mcp", "run", "aerospace-mcp"],
-      "env": {
-        "LLM_TOOLS_ENABLED": "true",
-        "OPENAI_API_KEY": "your-openai-api-key-here"
-      }
-    }
-  }
-}
-```
-
-**Note**: The `env` section is optional and only needed if you want to enable the AI-powered agent tools for enhanced user experience.
-
-### MCP via CLI
-
-```bash
-# Start the MCP server (stdio)
-uv run aerospace-mcp
-
-# Start in SSE mode (optional)
-uv run aerospace-mcp sse 0.0.0.0 8001
 ```
 
 ## 📋 Table of Contents
@@ -194,153 +213,82 @@ uv run aerospace-mcp sse 0.0.0.0 8001
 
 ### System Requirements
 
-- **Python**: 3.11+ (3.12+ recommended for best performance)
-- **Rust**: stable toolchain via [rustup](https://rustup.rs) when installing from source (the trajectory and orbital-mechanics core is a Rust extension built automatically by `uv sync` / `pip install`)
-- **Memory**: 512MB RAM minimum (1GB+ recommended)
-- **Storage**: 200MB free space
-- **Network**: Internet connection for initial setup
+- **uv** (recommended) or **pip** with **Python 3.11+**
+- **Prebuilt wheels**: Linux x86_64/arm64 (glibc 2.28+ or musl 1.2+), macOS 11+
+  (Intel and Apple Silicon), Windows x64. Other platforms install from the
+  source distribution, which needs a [Rust toolchain](https://rustup.rs).
+- **Disk**: about 300 MB for the default install (about 500 MB with `[llm]`)
+- **Network**: for the first install; the airport database and aircraft
+  models ship with the packages and work offline
 
-### Method 1: UV Package Manager (Recommended)
-
-UV is the fastest Python package manager and provides excellent dependency resolution:
+### With uv (no clone)
 
 ```bash
-# Install UV
-curl -LsSf https://astral.sh/uv/install.sh | sh  # Linux/macOS
-# Or: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"  # Windows
-
-# Clone repository
-git clone https://github.com/cheesejaguar/aerospace-mcp.git
-cd aerospace-mcp
-
-# Create virtual environment
-uv venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate     # Windows
-
-# Install dependencies
-uv add fastapi uvicorn[standard] airportsdata geographiclib pydantic python-dotenv
-uv add openap  # Optional: for performance estimates
-uv add mcp     # Optional: for MCP server functionality
-
-# Install optional aerospace analysis dependencies
-uv add --optional-dependencies atmosphere  # Ambiance for enhanced ISA
-uv add --optional-dependencies space      # Astropy for coordinate frames
-uv add --optional-dependencies all        # All optional dependencies
-
-# Install development dependencies (optional)
-uv add --dev pytest httpx black isort mypy pre-commit
-
-# Verify installation
-python -c "import main; print('✅ Installation successful')"
+uvx aerospace-mcp                               # MCP server (stdio), run in place
+uvx --from aerospace-mcp aerospace-mcp-cli list # any command, run in place
+uv tool install aerospace-mcp                   # install the commands on PATH
+uv tool upgrade aerospace-mcp                   # later: upgrade
 ```
 
-### Method 2: Pip (Traditional)
+`uvx` caches the environment after the first run. To pick up a new release
+with `uvx`, run `uvx aerospace-mcp@latest` once.
+
+### With pip
 
 ```bash
-# Clone repository
-git clone https://github.com/cheesejaguar/aerospace-mcp.git
-cd aerospace-mcp
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate     # Windows
-
-# Upgrade pip
-pip install --upgrade pip
-
-# Install core dependencies
-pip install fastapi uvicorn[standard] airportsdata geographiclib pydantic python-dotenv
-
-# Install optional dependencies
-pip install openap  # For performance estimates
-pip install mcp     # For MCP server
-pip install python-dotenv  # For loading .env in local/dev
-
-# Install from pyproject.toml
-pip install -e .
-
-# Verify installation
-python -c "import main; print('✅ Installation successful')"
+python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python -m pip install --upgrade pip                  # old pips miss the manylinux_2_28 / musllinux wheels
+pip install aerospace-mcp                            # or 'aerospace-mcp[llm]', 'aerospace-mcp[all]'
+aerospace-mcp-cli list
 ```
 
-### Method 3: Docker
+Extras: `llm` (LLM agent tools), `atmosphere`, `aircraft`, `rockets`,
+`space`, `gnc`, `all`.
+
+### From source
+
+See [From source (development)](#from-source-development): `uv sync` (or
+`pip install -e .`) in a checkout, with Rust installed via
+[rustup](https://rustup.rs).
+
+### Docker
 
 ```bash
-# Clone repository
 git clone https://github.com/cheesejaguar/aerospace-mcp.git
 cd aerospace-mcp
-
-# Build image
 docker build -t aerospace-mcp .
-
-# Run container
 docker run -d -p 8080:8080 --name aerospace-mcp aerospace-mcp
-
-# Health check
 curl http://localhost:8080/health
-
-# View logs
-docker logs aerospace-mcp
-
-# Stop container
-docker stop aerospace-mcp
 ```
 
-### Method 4: Conda/Mamba
-
-```bash
-# Create conda environment
-conda create -n aerospace-mcp python=3.11
-conda activate aerospace-mcp
-
-# Clone repository
-git clone https://github.com/cheesejaguar/aerospace-mcp.git
-cd aerospace-mcp
-
-# Install dependencies
-conda install fastapi uvicorn pydantic
-pip install airportsdata geographiclib openap mcp
-
-# Verify installation
-python -c "import main; print('✅ Installation successful')"
-```
+The image builds the native core itself (Rust is installed in the build
+stage only) and includes the `llm` extra.
 
 ### Troubleshooting Installation
 
-#### Common Issues
+**The MCP client cannot start the server / `uvx: command not found`**: GUI
+apps (Claude Desktop on macOS in particular) do not see the `PATH` from your
+shell profile. Put the absolute path from `which uvx` in the `command` field.
 
-**OpenAP Installation Problems**:
+**The MCP client times out on first launch**: the first `uvx` run downloads
+the dependencies. Run `uvx --from aerospace-mcp aerospace-mcp-cli list` once
+in a terminal, then restart the client.
+
+**`error: can't find Rust compiler` / `Failed to build aerospace-mcp`**: the
+installer found no wheel for your platform and fell back to the source
+distribution. Upgrade pip (`python -m pip install --upgrade pip`); if your
+platform has no prebuilt wheel (see above), install Rust with
+`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` and retry.
+
+**LLM agent tools report that LiteLLM is not installed**: install the `llm`
+extra (`pip install 'aerospace-mcp[llm]'`, or
+`uvx --from 'aerospace-mcp[llm]' aerospace-mcp`).
+
+**Check an installation**:
+
 ```bash
-# Try these alternatives if OpenAP fails to install
-pip install openap --no-cache-dir
-pip install openap --force-reinstall
-# Or install without OpenAP (performance estimates will be unavailable)
-```
-
-**GeographicLib Issues**:
-```bash
-# Install system dependencies (Ubuntu/Debian)
-sudo apt-get install libproj-dev proj-data proj-bin
-
-# Install system dependencies (macOS)
-brew install proj
-
-# Install system dependencies (Windows)
-# Download from: https://proj.org/download.html
-```
-
-**Import Errors**:
-```bash
-# Verify your Python environment
-python --version  # Should be 3.11+
-pip list | grep -E "(fastapi|openap|airportsdata)"
-
-# Test individual imports
-python -c "import fastapi; print('FastAPI OK')"
-python -c "import airportsdata; print('AirportsData OK')"
-python -c "import openap; print('OpenAP OK')" || echo "OpenAP not available (optional)"
+aerospace-mcp-cli run get_system_status   # optional packages and their versions
+aerospace-mcp-cli run hohmann_transfer --r1_m 6778000 --r2_m 42164000
 ```
 
 ## 🎯 Usage Examples
@@ -1035,12 +983,16 @@ Error responses include detailed messages:
 {
   "mcpServers": {
     "aerospace": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/aerospace-mcp", "run", "aerospace-mcp"]
+      "command": "uvx",
+      "args": ["aerospace-mcp"]
     }
   }
 }
 ```
+
+   From a source checkout use `"command": "uv"` with
+   `"args": ["--directory", "/path/to/aerospace-mcp", "run", "aerospace-mcp"]`.
+   If Claude Desktop cannot find `uvx`, give its absolute path (`which uvx`).
 
 3. Restart Claude Desktop
 4. Test with: "Search for airports in Tokyo"
@@ -1150,10 +1102,9 @@ Add to your `config.json`:
 git clone https://github.com/cheesejaguar/aerospace-mcp.git
 cd aerospace-mcp
 
-# Create development environment
-uv venv
+# Create the development environment (needs Rust, see Quick Start)
+uv sync
 source .venv/bin/activate
-uv add --dev pytest httpx black isort mypy pre-commit
 
 # Install pre-commit hooks
 pre-commit install
@@ -1283,8 +1234,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for
 
 2. **Setup Development Environment**
    ```bash
-   uv venv && source .venv/bin/activate
-   uv add --dev pytest httpx black isort mypy
+   uv sync && source .venv/bin/activate
    ```
 
 3. **Make Changes**

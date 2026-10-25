@@ -478,7 +478,7 @@
         /* ================= Quick start ================= */
         .qs-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
             gap: 1rem;
         }
         .qs-card {
@@ -813,13 +813,8 @@
 <pre><code>{
   <span class="tok-k">"mcpServers"</span>: {
     <span class="tok-k">"aerospace"</span>: {
-      <span class="tok-k">"command"</span>: <span class="tok-s">"uv"</span>,
-      <span class="tok-k">"args"</span>: [
-        <span class="tok-s">"--directory"</span>,
-        <span class="tok-s">"/path/to/aerospace-mcp"</span>,
-        <span class="tok-s">"run"</span>,
-        <span class="tok-s">"aerospace-mcp"</span>
-      ]
+      <span class="tok-k">"command"</span>: <span class="tok-s">"uvx"</span>,
+      <span class="tok-k">"args"</span>: [<span class="tok-s">"aerospace-mcp"</span>]
     }
   }
 }</code></pre>
@@ -922,18 +917,38 @@ Transfer SMA:      24,471 km</span></pre>
                 <h2>Running in under a minute</h2>
                 <div class="qs-grid">
                     <div class="qs-card reveal">
-                        <h3>UV (recommended)</h3>
+                        <h3>Claude Code</h3>
                         <div class="body">
                             <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
-<pre><code>git clone https://github.com/cheesejaguar/aerospace-mcp
-cd aerospace-mcp
-uv sync
+<pre><code><span class="tok-c"># MCP server + skills, one line</span>
+claude plugin marketplace add cheesejaguar/aerospace-mcp \
+  &amp;&amp; claude plugin install aerospace-mcp@aerospace-mcp
 
-<span class="tok-c"># MCP server (stdio)</span>
-uv run aerospace-mcp
+<span class="tok-c"># or just the MCP server</span>
+claude mcp add aerospace -- uvx aerospace-mcp</code></pre>
+                        </div>
+                    </div>
+                    <div class="qs-card reveal">
+                        <h3>Any agent (skills)</h3>
+                        <div class="body">
+                            <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
+<pre><code><span class="tok-c"># Cursor, Codex, OpenCode, Claude Code, ...</span>
+npx skills add cheesejaguar/aerospace-mcp
 
-<span class="tok-c"># or the HTTP API on :8080</span>
-uv run aerospace-mcp-http</code></pre>
+<span class="tok-c"># skills call the CLI through uv</span>
+curl -LsSf https://astral.sh/uv/install.sh | sh</code></pre>
+                        </div>
+                    </div>
+                    <div class="qs-card reveal">
+                        <h3>uv (no Rust needed)</h3>
+                        <div class="body">
+                            <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
+<pre><code><span class="tok-c"># prebuilt wheels: Linux, macOS, Windows</span>
+uv tool install aerospace-mcp
+aerospace-mcp-cli search <span class="tok-s">"orbit transfer"</span>
+
+<span class="tok-c"># or run in place, nothing installed</span>
+uvx --from aerospace-mcp aerospace-mcp-http</code></pre>
                         </div>
                     </div>
                     <div class="qs-card reveal">
@@ -945,18 +960,6 @@ docker run -p 8080:8080 aerospace-mcp
 
 <span class="tok-c"># verify</span>
 curl http://localhost:8080/health</code></pre>
-                        </div>
-                    </div>
-                    <div class="qs-card reveal">
-                        <h3>Claude Code</h3>
-                        <div class="body">
-                            <button class="copy-btn" aria-label="Copy code to clipboard">copy</button>
-<pre><code>claude mcp add aerospace -- \
-  uv --directory /path/to/aerospace-mcp \
-  run aerospace-mcp
-
-<span class="tok-c"># then, in a session:</span>
-<span class="tok-c"># "Plan a flight from SJC to Tokyo on an A359"</span></code></pre>
                         </div>
                     </div>
                 </div>
