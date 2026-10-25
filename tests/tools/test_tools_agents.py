@@ -220,3 +220,21 @@ def test_litellm_is_imported_and_configured_on_first_use(monkeypatch):
     stub = object()
     agents.litellm = stub
     assert agents._get_litellm() is stub
+
+
+def test_missing_litellm_reports_the_llm_extra(monkeypatch):
+    """LiteLLM is the optional 'llm' extra; without it the tools say so."""
+    import importlib
+    import sys
+
+    import aerospace_mcp.tools.agents as agents
+
+    importlib.reload(agents)
+    monkeypatch.setattr(agents, "LLM_TOOLS_ENABLED", True)
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setitem(sys.modules, "litellm", None)  # import raises ImportError
+
+    with pytest.raises(ImportError, match=r"aerospace-mcp\[llm\]"):
+        agents._get_litellm()
+    out = agents.format_data_for_tool("search_airports", "Find airports")
+    assert "aerospace-mcp[llm]" in out

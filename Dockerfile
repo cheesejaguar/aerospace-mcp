@@ -33,7 +33,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install production dependencies only (also compiles the Rust extension
 # into ./aerospace_mcp/_native*.so)
-RUN uv pip install --no-cache-dir -e .
+# The image keeps the optional LLM agent tools (LLM_TOOLS_ENABLED=true)
+RUN uv pip install --no-cache-dir -e ".[llm]"
 
 # Stage 2: Runtime image with minimal footprint
 FROM python:3.11-slim AS runtime

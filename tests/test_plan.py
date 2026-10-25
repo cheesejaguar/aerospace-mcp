@@ -23,7 +23,9 @@ def _set_cruise_tas(mock_gen, tas_kts: float = 450.0, alt_ft: float = 35000.0):
     altitude from ``fgen.wrap.cruise_mach()``, so the mock needs a Mach
     number rather than a canned cruise DataFrame.
     """
-    from openap.extra import aero
+    from aerospace_mcp.core import _openap_aero
+
+    aero = _openap_aero()
 
     mach = tas_kts * aero.kts / aero.vsound(alt_ft * aero.ft)
     mock_gen.wrap.cruise_mach.return_value = {"default": mach}
@@ -467,7 +469,9 @@ class TestOpenAPEstimates:
         Regression: the cruise speed came from OpenAP's default-altitude
         cruise() segment, so every cruise altitude reported ~447 kt.
         """
-        from openap.extra import aero
+        from aerospace_mcp.core import _openap_aero
+
+        aero = _openap_aero()
 
         mock_openap_flight_generator.wrap.cruise_mach.return_value = {"default": 0.78}
         with patch(

@@ -17,7 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import aerospace_mcp.core as core
-import main as main_module
+import aerospace_mcp.http_app as main_module
 from aerospace_mcp.core import (
     FlightPlanError,
     PlanRequest,
@@ -162,7 +162,9 @@ class TestPlanFlightTool:
     def test_cruise_tas_depends_on_altitude(self):
         """Cruise TAS = M * a(h) at the requested altitude (was always the
         FL358 value, ~447 kt).  A320 WRAP default cruise Mach is 0.78."""
-        from openap.extra import aero
+        from aerospace_mcp.core import _openap_aero
+
+        aero = _openap_aero()
 
         for alt in (25000, 35000):
             perf = _plan(

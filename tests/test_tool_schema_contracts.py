@@ -347,10 +347,18 @@ class TestRegistryConsistency:
         """Every registry tool is registered on the FastMCP server."""
         import asyncio
 
+        from fastmcp import Client
+
         from aerospace_mcp.fastmcp_server import mcp
         from aerospace_mcp.tools.registry import ALL_TOOLS
 
-        registered = set(asyncio.run(mcp.get_tools()).keys())
+        async def _names():
+            # Through the MCP protocol, so it works across fastmcp versions
+            # (fresh installs get the newest fastmcp, not the locked one).
+            async with Client(mcp) as client:
+                return {tool.name for tool in await client.list_tools()}
+
+        registered = asyncio.run(_names())
         assert registered == set(ALL_TOOLS), (
             f"only registered: {sorted(registered - set(ALL_TOOLS))}; "
             f"only in registry: {sorted(set(ALL_TOOLS) - registered)}"

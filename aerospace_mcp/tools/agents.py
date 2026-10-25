@@ -12,6 +12,7 @@ WARNING: This module is for educational and research purposes only.
 Do NOT use for real flight planning, navigation, or aircraft operations.
 """
 
+import importlib.util
 import json
 import logging
 import os
@@ -29,12 +30,23 @@ LLM_TOOLS_ENABLED = os.environ.get("LLM_TOOLS_ENABLED", "false").lower() == "tru
 # use by _get_litellm(). Tests replace this attribute with a stub.
 litellm: Any = None
 
+# LiteLLM (~200 MB installed) is an optional extra so the default install,
+# including `uvx aerospace-mcp`, stays small; only these tools need it.
+LITELLM_INSTALL_HINT = (
+    "LiteLLM is not installed. Install the 'llm' extra: "
+    "pip install 'aerospace-mcp[llm]', or run the server with "
+    "uvx --from 'aerospace-mcp[llm]' aerospace-mcp"
+)
+
 
 def _get_litellm() -> Any:
     """Import and configure LiteLLM on first use (or return the stub set)."""
     global litellm
     if litellm is None:
-        import litellm as _litellm
+        try:
+            import litellm as _litellm
+        except ImportError as exc:
+            raise ImportError(LITELLM_INSTALL_HINT) from exc
 
         # Configure LiteLLM for agentic tool calls
         _litellm.set_verbose = False
@@ -49,10 +61,13 @@ _AGENT_MODEL = os.environ.get("LLM_MODEL", "gpt-5.6-sol")
 # Log status of LLM tools
 if not LLM_TOOLS_ENABLED:
     logger.info("LLM tools disabled via LLM_TOOLS_ENABLED environment variable.")
-elif "OPENAI_API_KEY" not in os.environ:
-    logger.warning(
-        "LLM_TOOLS_ENABLED=true but OPENAI_API_KEY not set. Agent tools will not function without it."
-    )
+else:
+    if importlib.util.find_spec("litellm") is None:
+        logger.warning("LLM_TOOLS_ENABLED=true but %s", LITELLM_INSTALL_HINT)
+    if "OPENAI_API_KEY" not in os.environ:
+        logger.warning(
+            "LLM_TOOLS_ENABLED=true but OPENAI_API_KEY not set. Agent tools will not function without it."
+        )
 
 
 class ToolReference(BaseModel):

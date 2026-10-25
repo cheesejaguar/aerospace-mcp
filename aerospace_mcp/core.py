@@ -702,6 +702,17 @@ def _cached_cruise_mach(fgen: Any) -> float | None:
         return None
 
 
+def _openap_aero() -> Any:
+    """OpenAP's unit/ISA helper module (``openap.aero`` since 2.5, earlier
+    ``openap.extra.aero``); fresh installs get the newest openap, so both
+    locations are supported."""
+    try:
+        from openap import aero
+    except ImportError:
+        from openap.extra import aero
+    return aero
+
+
 def _cruise_tas_kts(fgen: Any, cruise_alt_ft: float, dt: int) -> float:
     """True airspeed in knots at the WRAP default cruise Mach and altitude.
 
@@ -711,8 +722,7 @@ def _cruise_tas_kts(fgen: Any, cruise_alt_ft: float, dt: int) -> float:
     """
     mach = _cached_cruise_mach(fgen)
     if mach is not None:
-        from openap.extra import aero
-
+        aero = _openap_aero()
         return float(aero.mach2tas(mach, cruise_alt_ft * aero.ft) / aero.kts)
     # Fallback for generators without a WRAP cruise-Mach accessor: simulate
     # a level segment at the requested altitude and average its speed.
