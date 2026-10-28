@@ -92,7 +92,15 @@ jobs:
   smoke:
     name: smoke (${{ matrix.os }}, py${{ matrix.python }})
     needs: wheels
-    runs-on: ${{ matrix.os }}
+    runs-on: >-
+      ${{
+        matrix.os != 'ubuntu-latest' && matrix.os ||
+        (github.event_name == 'pull_request' &&
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          github.event.pull_request.user.login == 'dependabot[bot]')) &&
+        'ubuntu-latest' ||
+        fromJSON(vars.RUNNER_FLEET_LABELS || '["ubuntu-latest"]')
+      }}
     strategy:
       fail-fast: false
       matrix:

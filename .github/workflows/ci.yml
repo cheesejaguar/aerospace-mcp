@@ -23,7 +23,14 @@ env:
 jobs:
   # Quick pre-checks that fail fast
   pre-commit:
-    runs-on: ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          github.event.pull_request.user.login == 'dependabot[bot]')) &&
+        'ubuntu-latest' ||
+        fromJSON(vars.RUNNER_FLEET_LABELS || '["ubuntu-latest"]')
+      }}
     steps:
     - uses: actions/checkout@v4
 
@@ -55,7 +62,14 @@ jobs:
 
   # Native core (rust/): formatting, lints, and pure-Rust unit tests.
   rust:
-    runs-on: ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          github.event.pull_request.user.login == 'dependabot[bot]')) &&
+        'ubuntu-latest' ||
+        fromJSON(vars.RUNNER_FLEET_LABELS || '["ubuntu-latest"]')
+      }}
     steps:
     - uses: actions/checkout@v4
 
@@ -82,7 +96,14 @@ jobs:
       run: cargo test --no-default-features
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          github.event.pull_request.user.login == 'dependabot[bot]')) &&
+        'ubuntu-latest' ||
+        fromJSON(vars.RUNNER_FLEET_LABELS || '["ubuntu-latest"]')
+      }}
     needs: pre-commit
     strategy:
       fail-fast: true  # Changed to fail-fast for speed
@@ -183,7 +204,14 @@ jobs:
 
   # Parallel security and docker builds for speed
   security:
-    runs-on: ubuntu-latest
+    runs-on: >-
+      ${{
+        (github.event_name == 'pull_request' &&
+         (github.event.pull_request.head.repo.full_name != github.repository ||
+          github.event.pull_request.user.login == 'dependabot[bot]')) &&
+        'ubuntu-latest' ||
+        fromJSON(vars.RUNNER_FLEET_LABELS || '["ubuntu-latest"]')
+      }}
     needs: pre-commit  # Run in parallel with tests
 
     steps:
