@@ -41,7 +41,11 @@ def test_plan_and_status():
     # Polyline sampled at the requested step
     points = data["route"]["points"]
     assert len(points) == int(-(-data["route"]["distance_km"] // 25.0)) + 1
-    assert points[0] == data["departure"]["airport"]["coordinates"]
+    # Geodesic sampling round-trips through floating point, so compare closely
+    # rather than bit-for-bit (last-ulp differences vary by platform).
+    assert points[0] == pytest.approx(
+        data["departure"]["airport"]["coordinates"], abs=1e-9
+    )
 
     status = json.loads(core_tools.get_system_status())
     assert status["status"] == "operational"
