@@ -1,15 +1,8 @@
 from __future__ import annotations
 
-from tests.tools.test_tools_common import make_module
+import pytest
 
-
-class RocketGeometry:
-    def __init__(self, **kwargs):
-        self.length_m = kwargs.get("length_m", 2.0)
-        self.diameter_m = kwargs.get("diameter_m", 0.3)
-        self.dry_mass_kg = kwargs.get("dry_mass_kg", 10.0)
-        self.propellant_mass_kg = kwargs.get("propellant_mass_kg", 5.0)
-
+from tests.tools.test_tools_common import without_integrations
 
 GEOMETRY = {
     "length_m": 2.0,
@@ -40,13 +33,10 @@ def test_rocket_3dof_trajectory_invalid_options():
     assert "error" in out.lower() and "dt_s" in out
 
 
-def test_rocket_importerror():
-    import sys
-
+def test_rocket_importerror(monkeypatch):
     from aerospace_mcp.tools import rockets as r_tools
 
-    sys.modules["aerospace_mcp.integrations.rockets"] = make_module()
-    sys.modules["aerospace_mcp.integrations.trajopt"] = make_module()
+    without_integrations(monkeypatch, "rockets", "trajopt")
     assert "not available" in r_tools.rocket_3dof_trajectory({}, {}).lower()
     assert "not available" in r_tools.estimate_rocket_sizing(1000, 5).lower()
     assert (
@@ -55,15 +45,23 @@ def test_rocket_importerror():
 
 
 def test_estimate_rocket_sizing_success():
-    import sys
+    """Tsiolkovsky: the mass ratio is exp(delta_v / (Isp g0))."""
+    import json
+    import math
 
-    sys.modules["aerospace_mcp.integrations.rockets"] = make_module(
-        estimate_rocket_sizing=lambda *a, **k: {"ok": True}
-    )
     from aerospace_mcp.tools.rockets import estimate_rocket_sizing
 
-    out = estimate_rocket_sizing(1000, 5)
-    assert "ok" in out
+    out = json.loads(estimate_rocket_sizing(1000, 5))
+    assert out["payload_mass_kg"] == 5
+    assert out["specific_impulse_s"] == 250.0  # solid propellant default
+    assert out["delta_v_ms"] == pytest.approx(1.2 * out["delta_v_without_margin_ms"])
+    assert out["mass_ratio"] == pytest.approx(
+        math.exp(out["delta_v_ms"] / (250.0 * 9.80665)), rel=1e-6
+    )
+    assert out["total_mass_kg"] == pytest.approx(
+        5 + out["propellant_mass_kg"] + out["structure_mass_kg"]
+    )
+    assert out["feasible"] is True
 
 
 def test_optimize_launch_angle_success():
@@ -81,34 +79,17 @@ def test_optimize_launch_angle_success():
     assert "not modelled" in ranged["note"]
 
 
-def test_rockets_exception_branches():
-    import sys
-
-    def _boom(*a, **k):
-        raise RuntimeError("boom")
-
-    sys.modules["aerospace_mcp.integrations.rockets"] = make_module(
-        RocketGeometry=RocketGeometry,
-        RocketTrajectoryPoint=object,
-        analyze_rocket_performance=_boom,
-        rocket_3dof_trajectory=_boom,
-        simulate_rocket=_boom,
-        estimate_rocket_sizing=_boom,
-    )
-    sys.modules["aerospace_mcp.integrations.trajopt"] = make_module(
-        RocketGeometry=RocketGeometry,
-        optimize_launch_angle=_boom,
-    )
+def test_rockets_invalid_input_errors():
     from aerospace_mcp.tools.rockets import (
-        estimate_rocket_sizing as _size,
-    )
-    from aerospace_mcp.tools.rockets import (
-        optimize_launch_angle as _opt,
-    )
-    from aerospace_mcp.tools.rockets import (
-        rocket_3dof_trajectory as _traj,
+        estimate_rocket_sizing,
+        optimize_launch_angle,
+        rocket_3dof_trajectory,
     )
 
-    assert "error" in _traj({}, {}).lower()
-    assert "error" in _size(1000, 5).lower()
-    assert "error" in _opt({}, None, "altitude").lower()
+    out = rocket_3dof_trajectory({}, {})
+    assert out.startswith("Rocket trajectory error") and "dry_mass_kg" in out
+    assert estimate_rocket_sizing(-1000, 5) == (
+        "Rocket sizing error: target_altitude_m must be > 0"
+    )
+    out = optimize_launch_angle({}, None, "altitude")
+    assert out.startswith("Launch optimization error") and "dry_mass_kg" in out

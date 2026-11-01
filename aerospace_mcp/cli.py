@@ -465,9 +465,12 @@ def _use_utf8_output() -> None:
         encoding = (getattr(stream, "encoding", None) or "").lower()
         if encoding.replace("-", "") in ("utf8", "utf8sig"):
             continue
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:  # not a TextIOWrapper (e.g. a test capture)
+            continue
         try:
-            stream.reconfigure(encoding="utf-8")
-        except (AttributeError, ValueError):
+            reconfigure(encoding="utf-8")
+        except ValueError:
             pass
 
 

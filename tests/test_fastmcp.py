@@ -1,9 +1,10 @@
 """Tests for FastMCP server functionality."""
 
-from unittest.mock import patch
+import json
 
 import pytest
 
+import aerospace_mcp.tools.core as core_tools
 from aerospace_mcp.fastmcp_server import mcp
 from aerospace_mcp.tools.core import (
     calculate_distance,
@@ -23,166 +24,95 @@ class TestFastMCPServerInitialization:
         assert mcp is not None
         assert mcp.name == "aerospace-mcp"
 
-    @pytest.mark.unit
-    def test_tools_registered(self):
-        """Test that all required tools are registered."""
-        # FastMCP automatically discovers registered tools
-        # We can check if the key tools are available by trying to call them
-
-        # The tools are registered as functions, so we can verify they exist
-        # This is a basic sanity check
-        assert callable(search_airports)
-        assert callable(plan_flight)
-        assert callable(calculate_distance)
-        assert callable(get_aircraft_performance)
-        assert callable(get_system_status)
-
 
 class TestSearchAirportsTool:
-    """Tests for the search_airports tool."""
+    """Tests for the search_airports tool (real airport database)."""
 
     @pytest.mark.unit
-    @patch("aerospace_mcp.tools.core._airport_from_iata")
-    def test_search_airports_by_iata(self, mock_airport):
+    def test_search_airports_by_iata(self):
         """Test searching airports by IATA code."""
-        # Mock airport data
-        mock_airport.return_value = type(
-            "Airport",
-            (),
-            {
-                "iata": "SJC",
-                "icao": "KSJC",
-                "name": "San Jose International Airport",
-                "city": "San Jose",
-                "country": "US",
-                "lat": 37.3626,
-                "lon": -121.929,
-                "tz": "America/Los_Angeles",
-            },
-        )()
-
         result = search_airports("SJC", query_type="iata")
 
-        assert "SJC" in result
-        assert "San Jose" in result
-        assert "Found 1 airport(s)" in result
+        assert result.startswith("Found 1 airport(s):")
+        assert "SJC (KSJC) - Norman Y Mineta San Jose International Airport" in result
+        assert "City: San Jose, US" in result
+        assert "Coordinates: 37.3630, -121.9286" in result
+        assert "Timezone: America/Los_Angeles" in result
 
     @pytest.mark.unit
-    @patch("aerospace_mcp.tools.core._find_city_airports")
-    def test_search_airports_by_city(self, mock_find):
-        """Test searching airports by city name."""
-        # Mock city search
-        mock_find.return_value = [
-            type(
-                "Airport",
-                (),
-                {
-                    "iata": "SJC",
-                    "icao": "KSJC",
-                    "name": "San Jose International Airport",
-                    "city": "San Jose",
-                    "country": "US",
-                    "lat": 37.3626,
-                    "lon": -121.929,
-                    "tz": "America/Los_Angeles",
-                },
-            )()
-        ]
+    def test_search_airports_auto_detects_iata(self):
+        """A three-letter query is treated as an IATA code in auto mode."""
+        assert search_airports("nrt") == search_airports("NRT", query_type="iata")
+        assert "NRT (RJAA) - Narita International Airport" in search_airports("nrt")
 
-        result = search_airports("San Jose", query_type="city")
+    @pytest.mark.unit
+    def test_search_airports_by_city(self):
+        """Test searching airports by city name with a country filter."""
+        result = search_airports("San Jose", country="US", query_type="city")
 
-        assert "SJC" in result
-        assert "San Jose" in result
-        assert "Found 1 airport(s)" in result
+        assert result.startswith("Found 2 airport(s):")
+        # Best match first
+        assert result.index("SJC (KSJC)") < result.index("RHV")
+        assert "SJO" not in result  # Costa Rica filtered out
 
     @pytest.mark.unit
     def test_search_airports_empty_query(self):
         """Test search with empty query."""
-        result = search_airports("")
-        assert "Error: Query parameter is required" in result
+        assert search_airports("") == "Error: Query parameter is required"
+        assert search_airports("   ") == "Error: Query parameter is required"
 
     @pytest.mark.unit
-    @patch("aerospace_mcp.tools.core._airport_from_iata")
-    def test_search_airports_not_found(self, mock_airport):
+    def test_search_airports_not_found(self):
         """Test search with non-existent airport."""
-        mock_airport.return_value = None
-
-        result = search_airports("XXX", query_type="iata")
-
-        assert "No airports found for iata 'XXX'" in result
+        assert search_airports("XXX", query_type="iata") == (
+            "No airports found for iata 'XXX'"
+        )
+        assert search_airports("Atlantis", country="GR") == (
+            "No airports found for city 'Atlantis' in country 'GR'"
+        )
 
 
 class TestPlanFlightTool:
     """Tests for the plan_flight tool."""
 
     @pytest.mark.unit
-    @patch("aerospace_mcp.tools.core._resolve_endpoint")
-    @patch("aerospace_mcp.tools.core.great_circle_points")
-    def test_plan_flight_basic(self, mock_route, mock_resolve):
+    def test_plan_flight_basic(self):
         """Test basic flight planning."""
-        # Mock airport resolution
-        mock_departure = type(
-            "Airport",
-            (),
-            {
-                "iata": "SJC",
-                "icao": "KSJC",
-                "name": "San Jose International Airport",
-                "city": "San Jose",
-                "country": "US",
-                "lat": 37.3626,
-                "lon": -121.929,
-            },
-        )()
-        mock_arrival = type(
-            "Airport",
-            (),
-            {
-                "iata": "NRT",
-                "icao": "RJAA",
-                "name": "Narita International Airport",
-                "city": "Tokyo",
-                "country": "JP",
-                "lat": 35.7647,
-                "lon": 140.386,
-            },
-        )()
-
-        mock_resolve.side_effect = [mock_departure, mock_arrival]
-
-        # Mock route calculation - returns tuple (points, distance_km)
-        mock_route.return_value = (
-            [(37.3626, -121.929), (35.7647, 140.386)],
-            8280.5,
+        result = json.loads(
+            plan_flight({"city": "San Jose", "country": "US"}, {"iata": "NRT"})
         )
 
-        departure = {"city": "San Jose"}
-        arrival = {"city": "Tokyo"}
-
-        result = plan_flight(departure, arrival)
-
-        assert "San Jose International Airport" in result
-        assert "Narita International Airport" in result
-        assert "8280.5" in result  # Distance
+        assert result["departure"]["airport"]["iata"] == "SJC"
+        assert result["arrival"]["airport"]["name"] == "Narita International Airport"
+        assert 8200 < result["route"]["distance_km"] < 8400
+        assert result["route"]["distance_nm"] == pytest.approx(
+            result["route"]["distance_km"] / 1.852
+        )
+        # Default aircraft is the A320, estimated by OpenAP
+        assert result["engine"] == "openap"
+        assert result["performance"]["block"]["time_min"] > 0
 
 
 class TestCalculateDistanceTool:
     """Tests for the calculate_distance tool."""
 
     @pytest.mark.unit
-    @patch("aerospace_mcp.tools.core.great_circle_points")
-    def test_calculate_distance(self, mock_route):
-        """Test distance calculation - great_circle_points returns tuple (points, distance_km)."""
-        mock_route.return_value = (
-            [(37.0, -122.0), (38.0, -121.0)],
-            100.0,
+    def test_calculate_distance(self):
+        """WGS-84 geodesic distance and bearings between two points."""
+        result = json.loads(calculate_distance(37.0, -122.0, 38.0, -121.0))
+
+        # 1 deg of latitude and longitude at 37.5 N: ~141.9 km, heading NE
+        assert result["distance_km"] == pytest.approx(141.9, abs=0.1)
+        assert result["distance_nm"] == pytest.approx(
+            result["distance_km"] / 1.852, rel=1e-6
         )
+        assert 35 < result["initial_bearing_deg"] < 42
+        assert result["coordinates"]["end"] == {"lat": 38.0, "lon": -121.0}
 
-        result = calculate_distance(37.0, -122.0, 38.0, -121.0)
-
-        assert "100.0" in result
-        # distance_nm is calculated from distance_km
-        assert "53.9" in result or "54.0" in result
+    @pytest.mark.unit
+    def test_calculate_distance_same_point(self):
+        result = json.loads(calculate_distance(10.0, 20.0, 10.0, 20.0))
+        assert result["distance_km"] == 0.0
 
 
 class TestSystemStatusTool:
@@ -202,31 +132,31 @@ class TestAircraftPerformanceTool:
     """Tests for the get_aircraft_performance tool."""
 
     @pytest.mark.unit
-    @patch("aerospace_mcp.tools.core.OPENAP_AVAILABLE", False)
-    def test_aircraft_performance_no_openap(self):
-        """Test aircraft performance when OpenAP not available."""
+    def test_aircraft_performance_no_openap(self, monkeypatch):
+        """Test aircraft performance when OpenAP is not installed."""
+        monkeypatch.setattr(core_tools, "OPENAP_AVAILABLE", False)
         result = get_aircraft_performance("A320", 1000.0)
 
         assert "OpenAP library is not available" in result
 
     @pytest.mark.unit
-    @patch("aerospace_mcp.tools.core.OPENAP_AVAILABLE", True)
-    @patch("aerospace_mcp.tools.core.estimates_openap")
-    def test_aircraft_performance_with_openap(self, mock_estimates):
-        """Test aircraft performance when OpenAP is available.
+    def test_aircraft_performance_with_openap(self):
+        """Real OpenAP estimate for a 1,000 km A320 sector."""
+        result = json.loads(get_aircraft_performance("A320", 1000.0))
 
-        estimates_openap returns tuple (performance_dict, engine_name).
-        """
-        mock_estimates.return_value = (
-            {
-                "fuel_kg": 2500.0,
-                "flight_time_minutes": 180.0,
-                "cruise_mach": 0.78,
-            },
-            "openap",
+        assert result["engine"] == "openap"
+        performance = result["performance"]
+        seg_km = sum(
+            performance[k]["distance_km"] for k in ("climb", "cruise", "descent")
         )
+        assert seg_km == pytest.approx(1000.0)
+        # ~1.5 h and a few tonnes of fuel for a 1,000 km A320 sector
+        assert 70 < performance["block"]["time_min"] < 110
+        assert 2000 < performance["block"]["fuel_kg"] < 6000
+        assert performance["assumptions"]["mass_source"] == "mtow_85pct"
 
-        result = get_aircraft_performance("A320", 1000.0)
-
-        assert "2500.0" in result
-        assert "180.0" in result
+    @pytest.mark.unit
+    def test_aircraft_performance_unsupported_type(self):
+        result = get_aircraft_performance("C172", 300.0)
+        assert result.startswith("Performance estimation error:")
+        assert "not supported by OpenAP" in result

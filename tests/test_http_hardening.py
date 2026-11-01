@@ -65,7 +65,7 @@ class TestBodySizeLimit:
         assert "too large" in response.json()["detail"]
 
     @pytest.mark.unit
-    def test_normal_body_accepted(self, client, mock_airports_iata, monkeypatch):
+    def test_normal_body_accepted(self, client, monkeypatch):
         """Bodies under the limit pass through to normal validation."""
         monkeypatch.setenv("MAX_BODY_BYTES", str(1024 * 1024))
 
@@ -125,7 +125,7 @@ class TestQueryBounds:
         assert response.status_code == 422
 
     @pytest.mark.unit
-    def test_route_step_km_upper_bound(self, client, mock_airports_iata):
+    def test_route_step_km_upper_bound(self, client):
         payload = {
             "depart_city": "San Jose",
             "arrive_city": "Tokyo",

@@ -1,98 +1,31 @@
 from __future__ import annotations
 
-import sys
-
-from tests.tools.test_tools_common import StubModel, make_module
+from tests.tools.test_tools_common import without_integrations
 
 
-def test_get_atmosphere_profile_success(monkeypatch):
-    def _get_profile(alts, model):
-        return [
-            StubModel(
-                altitude_m=a,
-                pressure_pa=101325 - a,
-                temperature_k=288.15 - 0.0065 * a,
-                density_kg_m3=1.225,
-                speed_of_sound_mps=340.0,
-            )
-            for a in alts
-        ]
+def test_atmosphere_import_errors(monkeypatch):
+    from aerospace_mcp.tools.atmosphere import get_atmosphere_profile, wind_model_simple
 
-    mod = make_module(get_atmosphere_profile=_get_profile)
-    sys.modules["aerospace_mcp.integrations.atmosphere"] = mod
-
-    from aerospace_mcp.tools.atmosphere import get_atmosphere_profile
-
-    out = get_atmosphere_profile([0, 1000], "ISA")
-    assert "Atmospheric Profile" in out
-    assert "JSON Data:" in out
+    without_integrations(monkeypatch, "atmosphere")
+    assert "not available" in get_atmosphere_profile([0], "ISA").lower()
+    assert "not available" in wind_model_simple([0.0]).lower()
 
 
-def test_get_atmosphere_profile_importerror(monkeypatch):
-    sys.modules["aerospace_mcp.integrations.atmosphere"] = make_module()
-    from aerospace_mcp.tools.atmosphere import get_atmosphere_profile
+def test_atmosphere_invalid_input_errors():
+    from aerospace_mcp.tools.atmosphere import get_atmosphere_profile, wind_model_simple
 
-    out = get_atmosphere_profile([0], "ISA")
-    assert "not available" in out.lower()
-
-
-def test_wind_model_simple_success():
-    def _wind_model(*args, **kwargs):
-        return [
-            StubModel(
-                altitude_m=a,
-                wind_speed_mps=5.0 + i,  # Correct attribute name
-                wind_direction_deg=270.0,
-            )
-            for i, a in enumerate([0.0, 50.0])
-        ]
-
-    sys.modules["aerospace_mcp.integrations.atmosphere"] = make_module(
-        wind_model_simple=_wind_model
+    assert get_atmosphere_profile([-1e6], "ISA") == (
+        "Atmosphere profile error: Altitude out of ISA range (0-86000m)"
     )
-
-    from aerospace_mcp.tools.atmosphere import wind_model_simple
-
-    out = wind_model_simple([0.0, 50.0])
-    assert "Wind Profile" in out
-
-
-def test_atmosphere_exception_handling(monkeypatch):
-    def _boom(*a, **k):
-        raise RuntimeError("boom")
-
-    sys.modules["aerospace_mcp.integrations.atmosphere"] = make_module(
-        get_atmosphere_profile=_boom, wind_model_simple=_boom
+    assert get_atmosphere_profile(["x"], "ISA").startswith("Atmosphere profile error")
+    assert wind_model_simple([0.0], 10.0, 270.0, "bogus").startswith(
+        "Wind model error: Unknown wind model: bogus"
     )
-    from aerospace_mcp.tools.atmosphere import (
-        get_atmosphere_profile as _gp,
-    )
-    from aerospace_mcp.tools.atmosphere import (
-        wind_model_simple as _wm,
-    )
-
-    assert "error" in _gp([0]).lower()
-    assert "error" in _wm([0.0]).lower()
-
-
-def test_wind_model_simple_importerror():
-    sys.modules["aerospace_mcp.integrations.atmosphere"] = make_module()
-    from aerospace_mcp.tools.atmosphere import wind_model_simple
-
-    out = wind_model_simple([0.0])
-    assert "not available" in out.lower()
 
 
 # ---------------------------------------------------------------------------
-# End-to-end tests against the real integration module (no stubs)
+# End-to-end tests against the real integration module
 # ---------------------------------------------------------------------------
-
-
-def _use_real_integration():
-    """Drop a stub left in sys.modules so the real module is imported."""
-    name = "aerospace_mcp.integrations.atmosphere"
-    if getattr(sys.modules.get(name), "__file__", None) is None:
-        sys.modules.pop(name, None)
 
 
 def _json_part(out: str):
@@ -102,7 +35,6 @@ def _json_part(out: str):
 
 
 def test_get_atmosphere_profile_end_to_end():
-    _use_real_integration()
     from aerospace_mcp.tools.atmosphere import get_atmosphere_profile
 
     data = _json_part(get_atmosphere_profile([0.0, 80000.0], "COESA"))
@@ -119,7 +51,6 @@ def test_get_atmosphere_profile_end_to_end():
 
 
 def test_wind_model_simple_end_to_end():
-    _use_real_integration()
     from aerospace_mcp.tools.atmosphere import wind_model_simple
 
     # power_law used to always fail ("Unknown wind model: power_law")

@@ -315,6 +315,12 @@ def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> st
     try:
         from geographiclib.geodesic import Geodesic
 
+        # Out-of-range latitudes used to surface as "cannot convert float
+        # NaN to integer" from deep inside the polyline sampler.
+        for name, lat in (("lat1", lat1), ("lat2", lat2)):
+            if not -90.0 <= float(lat) <= 90.0:
+                raise ValueError(f"{name} must be between -90 and 90 degrees")
+
         # Calculate great circle route - returns (list[tuple], distance_km)
         _, distance_km = great_circle_points(
             lat1, lon1, lat2, lon2, step_km=1000000

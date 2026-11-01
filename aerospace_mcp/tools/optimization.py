@@ -265,8 +265,8 @@ def porkchop_plot_analysis(
     """Generate porkchop plot for interplanetary transfer opportunities.
 
     Args:
-        departure_body: Departure celestial body name
-        arrival_body: Arrival celestial body name
+        departure_body: Departure body ('Earth' or 'Mars')
+        arrival_body: Arrival body ('Earth' or 'Mars')
         departure_date_range: Departure dates to evaluate (ISO format)
         arrival_date_range: Arrival dates to evaluate (ISO format)
         analysis_options: Optional analysis settings: ``min_tof_days``

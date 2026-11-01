@@ -293,10 +293,15 @@ If the user's requirements are unclear or insufficient data is provided, return 
             json.loads(formatted_result)
             return formatted_result
         except json.JSONDecodeError:
-            return f'{{"error": "Failed to generate valid JSON format. Raw response: {formatted_result}"}}'
+            return json.dumps(
+                {
+                    "error": "Failed to generate valid JSON format. "
+                    f"Raw response: {formatted_result}"
+                }
+            )
 
     except Exception as e:
-        return f'{{"error": "Failed to format data: {str(e)}"}}'
+        return json.dumps({"error": f"Failed to format data: {e}"})
 
 
 def select_aerospace_tool(user_task: str, user_context: str = "") -> str:
