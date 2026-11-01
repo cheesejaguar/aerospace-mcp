@@ -49,30 +49,6 @@ class TestTrajectoryWaypoint:
         assert waypoint.thrust_n[0] == 500.0
 
 
-class TestGeneticAlgorithm:
-    """Test Genetic Algorithm implementation."""
-
-    def test_ga_initialization(self):
-        """Test GA initialization."""
-        ga = GeneticAlgorithm(GeneticAlgorithmParams())
-
-        # Check that GA instance was created
-        assert ga is not None
-        assert hasattr(ga, "optimize")
-
-
-class TestParticleSwarmOptimizer:
-    """Test Particle Swarm Optimization implementation."""
-
-    def test_pso_initialization(self):
-        """Test PSO initialization."""
-        pso = ParticleSwarmOptimizer(ParticleSwarmParams())
-
-        # Check that PSO instance was created
-        assert pso is not None
-        assert hasattr(pso, "optimize")
-
-
 class TestOptimizationResult:
     """Test OptimizationResult data class."""
 
@@ -103,24 +79,6 @@ class TestOptimizationResult:
         assert len(result.optimal_trajectory) == 2
         assert result.delta_v_total_ms == 150.0
         assert result.converged
-
-
-class TestModuleImports:
-    """Test that all expected functions and classes are available."""
-
-    def test_imports(self):
-        """Test that key classes can be imported."""
-        # Test that we can import and create instances
-        waypoint = TrajectoryWaypoint(
-            time_s=0.0, position_m=[0.0, 0.0, 0.0], velocity_ms=[0.0, 0.0, 0.0]
-        )
-
-        ga = GeneticAlgorithm(GeneticAlgorithmParams())
-        pso = ParticleSwarmOptimizer(ParticleSwarmParams())
-
-        assert waypoint is not None
-        assert ga is not None
-        assert pso is not None
 
 
 def _waypoints(thrust_n=(100.0, 0.0, 0.0), n=5):

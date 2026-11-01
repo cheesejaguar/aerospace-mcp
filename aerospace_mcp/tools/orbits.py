@@ -568,7 +568,7 @@ def orbital_rendezvous_planning(
 
         result = _rendezvous(chaser, target)
 
-        return json.dumps(result, indent=2)
+        return json.dumps(result, indent=2, allow_nan=False)
 
     except ImportError:
         return "Rendezvous planning not available - install orbital packages"

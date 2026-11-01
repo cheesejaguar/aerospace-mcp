@@ -1,277 +1,144 @@
+"""Core flight-planning tools against the real airport database and OpenAP."""
+
 from __future__ import annotations
 
 import json
 
+import pytest
+
 import aerospace_mcp.tools.core as core_tools
 
 
-def test_search_airports_and_distance(monkeypatch):
-    class A:
-        def __init__(self, iata: str):
-            self.iata = iata
-            self.icao = "K" + iata
-            self.name = "Name"
-            self.city = "City"
-            self.country = "US"
-            self.lat = 0.0
-            self.lon = 0.0
-            self.tz = None
-
-    monkeypatch.setattr(
-        core_tools, "_airport_from_iata", lambda q: A(q) if q.upper() == "SJC" else None
-    )
-    monkeypatch.setattr(
-        core_tools,
-        "_find_city_airports",
-        lambda q, c: [A("SJC")] if q.lower() == "san jose" else [],
-    )
-
+def test_search_airports_and_distance():
     out = core_tools.search_airports("SJC", "US", "auto")
-    assert "Found" in out
+    assert out.startswith("Found 1 airport(s):")
+    assert "SJC (KSJC)" in out
     out2 = core_tools.search_airports("Unknown", "US", "city")
-    assert "No airports" in out2
+    assert out2 == "No airports found for city 'Unknown' in country 'US'"
     out3 = core_tools.search_airports("  ")
-    assert "required" in out3
+    assert out3 == "Error: Query parameter is required"
 
-    # calculate_distance expects great_circle_points returning tuple (points, distance_km)
-    monkeypatch.setattr(
-        core_tools,
-        "great_circle_points",
-        lambda a, b, c, d, step_km: ([(0.0, 0.0), (1.0, 1.0)], 1000.0),
-    )
-    dist = core_tools.calculate_distance(0, 0, 1, 1)
-    data = json.loads(dist)
-    assert data["distance_km"] == 1000.0
+    # Quarter of the equator: a * pi / 2 on the WGS-84 ellipsoid
+    data = json.loads(core_tools.calculate_distance(0, 0, 0, 90))
+    assert data["distance_km"] == pytest.approx(10018.754, abs=0.01)
+    assert data["distance_nm"] == pytest.approx(10018.754 / 1.852, abs=0.01)
+    assert data["initial_bearing_deg"] == pytest.approx(90.0)
 
 
-def test_plan_and_status(monkeypatch):
-    # Stubs for endpoints and routing
-    class A:
-        def __init__(self, iata: str):
-            self.iata = iata
-            self.icao = "K" + iata
-            self.name = "Name"
-            self.city = "City"
-            self.country = "US"
-            self.lat = 0.0
-            self.lon = 0.0
-            self.tz = None
-
-    monkeypatch.setattr(
-        core_tools,
-        "_resolve_endpoint",
-        lambda city, country, iata=None, role=None: A(iata or "SJC"),
-    )
-    # great_circle_points returns tuple (points, distance_km)
-    monkeypatch.setattr(
-        core_tools,
-        "great_circle_points",
-        lambda a, b, c, d, step_km: ([(0.0, 0.0), (1.0, 1.0)], 1000.0),
-    )
-    # estimates_openap returns tuple (dict, engine_name)
-    monkeypatch.setattr(core_tools, "OPENAP_AVAILABLE", True)
-    monkeypatch.setattr(
-        core_tools,
-        "estimates_openap",
-        lambda *a, **k: (
-            {"assumptions": {"cruise_alt_ft": a[1], "mass_kg": 70000.0}},
-            "engine",
-        ),
-    )
-
+def test_plan_and_status():
     out = core_tools.plan_flight(
-        {"city": "City", "iata": "SJC"},
-        {"city": "City", "iata": "NRT"},
+        {"city": "San Jose", "iata": "SJC"},
+        {"city": "Tokyo", "iata": "NRT"},
         {"ac_type": "A320", "cruise_alt_ft": 41000, "route_step_km": 25.0},
         {},
     )
     data = json.loads(out)
-    assert data["route"]["distance_km"] == 1000.0
+    assert data["departure"]["airport"]["iata"] == "SJC"
+    assert data["arrival"]["airport"]["iata"] == "NRT"
+    assert 8200 < data["route"]["distance_km"] < 8400
+    assert data["performance"]["assumptions"]["cruise_alt_ft"] == 41000
+    assert data["engine"] == "openap"
+    # Polyline sampled at the requested step
+    points = data["route"]["points"]
+    assert len(points) == int(-(-data["route"]["distance_km"] // 25.0)) + 1
+    # Geodesic sampling round-trips through floating point, so compare closely
+    # rather than bit-for-bit (last-ulp differences vary by platform).
+    assert points[0] == pytest.approx(
+        data["departure"]["airport"]["coordinates"], abs=1e-9
+    )
 
-    status = core_tools.get_system_status()
-    assert "system" in status
+    status = json.loads(core_tools.get_system_status())
+    assert status["status"] == "operational"
+    assert status["capabilities"]["airport_search"] is True
 
 
-def test_plan_optional_fields_and_resolution_error(monkeypatch):
-    import aerospace_mcp.tools.core as core_tools
-    from aerospace_mcp.core import AirportResolutionError
-
-    # Resolution error path
-    def raise_res(*a, **k):
-        raise AirportResolutionError("nope")
-
-    monkeypatch.setattr(core_tools, "_resolve_endpoint", raise_res)
+def test_plan_optional_fields_and_resolution_error():
     out_err = core_tools.plan_flight(
-        {"city": "City", "country": "US"},
-        {"city": "City", "country": "JP"},
+        {"city": "Atlantis", "country": "US"},
+        {"city": "Tokyo", "country": "JP"},
         {"ac_type": "A320"},
     )
-    assert "Airport resolution error" in out_err
+    assert out_err.startswith("Airport resolution error")
+    assert "Atlantis" in out_err
 
-    # Optional fields executed (with successful resolve)
-    class A:
-        def __init__(self, iata: str, country: str):
-            self.iata = iata
-            self.icao = "K" + iata
-            self.name = "Name"
-            self.city = "City"
-            self.country = country
-            self.lat = 0.0
-            self.lon = 0.0
-            self.tz = None
-
-    monkeypatch.setattr(
-        core_tools,
-        "_resolve_endpoint",
-        lambda city, country, iata=None, role=None: A(iata or "SJC", country or "US"),
+    # Country codes and route_options.step_km are honoured
+    out_ok = json.loads(
+        core_tools.plan_flight(
+            {"city": "San Jose", "country": "CR"},
+            {"city": "Tokyo", "country": "JP"},
+            {"ac_type": "A320"},
+            {"step_km": 500.0},
+        )
     )
-    # great_circle_points returns tuple (points, distance_km)
-    monkeypatch.setattr(
-        core_tools,
-        "great_circle_points",
-        lambda *a, **k: ([(0.0, 0.0), (1.0, 1.0)], 1.0),
-    )
-    out_ok = core_tools.plan_flight(
-        {"city": "City", "country": "US"},
-        {"city": "City", "country": "JP"},
-        {"ac_type": "A320"},
-    )
-    assert "departure" in out_ok
+    assert out_ok["departure"]["airport"]["iata"] == "SJO"
+    assert out_ok["arrival"]["airport"]["iata"] == "HND"
+    distance = out_ok["route"]["distance_km"]
+    assert len(out_ok["route"]["points"]) == int(-(-distance // 500.0)) + 1
 
 
-def test_search_airports_exception(monkeypatch):
-    import aerospace_mcp.tools.core as core_tools
-
-    def boom(q):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(core_tools, "_airport_from_iata", boom)
-    out = core_tools.search_airports("SJC", None, "iata")
-    assert "Search error" in out
+def test_search_airports_auto_detects_city():
+    """Queries that are not three letters are searched as cities."""
+    out = core_tools.search_airports("Tokyo", "JP")
+    assert out.startswith("Found 2 airport(s):")
+    assert out.index("HND") < out.index("NRT")
 
 
-def test_plan_invalid_request(monkeypatch):
-    import aerospace_mcp.tools.core as core_tools
-
-    # Valid endpoints
-    class A:
-        def __init__(self, iata: str):
-            self.iata = iata
-            self.icao = "K" + iata
-            self.name = "Name"
-            self.city = "City"
-            self.country = "US"
-            self.lat = 0.0
-            self.lon = 0.0
-            self.tz = None
-
-    monkeypatch.setattr(
-        core_tools, "_resolve_endpoint", lambda *a, role=None, **k: A("SJC")
-    )
-    # Build invalid PlanRequest by negative route_step_km
+def test_plan_invalid_request():
     out = core_tools.plan_flight(
-        {"city": "City"},
-        {"city": "City"},
+        {"iata": "SJC"},
+        {"iata": "NRT"},
         {"ac_type": "A320", "route_step_km": -1.0},
     )
-    assert "Invalid request" in out
+    assert out.startswith("Invalid request")
+    assert "route_step_km" in out
+
+
+def test_plan_same_airport_rejected():
+    out = core_tools.plan_flight({"iata": "SJC"}, {"city": "San Jose", "country": "US"})
+    assert out.startswith("Invalid request: departure and arrival both resolve to SJC")
 
 
 def test_plan_openap_error_and_unavailable(monkeypatch):
-    import aerospace_mcp.tools.core as core_tools
-
-    class A:
-        def __init__(self, iata: str):
-            self.iata = iata
-            self.icao = "K" + iata
-            self.name = "Name"
-            self.city = "City"
-            self.country = "US"
-            self.lat = 0.0
-            self.lon = 0.0
-            self.tz = None
-
-    # Distinct airports per role: the same airport twice is now rejected.
-    monkeypatch.setattr(
-        core_tools,
-        "_resolve_endpoint",
-        lambda *a, role=None, **k: A("SJC" if role == "departure" else "NRT"),
+    # An aircraft type OpenAP cannot model: route still returned, with a note
+    out = json.loads(
+        core_tools.plan_flight({"iata": "SJC"}, {"iata": "LAX"}, {"ac_type": "C172"})
     )
-    # great_circle_points returns tuple (points, distance_km)
-    monkeypatch.setattr(
-        core_tools,
-        "great_circle_points",
-        lambda *a, **k: ([(0.0, 0.0), (1.0, 1.0)], 1.0),
-    )
-    # OpenAP available but raises
-    monkeypatch.setattr(core_tools, "OPENAP_AVAILABLE", True)
-    from aerospace_mcp.core import OpenAPError
+    assert "performance" not in out
+    assert out["performance_note"].startswith("Performance estimation failed")
+    assert out["route"]["distance_km"] > 400
 
-    def raise_openap(*a, **k):
-        raise OpenAPError("bad")
-
-    monkeypatch.setattr(core_tools, "estimates_openap", raise_openap)
-    out = core_tools.plan_flight(
-        {"city": "City"}, {"city": "City"}, {"ac_type": "A320"}
-    )
-    assert "Performance estimation failed" in out
-    # OpenAP unavailable path
+    # OpenAP not installed
     monkeypatch.setattr(core_tools, "OPENAP_AVAILABLE", False)
-    out2 = core_tools.plan_flight(
-        {"city": "City"}, {"city": "City"}, {"ac_type": "A320"}
+    out2 = json.loads(
+        core_tools.plan_flight({"iata": "SJC"}, {"iata": "LAX"}, {"ac_type": "A320"})
     )
-    assert "OpenAP not available" in out2
+    assert out2["performance_note"] == (
+        "OpenAP not available - no performance estimates for A320"
+    )
 
 
-def test_plan_and_distance_exception(monkeypatch):
-    import aerospace_mcp.tools.core as core_tools
-
-    def boom(*a, **k):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(core_tools, "great_circle_points", boom)
-    out = core_tools.plan_flight({"iata": "SJC"}, {"iata": "NRT"}, {"ac_type": "A320"})
-    assert "Flight planning error" in out
-    out2 = core_tools.calculate_distance(0, 0, 0, 0)
-    assert "Distance calculation error" in out2
+def test_distance_invalid_input():
+    out = core_tools.calculate_distance("a", 0, 0, 0)
+    assert out.startswith("Distance calculation error")
 
 
 def test_get_aircraft_performance_branches(monkeypatch):
-    import aerospace_mcp.tools.core as core_tools
-
+    # Success
+    data = json.loads(core_tools.get_aircraft_performance("A320", 1000))
+    assert data["engine"] == "openap"
+    assert data["performance"]["assumptions"]["cruise_alt_ft"] == 35000
+    # Unsupported type -> OpenAPError branch
+    assert core_tools.get_aircraft_performance("C172", 300).startswith(
+        "Performance estimation error"
+    )
     # Unavailable
     monkeypatch.setattr(core_tools, "OPENAP_AVAILABLE", False)
     assert "OpenAP library is not available" in core_tools.get_aircraft_performance(
         "A320", 1000
     )
-    # Available success - estimates_openap returns tuple (dict, engine_name)
-    monkeypatch.setattr(core_tools, "OPENAP_AVAILABLE", True)
-    monkeypatch.setattr(
-        core_tools, "estimates_openap", lambda *a, **k: ({"ok": True}, "engine")
-    )
-    assert "ok" in core_tools.get_aircraft_performance("A320", 1000)
-    # OpenAPError
-    from aerospace_mcp.core import OpenAPError
-
-    def raise_openap(*a, **k):
-        raise OpenAPError("bad")
-
-    monkeypatch.setattr(core_tools, "estimates_openap", raise_openap)
-    assert "Performance estimation error" in core_tools.get_aircraft_performance(
-        "A320", 1000
-    )
-
-    # Unexpected error
-    def raise_runtime_error(*a, **k):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(core_tools, "estimates_openap", raise_runtime_error)
-    assert "Unexpected error" in core_tools.get_aircraft_performance("A320", 1000)
 
 
 def test_system_status_openap_false(monkeypatch):
-    import aerospace_mcp.tools.core as core_tools
-
     monkeypatch.setattr(core_tools, "OPENAP_AVAILABLE", False)
     out = core_tools.get_system_status()
     assert "OpenAP not available" in out

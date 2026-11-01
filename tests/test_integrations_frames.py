@@ -22,6 +22,14 @@ from aerospace_mcp.integrations.frames import (
 )
 
 
+@pytest.fixture
+def manual_frames(monkeypatch):
+    """Use the built-in GMST + precession model even when astropy is installed."""
+    import aerospace_mcp.integrations.frames as frames
+
+    monkeypatch.setattr(frames, "ASTROPY_AVAILABLE", False)
+
+
 class TestGeodeticECEFConversions:
     """Test geodetic <-> ECEF coordinate conversions."""
 
@@ -168,33 +176,41 @@ class TestFrameTransformations:
         )  # Magnitude should be preserved
 
     @pytest.mark.skipif(not ASTROPY_AVAILABLE, reason="astropy not available")
-    def test_astropy_integration(self):
-        """Test astropy integration if available."""
+    def test_astropy_integration(self, monkeypatch):
+        """The astropy (IAU) transform agrees with the manual GMST model to
+        within the nutation / polar-motion terms the manual path omits."""
+        import aerospace_mcp.integrations.frames as frames
+
         xyz = [6500000.0, 1000000.0, 2000000.0]
+        epoch = "2023-01-01T00:00:00"
 
-        # Should use astropy for high-precision transforms if available
-        result = transform_frames(xyz, "ECI", "ECEF", "2023-01-01T00:00:00")
+        precise = transform_frames(xyz, "ECI", "ECEF", epoch)
+        monkeypatch.setattr(frames, "ASTROPY_AVAILABLE", False)
+        manual = transform_frames(xyz, "ECI", "ECEF", epoch)
 
-        assert result.frame == "ECEF"
-        assert isinstance(result.x, float)
-        assert isinstance(result.y, float)
-        assert isinstance(result.z, float)
+        assert precise.frame == "ECEF"
+        assert (
+            math.dist((precise.x, precise.y, precise.z), (manual.x, manual.y, manual.z))
+            < 1000.0
+        )
+        assert math.hypot(precise.x, precise.y, precise.z) == pytest.approx(
+            math.hypot(*xyz), abs=1e-3
+        )
 
-    def test_approximate_transforms(self):
+    def test_approximate_transforms(self, manual_frames):
         """GMST-based ECI<->ECEF works without high-precision libraries."""
         xyz = [1000000.0, 2000000.0, 3000000.0]
 
-        if not ASTROPY_AVAILABLE and not SKYFIELD_AVAILABLE:
-            result = transform_frames(xyz, "GCRS", "ITRF")
-            assert result.frame == "ITRF"
-            # z-axis rotation: z unchanged, xy-magnitude preserved
-            assert result.z == xyz[2]
-            xy_mag_in = (xyz[0] ** 2 + xyz[1] ** 2) ** 0.5
-            xy_mag_out = (result.x**2 + result.y**2) ** 0.5
-            assert abs(xy_mag_out - xy_mag_in) < 1e-3
+        # At the default epoch (J2000.0) precession is the identity, so the
+        # transform is a pure rotation about z.
+        result = transform_frames(xyz, "GCRS", "ITRF")
+        assert result.frame == "ITRF"
+        assert result.z == pytest.approx(xyz[2], abs=1e-6)
+        xy_mag_in = (xyz[0] ** 2 + xyz[1] ** 2) ** 0.5
+        xy_mag_out = (result.x**2 + result.y**2) ** 0.5
+        assert abs(xy_mag_out - xy_mag_in) < 1e-3
 
-    @pytest.mark.skipif(ASTROPY_AVAILABLE, reason="tests the manual GMST path")
-    def test_eci_ecef_round_trip(self):
+    def test_eci_ecef_round_trip(self, manual_frames):
         """ECI -> ECEF -> ECI recovers the input to sub-millimetre level."""
         xyz = [6500000.0, 1000000.0, 2000000.0]
         epoch = "2024-03-20T12:00:00"
@@ -206,8 +222,7 @@ class TestFrameTransformations:
         assert abs(back.y - xyz[1]) < 1e-3
         assert abs(back.z - xyz[2]) < 1e-3
 
-    @pytest.mark.skipif(ASTROPY_AVAILABLE, reason="tests the manual GMST path")
-    def test_eci_ecef_rotation_advances_with_time(self):
+    def test_eci_ecef_rotation_advances_with_time(self, manual_frames):
         """Six hours of Earth rotation shifts the transform by ~90.25 deg."""
         import math
 

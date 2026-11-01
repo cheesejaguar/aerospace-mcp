@@ -1,8 +1,11 @@
 """Tests for FastAPI health endpoint."""
 
-from unittest.mock import patch
+import math
 
+import airportsdata
 import pytest
+
+import aerospace_mcp.core as core
 
 
 class TestHealthEndpoint:
@@ -10,52 +13,27 @@ class TestHealthEndpoint:
 
     @pytest.mark.unit
     def test_health_endpoint_with_openap(self, client):
-        """Test health endpoint when OpenAP is available."""
-        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", True):
-            with patch(
-                "aerospace_mcp.core._AIRPORTS_IATA",
-                {"SJC": {"iata": "SJC"}, "NRT": {"iata": "NRT"}},
-            ):
-                response = client.get("/health")
+        """OpenAP is installed in the test environment; the airport count is
+        the size of the airportsdata IATA table."""
+        response = client.get("/health")
 
-                assert response.status_code == 200
-                data = response.json()
-
-                assert "status" in data
-                assert "openap" in data
-                assert "airports_count" in data
-
-                assert data["status"] == "ok"
-                assert data["openap"] is True
-                assert data["airports_count"] == 2
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "ok",
+            "openap": True,
+            "airports_count": len(airportsdata.load("IATA")),
+        }
 
     @pytest.mark.unit
-    def test_health_endpoint_without_openap(self, client):
-        """Test health endpoint when OpenAP is not available."""
-        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", False):
-            with patch("aerospace_mcp.core._AIRPORTS_IATA", {"SJC": {"iata": "SJC"}}):
-                response = client.get("/health")
+    def test_health_endpoint_without_openap(self, client, monkeypatch):
+        """Health reports openap=false when the OpenAP package is missing."""
+        monkeypatch.setattr(core, "OPENAP_AVAILABLE", False)
+        response = client.get("/health")
 
-                assert response.status_code == 200
-                data = response.json()
-
-                assert data["status"] == "ok"
-                assert data["openap"] is False
-                assert data["airports_count"] == 1
-
-    @pytest.mark.unit
-    def test_health_endpoint_empty_airports(self, client):
-        """Test health endpoint with no airports loaded."""
-        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", True):
-            with patch("aerospace_mcp.core._AIRPORTS_IATA", {}):
-                response = client.get("/health")
-
-                assert response.status_code == 200
-                data = response.json()
-
-                assert data["status"] == "ok"
-                assert data["openap"] is True
-                assert data["airports_count"] == 0
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["openap"] is False
 
     @pytest.mark.unit
     def test_health_endpoint_response_format(self, client):
@@ -66,83 +44,53 @@ class TestHealthEndpoint:
         assert response.headers["content-type"] == "application/json"
 
         data = response.json()
-
-        # Check required fields exist
-        required_fields = ["status", "openap", "airports_count"]
-        for field in required_fields:
-            assert field in data, f"Missing required field: {field}"
-
-        # Check field types
-        assert isinstance(data["status"], str)
+        assert set(data) == {"status", "openap", "airports_count"}
         assert isinstance(data["openap"], bool)
-        assert isinstance(data["airports_count"], int)
-
-        # Check status value
-        assert data["status"] == "ok"
-
-        # Check airports_count is non-negative
-        assert data["airports_count"] >= 0
-
-    @pytest.mark.integration
-    def test_health_endpoint_real_data(self, client):
-        """Test health endpoint with real airport data."""
-        response = client.get("/health")
-
-        assert response.status_code == 200
-        data = response.json()
-
-        assert data["status"] == "ok"
-        # Real airport data should have many airports
+        # The real airport database has thousands of IATA entries
         assert data["airports_count"] > 1000
-        # OpenAP availability depends on installation
-        assert isinstance(data["openap"], bool)
 
 
 class TestAirportsByCity:
     """Tests for the /airports/by_city endpoint."""
 
     @pytest.mark.unit
-    def test_airports_by_city_san_jose(self, client, mock_airports_iata):
+    def test_airports_by_city_san_jose(self, client):
         """Test finding airports for San Jose."""
         response = client.get("/airports/by_city?city=San Jose&country=US")
 
         assert response.status_code == 200
         data = response.json()
 
-        assert isinstance(data, list)
-        assert len(data) == 1
+        assert [airport["iata"] for airport in data] == ["SJC", "RHV"]
 
         airport = data[0]
-        assert airport["iata"] == "SJC"
+        assert airport["icao"] == "KSJC"
         assert airport["city"] == "San Jose"
         assert airport["country"] == "US"
-        assert airport["name"] == "San Jose International Airport"
+        assert airport["name"] == "Norman Y Mineta San Jose International Airport"
 
     @pytest.mark.unit
-    def test_airports_by_city_without_country(self, client, mock_airports_iata):
+    def test_airports_by_city_without_country(self, client):
         """Test finding airports without specifying country."""
         response = client.get("/airports/by_city?city=San Jose")
 
         assert response.status_code == 200
         data = response.json()
 
-        assert isinstance(data, list)
-        assert len(data) >= 1
-
-        # Should find at least SJC
         iatas = [airport["iata"] for airport in data]
-        assert "SJC" in iatas
+        assert iatas[0] == "SJC"
+        # Costa Rica's San Jose airports are included without a country
+        assert {"SJO", "SYQ"} <= set(iatas)
 
     @pytest.mark.unit
-    def test_airports_by_city_nonexistent(self, client, mock_airports_iata):
+    def test_airports_by_city_nonexistent(self, client):
         """Test finding airports for non-existent city."""
         response = client.get("/airports/by_city?city=NonexistentCity&country=US")
 
         assert response.status_code == 200
         data = response.json()
 
-        assert isinstance(data, list)
-        assert len(data) == 0
+        assert data == []
 
     @pytest.mark.unit
     def test_airports_by_city_missing_parameter(self, client):
@@ -153,7 +101,7 @@ class TestAirportsByCity:
         assert response.status_code == 422
 
     @pytest.mark.unit
-    def test_airports_by_city_empty_city(self, client, mock_airports_iata):
+    def test_airports_by_city_empty_city(self, client):
         """Regression: empty city must not return the entire airport database."""
         response = client.get("/airports/by_city?city=")
 
@@ -161,7 +109,7 @@ class TestAirportsByCity:
         assert response.status_code == 422
 
     @pytest.mark.unit
-    def test_airports_by_city_whitespace_city(self, client, mock_airports_iata):
+    def test_airports_by_city_whitespace_city(self, client):
         """A whitespace-only city matches nothing (guarded in core)."""
         response = client.get("/airports/by_city?city=%20%20")
 
@@ -169,7 +117,7 @@ class TestAirportsByCity:
         assert response.json() == []
 
     @pytest.mark.unit
-    def test_airports_by_city_case_insensitive(self, client, mock_airports_iata):
+    def test_airports_by_city_case_insensitive(self, client):
         """Test that city search is case insensitive."""
         responses = [
             client.get("/airports/by_city?city=san jose&country=US"),
@@ -185,84 +133,57 @@ class TestAirportsByCity:
 
         # All should return the same results
         assert all(data == data_sets[0] for data in data_sets)
-        assert len(data_sets[0]) == 1
-        assert data_sets[0][0]["iata"] == "SJC"
+        assert [a["iata"] for a in data_sets[0]] == ["SJC", "RHV"]
 
 
 class TestPlanEndpoint:
-    """Tests for the /plan endpoint."""
+    """Tests for the /plan endpoint (real airport data and OpenAP)."""
 
     @pytest.mark.unit
-    def test_plan_endpoint_success(
-        self,
-        client,
-        mock_airports_iata,
-        mock_openap_flight_generator,
-        mock_openap_fuel_flow,
-        mock_openap_props,
-    ):
+    def test_plan_endpoint_success(self, client):
         """Test successful flight planning."""
-        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", True):
-            with patch(
-                "aerospace_mcp.core.FlightGenerator",
-                return_value=mock_openap_flight_generator,
-            ):
-                with patch(
-                    "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
-                ):
-                    with patch(
-                        "aerospace_mcp.core.prop.aircraft",
-                        return_value=mock_openap_props,
-                    ):
-                        request_data = {
-                            "depart_city": "San Jose",
-                            "arrive_city": "Tokyo",
-                            "depart_country": "US",
-                            "arrive_country": "JP",
-                            "ac_type": "A359",
-                            "cruise_alt_ft": 35000,
-                            "route_step_km": 50.0,
-                        }
+        request_data = {
+            "depart_city": "San Jose",
+            "arrive_city": "Tokyo",
+            "depart_country": "US",
+            "arrive_country": "JP",
+            "prefer_arrive_iata": "NRT",
+            "ac_type": "A359",
+            "cruise_alt_ft": 35000,
+            "route_step_km": 50.0,
+        }
 
-                        response = client.post("/plan", json=request_data)
+        response = client.post("/plan", json=request_data)
 
-                        assert response.status_code == 200
-                        data = response.json()
+        assert response.status_code == 200
+        data = response.json()
 
-                        # Check response structure
-                        required_fields = [
-                            "engine",
-                            "depart",
-                            "arrive",
-                            "distance_km",
-                            "distance_nm",
-                            "polyline",
-                            "estimates",
-                        ]
-                        for field in required_fields:
-                            assert field in data
+        assert data["engine"] == "openap"
+        assert data["depart"]["iata"] == "SJC"
+        assert data["arrive"]["iata"] == "NRT"
 
-                        # Check airport data
-                        assert data["depart"]["iata"] == "SJC"
-                        assert data["arrive"]["iata"] == "NRT"
+        assert 8200 < data["distance_km"] < 8400
+        assert data["distance_nm"] == pytest.approx(data["distance_km"] / 1.852)
 
-                        # Check distance reasonableness
-                        assert 8200 < data["distance_km"] < 8400
-                        assert 4400 < data["distance_nm"] < 4550  # km * NM_PER_KM
+        # Polyline runs SJC -> NRT at the requested 50 km spacing
+        polyline = data["polyline"]
+        assert len(polyline) == math.ceil(data["distance_km"] / 50.0) + 1
+        assert polyline[0] == pytest.approx(
+            [data["depart"]["lat"], data["depart"]["lon"]]
+        )
+        assert polyline[-1] == pytest.approx(
+            [data["arrive"]["lat"], data["arrive"]["lon"]]
+        )
 
-                        # Check polyline
-                        assert isinstance(data["polyline"], list)
-                        assert len(data["polyline"]) > 100  # Should have many points
-
-                        # Check estimates structure
-                        estimates = data["estimates"]
-                        assert "block" in estimates
-                        assert "climb" in estimates
-                        assert "cruise" in estimates
-                        assert "descent" in estimates
+        estimates = data["estimates"]
+        seg_km = sum(
+            estimates[k]["distance_km"] for k in ("climb", "cruise", "descent")
+        )
+        assert seg_km == pytest.approx(data["distance_km"])
+        assert estimates["block"]["fuel_kg"] > 0
 
     @pytest.mark.unit
-    def test_plan_endpoint_same_city_error(self, client, mock_airports_iata):
+    def test_plan_endpoint_same_city_error(self, client):
         """Test error when departure and arrival are the same city."""
         request_data = {
             "depart_city": "San Jose",
@@ -277,7 +198,7 @@ class TestPlanEndpoint:
         assert "identical" in data["detail"].lower()
 
     @pytest.mark.unit
-    def test_plan_endpoint_invalid_airport(self, client, mock_airports_iata):
+    def test_plan_endpoint_invalid_airport(self, client):
         """Test error with invalid airport."""
         request_data = {
             "depart_city": "NonexistentCity",
@@ -292,45 +213,26 @@ class TestPlanEndpoint:
         assert "no airport" in data["detail"].lower()
 
     @pytest.mark.unit
-    def test_plan_endpoint_preferred_iata(
-        self,
-        client,
-        mock_airports_iata,
-        mock_openap_flight_generator,
-        mock_openap_fuel_flow,
-        mock_openap_props,
-    ):
-        """Test planning with preferred IATA codes."""
-        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", True):
-            with patch(
-                "aerospace_mcp.core.FlightGenerator",
-                return_value=mock_openap_flight_generator,
-            ):
-                with patch(
-                    "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
-                ):
-                    with patch(
-                        "aerospace_mcp.core.prop.aircraft",
-                        return_value=mock_openap_props,
-                    ):
-                        request_data = {
-                            "depart_city": "Any City",  # This would normally fail
-                            "arrive_city": "Any City",
-                            "prefer_depart_iata": "SJC",
-                            "prefer_arrive_iata": "NRT",
-                            "ac_type": "A359",
-                        }
+    def test_plan_endpoint_preferred_iata(self, client):
+        """Preferred IATA codes override unresolvable city names."""
+        request_data = {
+            "depart_city": "Any City",  # This would normally fail
+            "arrive_city": "Other City",
+            "prefer_depart_iata": "SJC",
+            "prefer_arrive_iata": "NRT",
+            "ac_type": "A359",
+        }
 
-                        response = client.post("/plan", json=request_data)
+        response = client.post("/plan", json=request_data)
 
-                        assert response.status_code == 200
-                        data = response.json()
+        assert response.status_code == 200
+        data = response.json()
 
-                        assert data["depart"]["iata"] == "SJC"
-                        assert data["arrive"]["iata"] == "NRT"
+        assert data["depart"]["iata"] == "SJC"
+        assert data["arrive"]["iata"] == "NRT"
 
     @pytest.mark.unit
-    def test_plan_endpoint_invalid_preferred_iata(self, client, mock_airports_iata):
+    def test_plan_endpoint_invalid_preferred_iata(self, client):
         """Test error with invalid preferred IATA."""
         request_data = {
             "depart_city": "San Jose",
@@ -346,20 +248,31 @@ class TestPlanEndpoint:
         assert "not found" in data["detail"].lower()
 
     @pytest.mark.unit
-    def test_plan_endpoint_openap_unavailable(self, client, mock_airports_iata):
-        """Test error when OpenAP is unavailable."""
-        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", False):
-            request_data = {
-                "depart_city": "San Jose",
-                "arrive_city": "Tokyo",
-                "ac_type": "A320",
-            }
+    def test_plan_endpoint_unsupported_aircraft(self, client):
+        """An aircraft OpenAP cannot model is a 400, not a 500."""
+        response = client.post(
+            "/plan",
+            json={"depart_city": "San Jose", "arrive_city": "Tokyo", "ac_type": "C172"},
+        )
 
-            response = client.post("/plan", json=request_data)
+        assert response.status_code == 400
+        assert "not supported" in response.json()["detail"]
 
-            assert response.status_code == 501
-            data = response.json()
-            assert "unavailable" in data["detail"].lower()
+    @pytest.mark.unit
+    def test_plan_endpoint_openap_unavailable(self, client, monkeypatch):
+        """501 when the OpenAP package is not installed."""
+        monkeypatch.setattr(core, "OPENAP_AVAILABLE", False)
+        request_data = {
+            "depart_city": "San Jose",
+            "arrive_city": "Tokyo",
+            "ac_type": "A320",
+        }
+
+        response = client.post("/plan", json=request_data)
+
+        assert response.status_code == 501
+        data = response.json()
+        assert "unavailable" in data["detail"].lower()
 
     @pytest.mark.unit
     def test_plan_endpoint_validation_errors(self, client):
@@ -399,48 +312,24 @@ class TestPlanEndpoint:
         assert response.status_code == 422
 
     @pytest.mark.unit
-    def test_plan_endpoint_custom_parameters(
-        self,
-        client,
-        mock_airports_iata,
-        mock_openap_flight_generator,
-        mock_openap_fuel_flow,
-        mock_openap_props,
-    ):
-        """Test planning with custom parameters."""
-        with patch("aerospace_mcp.core.OPENAP_AVAILABLE", True):
-            with patch(
-                "aerospace_mcp.core.FlightGenerator",
-                return_value=mock_openap_flight_generator,
-            ):
-                with patch(
-                    "aerospace_mcp.core.FuelFlow", return_value=mock_openap_fuel_flow
-                ):
-                    with patch(
-                        "aerospace_mcp.core.prop.aircraft",
-                        return_value=mock_openap_props,
-                    ):
-                        request_data = {
-                            "depart_city": "San Jose",
-                            "arrive_city": "Tokyo",
-                            "ac_type": "A320",
-                            "cruise_alt_ft": 41000,
-                            "mass_kg": 70000.0,
-                            "route_step_km": 100.0,
-                        }
+    def test_plan_endpoint_custom_parameters(self, client):
+        """Custom altitude, mass and step are honoured."""
+        request_data = {
+            "depart_city": "San Jose",
+            "arrive_city": "Tokyo",
+            "ac_type": "A320",
+            "cruise_alt_ft": 41000,
+            "mass_kg": 70000.0,
+            "route_step_km": 100.0,
+        }
 
-                        response = client.post("/plan", json=request_data)
+        response = client.post("/plan", json=request_data)
 
-                        assert response.status_code == 200
-                        data = response.json()
+        assert response.status_code == 200
+        data = response.json()
 
-                        # Check that custom parameters were used
-                        assert (
-                            data["estimates"]["assumptions"]["cruise_alt_ft"] == 41000
-                        )
-                        assert data["estimates"]["assumptions"]["mass_kg"] == 70000.0
-
-                        # Polyline should have fewer points due to larger step size
-                        assert (
-                            len(data["polyline"]) < 200
-                        )  # Fewer than default 25km step
+        assumptions = data["estimates"]["assumptions"]
+        assert assumptions["cruise_alt_ft"] == 41000
+        assert assumptions["mass_kg"] == 70000.0
+        assert assumptions["mass_source"] == "user"
+        assert len(data["polyline"]) == math.ceil(data["distance_km"] / 100.0) + 1

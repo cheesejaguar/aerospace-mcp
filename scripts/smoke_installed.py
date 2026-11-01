@@ -23,6 +23,7 @@ import sysconfig
 import time
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 BIN = Path(sysconfig.get_path("scripts"))
 
@@ -110,18 +111,22 @@ def check_cli() -> None:
         print(f"cli {argv[1]}: ok")
 
 
-def _rpc(proc: subprocess.Popen, message: dict) -> dict | None:
+def _rpc(proc: subprocess.Popen[str], message: dict[str, Any]) -> dict[str, Any]:
+    """Send a JSON-RPC message; return the result of a request ({} for a
+    notification)."""
+    assert proc.stdin is not None and proc.stdout is not None
     proc.stdin.write(json.dumps(message) + "\n")
     proc.stdin.flush()
     if "id" not in message:
-        return None
+        return {}
     while True:
         line = proc.stdout.readline()
         assert line, "MCP server closed stdout"
         reply = json.loads(line)
         if reply.get("id") == message["id"]:
             assert "error" not in reply, reply
-            return reply["result"]
+            result: dict[str, Any] = reply["result"]
+            return result
 
 
 def check_mcp_stdio() -> None:
@@ -196,7 +201,7 @@ def check_http() -> None:
     try:
         deadline = time.monotonic() + 60
         while True:
-            assert proc.poll() is None, proc.stderr.read()
+            assert proc.poll() is None, proc.stderr.read() if proc.stderr else ""
             try:
                 with urllib.request.urlopen(f"{base}/health", timeout=2) as resp:
                     health = json.load(resp)

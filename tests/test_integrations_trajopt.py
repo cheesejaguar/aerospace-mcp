@@ -236,21 +236,22 @@ class TestThrustProfileOptimization:
         results = {}
 
         for obj in objectives:
-            try:
-                result = optimize_thrust_profile(
-                    geometry,
-                    burn_time_s=5.0,
-                    total_impulse_target=10000.0,
-                    n_segments=3,
-                    objective=obj,
-                )
-                results[obj] = result
-            except Exception as e:
-                pytest.skip(f"Objective {obj} failed: {e}")
+            results[obj] = optimize_thrust_profile(
+                geometry,
+                burn_time_s=5.0,
+                total_impulse_target=10000.0,
+                n_segments=3,
+                objective=obj,
+            )
 
-        # At least altitude optimization should work
-        assert "max_altitude" in results
-        assert results["max_altitude"].iterations > 0
+        for obj, result in results.items():
+            assert result.iterations > 0, obj
+            # Never worse than the constant-thrust starting profile
+            if obj.startswith("max_"):
+                assert result.optimal_objective >= result.initial_objective, obj
+            else:
+                assert result.optimal_objective <= result.initial_objective, obj
+            assert result.performance.total_impulse_ns == pytest.approx(10000.0), obj
 
     def test_thrust_profile_segment_variations(self):
         """Test thrust profile with different numbers of segments."""

@@ -104,86 +104,138 @@ class TestToolSchemaSnapshots:
             )
 
     def test_tool_parameters_are_documented(self, current_schemas):
-        """Test that tools have parameter documentation."""
+        """Every tool has a dict of parameter descriptions."""
         for name, schema in current_schemas.items():
             params = schema.get("parameters", {})
-            # Parameters can be empty for simple tools, but should be a dict
             assert isinstance(params, dict), (
                 f"Tool {name} parameters should be a dict, got {type(params)}"
             )
+            assert all(isinstance(d, str) and d for d in params.values()), name
+
+
+# Search metadata that still lists parameter names the tool does not take
+# (renamed or restructured tools whose TOOL_REGISTRY entry was not updated).
+# The names are only used as search keywords, but they are wrong.
+STALE_METADATA_PARAMETERS = {
+    "calculate_distance",
+    "get_aircraft_performance",
+    "wind_model_simple",
+    "wing_vlm_analysis",
+    "airfoil_polar_analysis",
+    "calculate_stability_derivatives",
+    "get_airfoil_database",
+    "propeller_bemt_analysis",
+    "uav_energy_estimate",
+    "get_propeller_database",
+    "rocket_3dof_trajectory",
+    "optimize_launch_angle",
+    "elements_to_state_vector",
+    "state_vector_to_elements",
+    "orbital_rendezvous_planning",
+    "optimize_thrust_profile",
+    "trajectory_sensitivity_analysis",
+}
+
+
+def _metadata_cases():
+    from aerospace_mcp.tools.tool_search import TOOL_REGISTRY
+
+    return [
+        pytest.param(
+            tool,
+            id=tool.name,
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="TOOL_REGISTRY search metadata lists parameters the "
+                "tool does not accept",
+            )
+            if tool.name in STALE_METADATA_PARAMETERS
+            else (),
+        )
+        for tool in TOOL_REGISTRY
+    ]
+
+
+@pytest.mark.parametrize("tool", _metadata_cases())
+def test_search_metadata_parameters_exist_on_the_tool(tool):
+    """TOOL_REGISTRY parameter names are real parameters of the tool."""
+    import inspect
+
+    from aerospace_mcp.tools.registry import ALL_TOOLS
+
+    real = set(inspect.signature(ALL_TOOLS[tool.name]).parameters)
+    assert set(tool.parameters) <= real, (
+        f"{tool.name}: not parameters of the tool: {set(tool.parameters) - real}"
+    )
 
 
 class TestToolSchemaStability:
-    """Test for unintentional breaking changes in tool schemas."""
+    """Test for unintentional breaking changes in tool input schemas."""
+
+    @staticmethod
+    def _input_schema(name: str) -> dict:
+        import asyncio
+
+        from fastmcp import Client
+
+        from aerospace_mcp.fastmcp_server import mcp
+
+        async def _schema():
+            async with Client(mcp) as client:
+                tools = {t.name: t for t in await client.list_tools()}
+                return tools[name].inputSchema
+
+        return asyncio.run(_schema())
 
     def test_search_airports_schema_stable(self):
-        """Test search_airports schema hasn't changed."""
-        from aerospace_mcp.tools.tool_search import TOOL_REGISTRY
-
-        tool = next((t for t in TOOL_REGISTRY if t.name == "search_airports"), None)
-        assert tool is not None
-
-        # Check required parameters exist
-        assert "query" in tool.parameters
-        assert "query_type" in tool.parameters
+        schema = self._input_schema("search_airports")
+        assert schema["required"] == ["query"]
+        assert set(schema["properties"]) == {"query", "country", "query_type"}
+        assert schema["properties"]["query_type"]["enum"] == ["iata", "city", "auto"]
 
     def test_plan_flight_schema_stable(self):
-        """Test plan_flight schema hasn't changed."""
-        from aerospace_mcp.tools.tool_search import TOOL_REGISTRY
-
-        tool = next((t for t in TOOL_REGISTRY if t.name == "plan_flight"), None)
-        assert tool is not None
-
-        # Check required parameters exist
-        assert "departure" in tool.parameters
-        assert "arrival" in tool.parameters
+        schema = self._input_schema("plan_flight")
+        assert schema["required"] == ["departure", "arrival"]
+        assert set(schema["properties"]) == {
+            "departure",
+            "arrival",
+            "aircraft",
+            "route_options",
+            "wind",
+        }
 
     def test_calculate_distance_schema_stable(self):
-        """Test calculate_distance schema hasn't changed."""
-        from aerospace_mcp.tools.tool_search import TOOL_REGISTRY
-
-        tool = next((t for t in TOOL_REGISTRY if t.name == "calculate_distance"), None)
-        assert tool is not None
-
-        # Check required parameters exist (uses airport-based interface)
-        assert "origin" in tool.parameters
-        assert "destination" in tool.parameters
+        schema = self._input_schema("calculate_distance")
+        assert schema["required"] == ["lat1", "lon1", "lat2", "lon2"]
+        for prop in schema["properties"].values():
+            assert prop["type"] == "number"
 
 
 class TestToolErrorShapes:
     """Test that tools return consistent error shapes."""
 
     def test_search_airports_invalid_query(self):
-        """Test search_airports returns proper error for invalid query."""
+        """An empty query is an error string, not an exception."""
         from aerospace_mcp.tools.core import search_airports
 
-        # Empty query should still return valid response
-        result = search_airports(query="")
-        assert isinstance(result, str)
-        # Should indicate no results or error gracefully
+        assert search_airports(query="") == "Error: Query parameter is required"
 
     def test_plan_flight_missing_fields(self):
-        """Test plan_flight error shape for missing fields."""
+        """Missing departure/arrival is reported as an invalid request."""
         from aerospace_mcp.tools.core import plan_flight
 
-        # Missing required fields should return error
         result = plan_flight(departure={}, arrival={})
-        assert isinstance(result, str)
-        # Should contain error indication
+        assert result.startswith("Invalid request:")
+        assert "depart_city" in result and "arrive_city" in result
 
     def test_calculate_distance_invalid_coords(self):
-        """Test calculate_distance error shape for invalid coordinates."""
+        """Out-of-range latitudes are rejected with a clear message."""
         from aerospace_mcp.tools.core import calculate_distance
 
-        # Invalid coordinates (lat/lon values of 999 are out of valid range)
         result = calculate_distance(lat1=999, lon1=999, lat2=999, lon2=999)
-        assert isinstance(result, str)
-        # Should indicate error or handle gracefully - verify error-related content
-        result_lower = result.lower()
-        assert any(
-            keyword in result_lower
-            for keyword in ["error", "invalid", "failed", "distance"]
-        ), f"Expected error indication or distance result, got: {result[:200]}"
+        assert result == (
+            "Distance calculation error: lat1 must be between -90 and 90 degrees"
+        )
 
     def test_get_aircraft_performance_invalid_type(self):
         """Test get_aircraft_performance error for invalid aircraft."""
@@ -193,19 +245,8 @@ class TestToolErrorShapes:
             aircraft_type="INVALID_AIRCRAFT_XYZ",
             distance_km=1000,
         )
-        assert isinstance(result, str)
-        # Should indicate error or unavailable aircraft
-        result_lower = result.lower()
-        assert any(
-            keyword in result_lower
-            for keyword in [
-                "error",
-                "not available",
-                "unavailable",
-                "not found",
-                "unknown",
-            ]
-        ), f"Expected error indication for invalid aircraft, got: {result[:200]}"
+        assert result.startswith("Performance estimation error:")
+        assert "'INVALID_AIRCRAFT_XYZ' not supported by OpenAP" in result
 
 
 class TestToolResponseShapes:
@@ -216,56 +257,35 @@ class TestToolResponseShapes:
         from aerospace_mcp.tools.core import search_airports
 
         result = search_airports(query="JFK")
-        assert isinstance(result, str)
-
-        # Response should be parseable or contain expected info
-        # JFK should be found
-        assert "JFK" in result or "John F. Kennedy" in result or "New York" in result
+        assert result.startswith("Found 1 airport(s):")
+        assert "JFK (KJFK) - John F Kennedy International Airport" in result
 
     def test_get_system_status_response_shape(self):
         """Test get_system_status returns expected response shape."""
         from aerospace_mcp.tools.core import get_system_status
 
-        result = get_system_status()
-        assert isinstance(result, str)
-
-        # Should contain JSON with expected fields
-
-        try:
-            # Try to extract JSON from response
-            data = json.loads(result)
-            assert "status" in data or "openap_available" in data
-        except json.JSONDecodeError:
-            # Response might be formatted text with JSON
-            assert "status" in result.lower() or "aerospace" in result.lower()
+        data = json.loads(get_system_status())
+        assert data["status"] == "operational"
+        assert data["capabilities"]["openap_performance"] is True
+        assert data["optional_features"]["openap_available"] is True
 
     def test_list_tool_categories_response_shape(self):
         """Test list_tool_categories returns expected response shape."""
-        from aerospace_mcp.tools.tool_search import list_tool_categories
+        from aerospace_mcp.tools.tool_search import TOOL_REGISTRY, list_tool_categories
 
-        result = list_tool_categories()
-        assert isinstance(result, str)
-
-        # Should contain JSON with categories
-
-        data = json.loads(result)
-        assert "categories" in data
-        assert "total_tools" in data
-        assert isinstance(data["categories"], list)
+        data = json.loads(list_tool_categories())
+        assert data["total_tools"] == len(TOOL_REGISTRY)
+        assert sum(c["tool_count"] for c in data["categories"]) == len(TOOL_REGISTRY)
 
     def test_search_aerospace_tools_response_shape(self):
         """Test search_aerospace_tools returns expected response shape."""
         from aerospace_mcp.tools.tool_search import search_aerospace_tools
 
-        result = search_aerospace_tools(query="orbit")
-        assert isinstance(result, str)
-
-        # Should contain JSON with tool references
-
-        data = json.loads(result)
-        assert "tool_references" in data
-        assert "total_matches" in data
-        assert isinstance(data["tool_references"], list)
+        data = json.loads(search_aerospace_tools(query="orbit"))
+        assert data["total_matches"] == len(data["tool_references"]) > 0
+        assert all(r["type"] == "tool_reference" for r in data["tool_references"])
+        names = {r["tool_name"] for r in data["tool_references"]}
+        assert "propagate_orbit_j2" in names
 
 
 class TestToolCategoryCompleteness:

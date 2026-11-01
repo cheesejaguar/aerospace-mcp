@@ -1,4 +1,7 @@
-"""Tests for multi-leg planning, wind-aware estimates, and the aircraft DB tool."""
+"""Tests for multi-leg planning, wind-aware estimates, and the aircraft DB tool.
+
+All tests use the real airport database, great-circle routing and OpenAP.
+"""
 
 from __future__ import annotations
 
@@ -7,175 +10,130 @@ import math
 
 import pytest
 
-import aerospace_mcp.core as core
 import aerospace_mcp.tools.core as core_tools
-from aerospace_mcp.core import AirportOut, FlightPlanError, plan_multi_leg
-
-
-def _airport(iata: str, lon: float = 0.0) -> AirportOut:
-    return AirportOut(
-        iata=iata,
-        icao="K" + iata,
-        name=f"{iata} International Airport",
-        city=f"City{iata}",
-        country="US",
-        lat=0.0,
-        lon=lon,
-        tz=None,
-    )
-
-
-@pytest.fixture
-def stub_planning(monkeypatch):
-    """Stub airport resolution, routing, and performance in core."""
-    airports = {
-        "AAA": _airport("AAA", 0.0),
-        "BBB": _airport("BBB", 5.0),
-        "CCC": _airport("CCC", 10.0),
-    }
-
-    def resolve(city, country, prefer_iata, role):
-        key = prefer_iata or city[-3:]
-        return airports[key]
-
-    monkeypatch.setattr(core, "_resolve_endpoint", resolve)
-    monkeypatch.setattr(
-        core,
-        "great_circle_points",
-        lambda lat1, lon1, lat2, lon2, step: ([(lat1, lon1), (lat2, lon2)], 500.0),
-    )
-    monkeypatch.setattr(
-        core,
-        "estimates_openap",
-        lambda ac, alt, mass, dist, headwind_kts=0.0: (
-            {"block": {"time_min": 60.0, "fuel_kg": 2000.0}},
-            "openap",
-        ),
-    )
-    return airports
+from aerospace_mcp.core import (
+    AirportResolutionError,
+    FlightPlanError,
+    estimates_openap,
+    great_circle_points,
+    plan_multi_leg,
+)
 
 
 class TestPlanMultiLeg:
-    def test_two_legs_aggregate(self, stub_planning):
+    def test_two_legs_aggregate(self):
         result = plan_multi_leg(
-            [{"iata": "AAA"}, {"iata": "BBB"}, {"iata": "CCC"}],
+            [{"iata": "SFO"}, {"iata": "LAX"}, {"city": "Seattle", "country": "US"}],
             ac_type="A320",
         )
 
-        assert result["totals"]["legs"] == 2
-        assert result["totals"]["distance_km"] == pytest.approx(1000.0)
-        assert result["totals"]["time_min"] == pytest.approx(120.0)
-        assert result["totals"]["fuel_kg"] == pytest.approx(4000.0)
-        assert [leg["leg"] for leg in result["legs"]] == [1, 2]
-        assert result["legs"][0]["depart"]["iata"] == "AAA"
-        assert result["legs"][1]["arrive"]["iata"] == "CCC"
+        legs = result["legs"]
+        assert [leg["leg"] for leg in legs] == [1, 2]
+        assert [leg["depart"]["iata"] for leg in legs] == ["SFO", "LAX"]
+        assert [leg["arrive"]["iata"] for leg in legs] == ["LAX", "SEA"]
+
+        # Each leg is planned exactly like a single-leg route
+        sfo, lax = legs[0]["depart"], legs[0]["arrive"]
+        _, sfo_lax_km = great_circle_points(
+            sfo["lat"], sfo["lon"], lax["lat"], lax["lon"], 25.0
+        )
+        assert legs[0]["distance_km"] == pytest.approx(sfo_lax_km)
+        single, _ = estimates_openap("A320", 35000, None, sfo_lax_km)
+        assert legs[0]["estimates"]["block"] == pytest.approx(single["block"])
+
+        totals = result["totals"]
+        assert totals["legs"] == 2
+        assert totals["distance_km"] == pytest.approx(
+            sum(leg["distance_km"] for leg in legs)
+        )
+        assert totals["time_min"] == pytest.approx(
+            sum(leg["estimates"]["block"]["time_min"] for leg in legs)
+        )
+        assert totals["fuel_kg"] == pytest.approx(
+            sum(leg["estimates"]["block"]["fuel_kg"] for leg in legs)
+        )
+        # SFO-LAX ~540 km, LAX-SEA ~1,540 km
+        assert 2000 < totals["distance_km"] < 2150
+        assert result["assumptions"]["constant_mass_between_legs"] is True
 
     def test_too_few_waypoints(self):
         with pytest.raises(FlightPlanError, match="at least 2"):
-            plan_multi_leg([{"iata": "AAA"}], ac_type="A320")
+            plan_multi_leg([{"iata": "SFO"}], ac_type="A320")
 
     def test_too_many_waypoints(self):
         with pytest.raises(FlightPlanError, match="at most"):
-            plan_multi_leg([{"iata": "AAA"}] * 11, ac_type="A320")
+            plan_multi_leg([{"iata": "SFO"}] * 11, ac_type="A320")
 
     def test_missing_city_and_iata(self):
         with pytest.raises(FlightPlanError, match="city.*iata"):
-            plan_multi_leg([{"iata": "AAA"}, {}], ac_type="A320")
+            plan_multi_leg([{"iata": "SFO"}, {}], ac_type="A320")
 
-    def test_repeated_consecutive_airport(self, stub_planning):
-        with pytest.raises(FlightPlanError, match="both AAA"):
-            plan_multi_leg([{"iata": "AAA"}, {"iata": "AAA"}], ac_type="A320")
+    def test_repeated_consecutive_airport(self):
+        with pytest.raises(FlightPlanError, match="both SFO"):
+            plan_multi_leg([{"iata": "SFO"}, {"iata": "SFO"}], ac_type="A320")
+
+    def test_unresolvable_waypoint_names_the_stop(self):
+        with pytest.raises(AirportResolutionError, match="waypoint 1"):
+            plan_multi_leg([{"iata": "SFO"}, {"city": "Atlantis"}], ac_type="A320")
+
+    def test_invalid_aircraft_parameters(self):
+        with pytest.raises(FlightPlanError, match="cruise_alt_ft"):
+            plan_multi_leg(
+                [{"iata": "SFO"}, {"iata": "LAX"}], ac_type="A320", cruise_alt_ft=60000
+            )
 
 
 class TestPlanMultiLegTool:
-    def test_tool_returns_json(self, monkeypatch):
-        monkeypatch.setattr(
-            core,
-            "plan_multi_leg",
-            lambda waypoints, ac_type, cruise_alt_ft, mass_kg, route_step_km: {
-                "legs": [],
-                "totals": {"legs": 0},
-            },
-        )
-        out = core_tools.plan_multi_leg_flight([{"iata": "AAA"}, {"iata": "BBB"}])
-        assert json.loads(out)["totals"]["legs"] == 0
+    def test_tool_returns_json(self):
+        out = core_tools.plan_multi_leg_flight([{"iata": "SFO"}, {"iata": "LAX"}])
+        data = json.loads(out)
+        assert data["totals"]["legs"] == 1
+        assert data["legs"][0]["arrive"]["iata"] == "LAX"
 
-    def test_tool_stringifies_errors(self, monkeypatch):
-        def boom(*args, **kwargs):
-            raise FlightPlanError("waypoints must be a list of at least 2 entries")
-
-        monkeypatch.setattr(core, "plan_multi_leg", boom)
+    def test_tool_stringifies_errors(self):
         out = core_tools.plan_multi_leg_flight([])
         assert "at least 2" in out
+        assert not out.startswith("{")
+
+
+def _east_west_plan(wind=None):
+    # JFK -> LHR departs on a north-easterly initial bearing (~51 deg)
+    return json.loads(
+        core_tools.plan_flight(
+            {"iata": "JFK"}, {"iata": "LHR"}, {"ac_type": "A320"}, None, wind=wind
+        )
+    )
 
 
 class TestWindAwarePlanning:
-    def test_headwind_passed_to_estimates(self, monkeypatch):
-        captured = {}
+    def test_headwind_passed_to_estimates(self):
+        calm = _east_west_plan()
+        # Wind FROM 270 (a westerly) is a tailwind on an eastbound route.
+        windy = _east_west_plan({"wind_speed_kts": 50.0, "wind_direction_deg": 270.0})
 
-        monkeypatch.setattr(
-            core_tools,
-            "_resolve_endpoint",
-            lambda city, country, iata=None, role=None: _airport(iata or "AAA"),
+        bearing = windy["route"]["initial_bearing_deg"]
+        expected = 50.0 * math.cos(math.radians(270.0 - bearing))
+        assert expected < 0  # tailwind
+        assert windy["wind"]["headwind_component_kts"] == pytest.approx(expected)
+
+        # The component reaches the performance estimate
+        assert windy["performance"]["assumptions"]["headwind_kts"] == pytest.approx(
+            expected
         )
-        monkeypatch.setattr(
-            core_tools,
-            "great_circle_points",
-            lambda a, b, c, d, step_km: ([(0.0, 0.0), (0.0, 5.0)], 500.0),
+        assert windy["performance"]["cruise"]["avg_gs_kts"] == pytest.approx(
+            calm["performance"]["cruise"]["avg_gs_kts"] - expected
         )
-        monkeypatch.setattr(core_tools, "OPENAP_AVAILABLE", True)
-
-        def fake_estimates(ac, alt, mass, dist, headwind_kts=0.0):
-            captured["headwind"] = headwind_kts
-            return {"block": {"time_min": 1.0, "fuel_kg": 1.0}}, "openap"
-
-        monkeypatch.setattr(core_tools, "estimates_openap", fake_estimates)
-
-        out = core_tools.plan_flight(
-            {"city": "CityAAA", "iata": "AAA"},
-            {"city": "CityBBB", "iata": "BBB"},
-            {"ac_type": "A320"},
-            None,
-            wind={"wind_speed_kts": 50.0, "wind_direction_deg": 90.0},
+        assert (
+            windy["performance"]["block"]["time_min"]
+            < calm["performance"]["block"]["time_min"]
         )
-        data = json.loads(out)
 
-        # Route is due east (bearing 90); wind FROM 090 is a pure headwind.
-        bearing = data["route"]["initial_bearing_deg"]
-        expected = 50.0 * math.cos(math.radians(90.0 - bearing))
-        assert captured["headwind"] == pytest.approx(expected)
-        assert data["wind"]["headwind_component_kts"] == pytest.approx(expected)
+    def test_no_wind_default_unchanged(self):
+        data = _east_west_plan()
 
-    def test_no_wind_default_unchanged(self, monkeypatch):
-        captured = {}
-
-        monkeypatch.setattr(
-            core_tools,
-            "_resolve_endpoint",
-            lambda city, country, iata=None, role=None: _airport(iata or "AAA"),
-        )
-        monkeypatch.setattr(
-            core_tools,
-            "great_circle_points",
-            lambda a, b, c, d, step_km: ([(0.0, 0.0), (0.0, 5.0)], 500.0),
-        )
-        monkeypatch.setattr(core_tools, "OPENAP_AVAILABLE", True)
-
-        def fake_estimates(ac, alt, mass, dist, headwind_kts=0.0):
-            captured["headwind"] = headwind_kts
-            return {"block": {"time_min": 1.0, "fuel_kg": 1.0}}, "openap"
-
-        monkeypatch.setattr(core_tools, "estimates_openap", fake_estimates)
-
-        out = core_tools.plan_flight(
-            {"city": "CityAAA", "iata": "AAA"},
-            {"city": "CityBBB", "iata": "BBB"},
-            {"ac_type": "A320"},
-        )
-        data = json.loads(out)
-
-        assert captured["headwind"] == 0.0
         assert "wind" not in data
+        assert data["performance"]["assumptions"]["headwind_kts"] == 0.0
+        assert data["performance"]["assumptions"]["zero_wind"] is True
 
 
 class TestAircraftDatabase:
@@ -184,32 +142,24 @@ class TestAircraftDatabase:
         out = core_tools.get_aircraft_database()
         assert "not available" in out
 
-    def test_list_and_search(self, monkeypatch):
-        class FakeProp:
-            @staticmethod
-            def available_aircraft():
-                return ["a320", "a321", "b738"]
-
-            @staticmethod
-            def aircraft(ac_type, use_synonym=False):
-                assert ac_type == "A320"
-                return {
-                    "limits": {"MTOW": 78000.0, "OEW": 42600.0, "MFC": 23859.0},
-                    "engine": {"default": "CFM56-5B4"},
-                    "wing": {"area": 122.6, "span": 35.8},
-                    "cruise": {"mach": 0.78, "height": 11000.0},
-                }
-
-        monkeypatch.setattr(core_tools, "OPENAP_AVAILABLE", True)
-        monkeypatch.setattr(core, "prop", FakeProp, raising=False)
+    def test_list_and_search(self):
+        from openap import prop
 
         listing = json.loads(core_tools.get_aircraft_database())
-        assert listing["total_aircraft"] == 3
-        assert "A320" in listing["aircraft_types"]
+        assert listing["total_aircraft"] == len(prop.available_aircraft())
+        assert listing["aircraft_types"] == sorted(listing["aircraft_types"])
+        assert {"A320", "B738"} <= set(listing["aircraft_types"])
 
         search = json.loads(core_tools.get_aircraft_database("a32"))
         assert search["matches"] == ["A320", "A321"]
+        assert "aircraft" not in search  # several matches: no detail
 
         exact = json.loads(core_tools.get_aircraft_database("A320"))
-        assert exact["aircraft"]["mtow_kg"] == 78000.0
+        assert exact["aircraft"]["mtow_kg"] == 78000
         assert exact["aircraft"]["engine"] == "CFM56-5B4"
+        assert exact["aircraft"]["cruise_mach"] == 0.78
+
+    def test_unknown_aircraft(self):
+        out = json.loads(core_tools.get_aircraft_database("ZZZZ"))
+        assert out["matches"] == []
+        assert "aircraft" not in out

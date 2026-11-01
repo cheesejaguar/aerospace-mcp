@@ -1,226 +1,72 @@
 from __future__ import annotations
 
-import sys
+import json
 
-from tests.tools.test_tools_common import StubModel, make_module
+from aerospace_mcp.tools import propellers as prop_tools
+from tests.tools.test_tools_common import without_integrations
 
-
-class PropellerGeometry:
-    def __init__(self, **kwargs):
-        self.diameter_m = kwargs.get("diameter_m", 0.3)
-        self.pitch_m = kwargs.get("pitch_m", 0.2)
-        self.num_blades = kwargs.get("num_blades", 2)
+BATTERY = {"capacity_ah": 2.5, "voltage_nominal_v": 14.8, "mass_kg": 0.3}
+QUAD = {"mass_kg": 1.5, "disk_area_m2": 0.2}
 
 
-def test_propeller_and_uav_success():
-    def _bemt(geom, rpm_list, vel, alt):
-        return [
-            StubModel(
-                rpm=rpm,
-                thrust_n=10.0,
-                torque_nm=1.0,
-                power_w=100.0,
-                efficiency=0.8,
-                advance_ratio=0.5,
-                thrust_coefficient=0.1,
-                power_coefficient=0.05,
-            )
-            for rpm in rpm_list
-        ]
-
-    class UAVConfig:
-        def __init__(self, **kw):
-            self.mass_kg = kw.get("mass_kg", 5.0)
-            self.wing_area_m2 = kw.get("wing_area_m2", 1.0)
-            self.disk_area_m2 = kw.get("disk_area_m2", 0.0)
-
-    class Battery:
-        def __init__(self, **kw):
-            self.capacity_ah = kw.get("capacity_ah", 10.0)
-            self.voltage_nominal_v = kw.get("voltage_nominal_v", 22.2)
-            self.mass_kg = kw.get("mass_kg", 1.0)
-
-    class EnergyResult:
-        flight_time_min = 30.0
-        range_km = 10.0
-        hover_time_min = None
-        power_required_w = 200.0
-        energy_consumed_wh = 300.0
-        battery_energy_wh = 400.0
-        efficiency_overall = 0.8
-
-    sys.modules["aerospace_mcp.integrations.propellers"] = make_module(
-        PropellerGeometry=PropellerGeometry,
-        propeller_bemt_analysis=_bemt,
-        UAVConfiguration=UAVConfig,
-        BatteryConfiguration=Battery,
-        uav_energy_estimate=lambda *a, **k: EnergyResult(),
-        PROPELLER_DATABASE={"APC_10x4.7": {"diameter": 0.254}},
-    )
-
-    from aerospace_mcp.tools.propellers import (
-        get_propeller_database,
-        propeller_bemt_analysis,
-        uav_energy_estimate,
-    )
-
-    assert "BEMT Analysis" in propeller_bemt_analysis(
-        {"diameter_m": 0.3, "pitch_m": 0.2, "num_blades": 2},
-        {"rpm_list": [2000, 3000], "velocity_ms": 20.0, "altitude_m": 0.0},
-        {},
-    )
-    assert "UAV Energy" in uav_energy_estimate(
-        {"mass_kg": 5.0, "wing_area_m2": 1.0},
-        {"capacity_ah": 10.0, "voltage_nominal_v": 22.2, "mass_kg": 1.0},
-        {},
-    )
-    assert "APC_10x4.7" in get_propeller_database()
-
-
-def test_propellers_import_errors():
-    import sys
-
-    from aerospace_mcp.tools import propellers as prop_tools
-
-    sys.modules["aerospace_mcp.integrations.propellers"] = make_module()
+def test_propellers_import_errors(monkeypatch):
+    without_integrations(monkeypatch, "propellers")
     assert "not available" in prop_tools.propeller_bemt_analysis({}, {}, {}).lower()
     assert "not available" in prop_tools.uav_energy_estimate({}, {}).lower()
     assert "not available" in prop_tools.get_propeller_database().lower()
 
 
-def test_propellers_exception_branches():
-    import sys
+def test_propellers_invalid_input_errors():
+    """Missing required geometry/config fields are reported, not raised."""
+    out = prop_tools.propeller_bemt_analysis({}, {"rpm_list": [3000]}, {})
+    assert out.startswith("Propeller analysis error")
+    assert "diameter_m" in out
+    out = prop_tools.uav_energy_estimate({}, BATTERY)
+    assert out.startswith("UAV energy analysis error")
+    assert "mass_kg" in out
 
-    def _boom(*a, **k):
-        raise RuntimeError("boom")
 
-    sys.modules["aerospace_mcp.integrations.propellers"] = make_module(
-        PropellerGeometry=PropellerGeometry,
-        propeller_bemt_analysis=_boom,
-        UAVConfiguration=type("U", (), {}),
-        BatteryConfiguration=type("B", (), {}),
-        uav_energy_estimate=_boom,
-        PROPELLER_DATABASE={"x": 1},
-    )
-    from aerospace_mcp.tools import propellers as ptools
-
-    assert "error" in ptools.propeller_bemt_analysis({}, {}, {}).lower()
-    assert "error" in ptools.uav_energy_estimate({}, {}).lower()
-
-    # Force exception via database access
-    class BadDB:
-        def __iter__(self):
-            raise RuntimeError("boom")
-
-    sys.modules["aerospace_mcp.integrations.propellers"] = make_module(
-        PROPELLER_DATABASE=BadDB()
-    )
-    assert "error" in ptools.get_propeller_database().lower()
+def test_get_propeller_database():
+    data = json.loads(prop_tools.get_propeller_database())
+    assert data["APC_10x7"]["diameter_m"] == 0.254
+    assert data["APC_10x7"]["num_blades"] == 2
 
 
 def test_uav_energy_recommendations_branches():
-    import sys
-
-    class UAV:
-        def __init__(self, **kw):
-            self.mass_kg = 5.0
-            self.wing_area_m2 = kw.get("wing_area_m2", 1.0)
-            self.disk_area_m2 = kw.get("disk_area_m2", 0.0)
-
-    class Bat:
-        def __init__(self, **kw):
-            self.capacity_ah = 10.0
-            self.voltage_nominal_v = 22.2
-            self.mass_kg = 1.0
-
-    # Case: very short (<10) and low efficiency
-    class R1:
-        flight_time_min = 5.0
-        range_km = None
-        hover_time_min = 2.0
-        power_required_w = 100
-        energy_consumed_wh = 100
-        battery_energy_wh = 200
-        efficiency_overall = 0.5
-
-    # Case: short (<20)
-    class R2(R1):
-        flight_time_min = 15.0
-        efficiency_overall = 0.9
-
-    # Case: excellent (>120)
-    class R3(R1):
-        flight_time_min = 130.0
-        efficiency_overall = 0.9
-
-    sys.modules["aerospace_mcp.integrations.propellers"] = make_module(
-        UAVConfiguration=UAV,
-        BatteryConfiguration=Bat,
-        uav_energy_estimate=lambda *a, **k: R1(),
+    """Flight-time and efficiency advice follows the real energy estimate."""
+    tiny_battery = {"capacity_ah": 1.0, "voltage_nominal_v": 11.1, "mass_kg": 0.1}
+    very_short = prop_tools.uav_energy_estimate(
+        {"mass_kg": 3.0, "disk_area_m2": 0.1}, tiny_battery
     )
-    from aerospace_mcp.tools.propellers import uav_energy_estimate as uav
+    assert _json_part(very_short)["flight_time_min"] < 10
+    assert "Very short flight time" in very_short
+    assert "Rotor Disk Area: 0.10" in very_short  # multirotor branch
 
-    out1 = uav(
-        {"wing_area_m2": 1.0},
-        {"capacity_ah": 10.0, "voltage_nominal_v": 22.2, "mass_kg": 1.0},
-    )
-    assert "Very short" in out1
-    assert "Low system efficiency" in out1
+    short = prop_tools.uav_energy_estimate(QUAD, BATTERY)
+    assert 10 <= _json_part(short)["flight_time_min"] < 20
+    assert "Short flight time" in short
+    assert "Good system efficiency" in short
 
-    sys.modules["aerospace_mcp.integrations.propellers"] = make_module(
-        UAVConfiguration=UAV,
-        BatteryConfiguration=Bat,
-        uav_energy_estimate=lambda *a, **k: R2(),
+    # Motor 60 % x ESC 95 % = 57 % overall
+    inefficient = prop_tools.uav_energy_estimate(
+        {**QUAD, "motor_efficiency": 0.6}, BATTERY
     )
-    out2 = uav(
-        {"wing_area_m2": 1.0},
-        {"capacity_ah": 10.0, "voltage_nominal_v": 22.2, "mass_kg": 1.0},
-    )
-    assert "Short flight time" in out2
+    assert _json_part(inefficient)["efficiency_overall"] == 0.6 * 0.95
+    assert "Low system efficiency" in inefficient
 
-    sys.modules["aerospace_mcp.integrations.propellers"] = make_module(
-        UAVConfiguration=UAV,
-        BatteryConfiguration=Bat,
-        uav_energy_estimate=lambda *a, **k: R3(),
+    glider = prop_tools.uav_energy_estimate(
+        {"mass_kg": 2.0, "wing_area_m2": 1.0},
+        {"capacity_ah": 20.0, "voltage_nominal_v": 22.2, "mass_kg": 2.0},
+        {"velocity_ms": 12.0},
     )
-    out3 = uav(
-        {"wing_area_m2": 1.0},
-        {"capacity_ah": 10.0, "voltage_nominal_v": 22.2, "mass_kg": 1.0},
-    )
-    assert "Excellent endurance" in out3
-
-    # Multirotor branch (disk area)
-    class UAV2(UAV):
-        def __init__(self, **kw):
-            super().__init__(**kw)
-            self.wing_area_m2 = 0.0
-            self.disk_area_m2 = 2.0
-
-    sys.modules["aerospace_mcp.integrations.propellers"] = make_module(
-        UAVConfiguration=UAV2,
-        BatteryConfiguration=Bat,
-        uav_energy_estimate=lambda *a, **k: R2(),
-    )
-    out4 = uav(
-        {"disk_area_m2": 2.0},
-        {"capacity_ah": 10.0, "voltage_nominal_v": 22.2, "mass_kg": 1.0},
-    )
-    assert "Rotor Disk Area" in out4
+    assert _json_part(glider)["flight_time_min"] > 120
+    assert "Excellent endurance" in glider
+    assert "Rotor Disk Area" not in glider
 
 
 # ---------------------------------------------------------------------------
-# End-to-end tests against the real integration module (no stubs)
+# End-to-end tests against the real integration module
 # ---------------------------------------------------------------------------
-
-
-def _use_real_integration():
-    """Drop a stub left in sys.modules so the real module is imported."""
-    for name in (
-        "aerospace_mcp.integrations.propellers",
-        "aerospace_mcp.integrations.atmosphere",
-    ):
-        if getattr(sys.modules.get(name), "__file__", None) is None:
-            sys.modules.pop(name, None)
 
 
 def _json_part(out: str):
@@ -230,7 +76,6 @@ def _json_part(out: str):
 
 
 def test_propeller_bemt_analysis_end_to_end():
-    _use_real_integration()
     from aerospace_mcp.tools.propellers import propeller_bemt_analysis
 
     geo = {"diameter_m": 0.254, "pitch_m": 0.1143, "num_blades": 2}
@@ -259,7 +104,6 @@ def test_propeller_bemt_analysis_end_to_end():
 
 
 def test_uav_energy_estimate_end_to_end():
-    _use_real_integration()
     from aerospace_mcp.tools.propellers import uav_energy_estimate
 
     battery = {"capacity_ah": 5.0, "voltage_nominal_v": 14.8, "mass_kg": 0.5}

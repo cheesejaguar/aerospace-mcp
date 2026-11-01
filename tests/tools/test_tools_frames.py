@@ -2,108 +2,38 @@ from __future__ import annotations
 
 import json
 import math
-import sys
 
-from tests.tools.test_tools_common import StubModel, make_module
+from tests.tools.test_tools_common import without_integrations
 
 
-def test_transform_frames_success():
-    # The integration returns a CoordinatePoint-like object (attributes,
-    # not dict keys); the stub mirrors that.
-    def _transform(coords, from_f, to_f, epoch):
-        return StubModel(x=1.0, y=2.0, z=3.0, frame=to_f, epoch=epoch or "J2000")
+def test_frames_import_errors(monkeypatch):
+    from aerospace_mcp.tools import frames as tools
 
-    sys.modules["aerospace_mcp.integrations.frames"] = make_module(
-        transform_frames=_transform
+    without_integrations(monkeypatch, "frames")
+    assert "not available" in tools.transform_frames({}, "ECEF", "ECI", None).lower()
+    assert "not available" in tools.geodetic_to_ecef(0, 0, 0).lower()
+    assert "not available" in tools.ecef_to_geodetic(0, 0, 0).lower()
+
+
+def test_frames_invalid_input_errors():
+    from aerospace_mcp.tools import frames as tools
+
+    assert tools.geodetic_to_ecef(100, 0, 0) == (
+        "Geodetic to ECEF error: Latitude must be between -90 and +90 degrees"
     )
-    from aerospace_mcp.tools.frames import transform_frames
-
-    out = json.loads(transform_frames({"x": 1}, "ECEF", "ECI", None))
-    assert out["output"] == {"x": 1.0, "y": 2.0, "z": 3.0}
-    assert out["epoch_utc"] == "J2000"
-
-
-def test_transform_frames_importerror():
-    sys.modules["aerospace_mcp.integrations.frames"] = make_module()
-    from aerospace_mcp.tools.frames import transform_frames
-
-    out = transform_frames({}, "ECEF", "ECI", None)
-    assert "not available" in out.lower()
-
-
-def test_geodetic_to_ecef_success():
-    sys.modules["aerospace_mcp.integrations.frames"] = make_module(
-        geodetic_to_ecef=lambda lat, lon, alt: StubModel(x=1.0, y=2.0, z=3.0)
-    )
-    from aerospace_mcp.tools.frames import geodetic_to_ecef
-
-    out = json.loads(geodetic_to_ecef(0, 0, 0))
-    assert out["output"] == {"x_m": 1.0, "y_m": 2.0, "z_m": 3.0}
-
-
-def test_geodetic_to_ecef_importerror():
-    sys.modules["aerospace_mcp.integrations.frames"] = make_module()
-    from aerospace_mcp.tools.frames import geodetic_to_ecef
-
-    out = geodetic_to_ecef(0, 0, 0)
-    assert "not available" in out.lower()
-
-
-def test_ecef_to_geodetic_success():
-    sys.modules["aerospace_mcp.integrations.frames"] = make_module(
-        ecef_to_geodetic=lambda x, y, z: StubModel(
-            latitude_deg=0.0, longitude_deg=0.0, altitude_m=0.0
-        )
-    )
-    from aerospace_mcp.tools.frames import ecef_to_geodetic
-
-    out = json.loads(ecef_to_geodetic(1, 2, 3))
-    assert out["reference_frame"] == "WGS84 Geodetic"
-    assert out["output"]["altitude_m"] == 0.0
-
-
-def test_frames_exception_branches():
-    import sys as _sys
-
-    def _boom(*a, **k):
-        raise RuntimeError("boom")
-
-    _sys.modules["aerospace_mcp.integrations.frames"] = make_module(
-        transform_frames=_boom, geodetic_to_ecef=_boom, ecef_to_geodetic=_boom
-    )
-    from aerospace_mcp.tools.frames import (
-        ecef_to_geodetic as _e2g,
-    )
-    from aerospace_mcp.tools.frames import (
-        geodetic_to_ecef as _g2e,
-    )
-    from aerospace_mcp.tools.frames import (
-        transform_frames as _tf,
-    )
-
-    assert "error" in _tf({}, "ECEF", "ECI", None).lower()
-    assert "error" in _g2e(0, 0, 0).lower()
-    assert "error" in _e2g(0, 0, 0).lower()
-
-
-def test_ecef_to_geodetic_importerror():
-    sys.modules["aerospace_mcp.integrations.frames"] = make_module()
-    from aerospace_mcp.tools.frames import ecef_to_geodetic
-
-    out = ecef_to_geodetic(0, 0, 0)
-    assert "not available" in out.lower()
+    assert tools.geodetic_to_ecef("a", 0, 0).startswith("Geodetic to ECEF error")
+    assert tools.ecef_to_geodetic("a", 0, 0).startswith("ECEF to geodetic error")
 
 
 # ---------------------------------------------------------------------------
-# End-to-end tests against the real integration module (no stubs).  The
-# stubbed tests above returned dicts where the integration returns pydantic
-# models, which is how every frames tool shipped broken.
+# End-to-end tests against the real integration module.  Earlier stubbed
+# tests returned dicts where the integration returns pydantic models, which
+# is how every frames tool shipped broken.
 # ---------------------------------------------------------------------------
 
 
 def _real_frames_tools():
-    """Import the tool module with the real integrations.frames module."""
-    sys.modules.pop("aerospace_mcp.integrations.frames", None)
+    """Import the tool module (it imports integrations.frames on each call)."""
     from aerospace_mcp.tools import frames as tools
 
     return tools

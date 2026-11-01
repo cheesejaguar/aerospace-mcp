@@ -1,69 +1,103 @@
 from __future__ import annotations
 
-import sys
+import json
+import math
 
-from tests.tools.test_tools_common import make_module
+import pytest
 
-
-class OrbitElements:
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
+from tests.tools.test_tools_common import without_integrations
 
 
-class StateVector:
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-
-
-def test_orbits_elements_to_state_success():
-    class Result:
-        position_m = [1.0, 2.0, 3.0]
-        velocity_ms = [4.0, 5.0, 6.0]
-
-    sys.modules["aerospace_mcp.integrations.orbits"] = make_module(
-        OrbitElements=OrbitElements, elements_to_state_vector=lambda e: Result()
-    )
+def test_orbits_elements_to_state_circular_equatorial():
+    """Circular equatorial orbit at periapsis: r = a along x, v = sqrt(mu/a)
+    along y."""
     from aerospace_mcp.tools.orbits import elements_to_state_vector
 
-    out = elements_to_state_vector({"semi_major_axis_m": 7000e3})
-    assert "position_m" in out
+    out = json.loads(elements_to_state_vector(CIRCULAR))
+    assert out["position_m"] == {"x": 7.0e6, "y": 0.0, "z": 0.0}
+    assert out["velocity_ms"]["x"] == pytest.approx(0.0, abs=1e-9)
+    assert out["velocity_ms"]["y"] == pytest.approx(math.sqrt(MU_EARTH / 7.0e6))
+    assert out["reference_frame"] == "J2000"
 
 
-def test_orbits_state_to_elements_success():
-    class Result:
-        semi_major_axis_m = 1.0
-        eccentricity = 0.1
-        inclination_deg = 45.0
-        raan_deg = 0.0
-        arg_periapsis_deg = 0.0
-        true_anomaly_deg = 0.0
-        epoch_utc = "2020-01-01T00:00:00Z"
-
-    sys.modules["aerospace_mcp.integrations.orbits"] = make_module(
-        StateVector=StateVector, state_vector_to_elements=lambda s: Result()
-    )
-    from aerospace_mcp.tools.orbits import state_vector_to_elements
-
-    out = state_vector_to_elements(
-        {"position_m": [1, 0, 0], "velocity_ms": [0, 1, 0], "epoch_utc": "..."}
-    )
-    assert "eccentricity" in out
-
-
-def test_orbits_hohmann_and_rendezvous_success():
-    sys.modules["aerospace_mcp.integrations.orbits"] = make_module(
-        hohmann_transfer=lambda *a, **k: {"dv": [1.0, 2.0]},
-        orbital_rendezvous_planning=lambda *a, **k: {"plan": []},
-        OrbitElements=OrbitElements,
-    )
+def test_orbits_state_to_elements_round_trip():
     from aerospace_mcp.tools.orbits import (
-        hohmann_transfer,
-        orbital_rendezvous_planning,
+        elements_to_state_vector,
+        state_vector_to_elements,
     )
 
-    assert "dv" in hohmann_transfer(7000e3, 8000e3)
-    assert "plan" in orbital_rendezvous_planning({}, {})
+    state = json.loads(elements_to_state_vector(ELEMENTS))
+    out = json.loads(
+        state_vector_to_elements(
+            {
+                "position_m": list(state["position_m"].values()),
+                "velocity_ms": list(state["velocity_ms"].values()),
+                "epoch_utc": ELEMENTS["epoch_utc"],
+            }
+        )
+    )
+    assert out["semi_major_axis_m"] == pytest.approx(7.0e6, rel=1e-9)
+    assert out["eccentricity"] == pytest.approx(0.001, rel=1e-6)
+    assert out["inclination_deg"] == pytest.approx(51.6)
+    assert out["raan_deg"] == pytest.approx(30.0)
+    assert out["epoch_utc"] == ELEMENTS["epoch_utc"]
 
+
+def test_orbits_hohmann_leo_to_geo():
+    """LEO (300 km) to GEO: the textbook ~2.43 + ~1.47 = ~3.9 km/s, 5.3 h."""
+    from aerospace_mcp.tools.orbits import hohmann_transfer
+
+    out = json.loads(hohmann_transfer(6678e3, 42164e3))
+    assert out["delta_v1_ms"] == pytest.approx(2426, abs=5)
+    assert out["delta_v2_ms"] == pytest.approx(1467, abs=5)
+    assert out["total_delta_v_ms"] == pytest.approx(
+        out["delta_v1_ms"] + out["delta_v2_ms"]
+    )
+    assert out["transfer_time_h"] == pytest.approx(5.28, abs=0.01)
+    assert out["transfer_semi_major_axis_m"] == (6678e3 + 42164e3) / 2
+
+
+def test_orbits_rendezvous_same_period_is_valid_json():
+    """Equal periods never close the phase angle: phasing time is null.
+
+    It used to be float('inf'), which the tool serialised as the invalid
+    JSON token ``Infinity``.
+    """
+    from aerospace_mcp.tools.orbits import orbital_rendezvous_planning
+
+    target = {**CIRCULAR, "true_anomaly_deg": 10.0}
+    raw = orbital_rendezvous_planning(CIRCULAR, target)
+    assert "Infinity" not in raw
+    out = json.loads(raw)
+    assert out["phase_angle_deg"] == pytest.approx(10.0)
+    # Chord between two points 10 deg apart on a 7,000 km circle
+    assert out["relative_distance_m"] == pytest.approx(
+        2 * 7.0e6 * math.sin(math.radians(5.0))
+    )
+    assert out["phasing_time_s"] is None
+    assert out["phasing_time_h"] is None
+
+
+def test_orbits_rendezvous_different_altitudes():
+    from aerospace_mcp.tools.orbits import orbital_rendezvous_planning
+
+    target = {**CIRCULAR, "semi_major_axis_m": 7.1e6, "true_anomaly_deg": 30.0}
+    out = json.loads(orbital_rendezvous_planning(CIRCULAR, target))
+    assert out["phasing_time_s"] > 0
+    assert out["altitude_difference_m"] == pytest.approx(1.0e5)
+    assert [m["type"] for m in out["maneuvers"]] == ["altitude_adjustment"]
+
+
+CIRCULAR = {
+    "semi_major_axis_m": 7.0e6,
+    "eccentricity": 0.0,
+    "inclination_deg": 0.0,
+    "raan_deg": 0.0,
+    "arg_periapsis_deg": 0.0,
+    "true_anomaly_deg": 0.0,
+    "epoch_utc": "2026-01-01T00:00:00+00:00",
+}
+MU_EARTH = 3.986004418e14
 
 ELEMENTS = {
     "semi_major_axis_m": 7.0e6,
@@ -210,12 +244,10 @@ def test_propagate_rejects_out_of_range_step():
     assert "error" in propagate_orbit_j2(ELEMENTS, 600.0, 0.01).lower()
 
 
-def test_orbits_import_errors():
-    import sys
-
+def test_orbits_import_errors(monkeypatch):
     from aerospace_mcp.tools import orbits as orbits_tools
 
-    sys.modules["aerospace_mcp.integrations.orbits"] = make_module()
+    without_integrations(monkeypatch, "orbits")
     assert "not available" in orbits_tools.elements_to_state_vector({}).lower()
     assert "not available" in orbits_tools.state_vector_to_elements({}).lower()
     assert "not available" in orbits_tools.propagate_orbit_j2({}, 10.0).lower()
@@ -224,27 +256,19 @@ def test_orbits_import_errors():
     assert "not available" in orbits_tools.orbital_rendezvous_planning({}, {}).lower()
 
 
-def test_orbits_exception_branches():
-    import sys
-
-    def _boom(*a, **k):
-        raise RuntimeError("boom")
-
-    sys.modules["aerospace_mcp.integrations.orbits"] = make_module(
-        OrbitElements=OrbitElements,
-        StateVector=StateVector,
-        elements_to_state_vector=_boom,
-        state_vector_to_elements=_boom,
-        propagate_orbit_j2_sampled=_boom,
-        ground_track_sampled=_boom,
-        hohmann_transfer=_boom,
-        orbital_rendezvous_planning=_boom,
-    )
+def test_orbits_invalid_input_errors():
+    """Bad inputs come back as error strings naming the problem."""
     from aerospace_mcp.tools import orbits as otools
 
-    assert "error" in otools.elements_to_state_vector({}).lower()
-    assert "error" in otools.state_vector_to_elements({}).lower()
-    assert "error" in otools.propagate_orbit_j2({}, 10.0).lower()
-    assert "error" in otools.calculate_ground_track({}, 10.0).lower()
-    assert "error" in otools.hohmann_transfer(1.0, 2.0).lower()
-    assert "error" in otools.orbital_rendezvous_planning({}, {}).lower()
+    out = otools.elements_to_state_vector({})
+    assert out.startswith("Elements to state vector error") and "semi_major" in out
+    out = otools.state_vector_to_elements({})
+    assert out.startswith("State vector to elements error") and "position_m" in out
+    assert otools.propagate_orbit_j2({}, 10.0).startswith("Orbit propagation error")
+    assert otools.calculate_ground_track({}, 10.0).startswith("Ground track error")
+    assert otools.hohmann_transfer(-1.0, 2.0) == (
+        "Hohmann transfer error: orbit radii must be > 0"
+    )
+    assert otools.orbital_rendezvous_planning({}, {}).startswith(
+        "Rendezvous planning error"
+    )

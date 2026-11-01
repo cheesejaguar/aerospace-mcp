@@ -775,7 +775,9 @@ def orbital_rendezvous_planning(
 
     Returns:
         Rendezvous plan dictionary with relative distance, phase angle,
-        phasing time, delta-V estimates, and maneuver list.
+        phasing time, delta-V estimates, and maneuver list.  The phasing
+        times are ``None`` when both orbits have the same period (within
+        1 s): the phase angle then never closes without a maneuver.
     """
     # Convert to state vectors for analysis
     chaser_state = elements_to_state_vector(chaser_elements)
@@ -802,6 +804,7 @@ def orbital_rendezvous_planning(
     phase_angle_rad = math.acos(cos_phase)
 
     # Estimate phasing time
+    phasing_time_s: float | None
     if abs(chaser_props.period_s - target_props.period_s) > 1:
         synodic_period = abs(
             chaser_props.period_s
@@ -810,7 +813,9 @@ def orbital_rendezvous_planning(
         )
         phasing_time_s = phase_angle_rad / (2 * math.pi) * synodic_period
     else:
-        phasing_time_s = float("inf")  # Coplanar, similar orbits
+        # Equal periods: no natural drift.  None rather than inf, which is
+        # not valid JSON for MCP clients.
+        phasing_time_s = None
 
     # Delta-V estimates for circularization if needed
     chaser_circ_dv = 0.0
@@ -868,7 +873,7 @@ def orbital_rendezvous_planning(
         "phase_angle_deg": rad_to_deg(phase_angle_rad),
         "phasing_time_s": phasing_time_s,
         "phasing_time_h": (
-            phasing_time_s / 3600 if phasing_time_s != float("inf") else float("inf")
+            phasing_time_s / 3600 if phasing_time_s is not None else None
         ),
         "time_to_rendezvous_s": phasing_time_s,  # Add expected key
         "chaser_period_s": chaser_props.period_s,
@@ -921,7 +926,18 @@ def porkchop_plot_analysis(
     Returns:
         Dictionary containing the transfer grid, optimal transfer,
         and summary statistics.
+
+    Raises:
+        ValueError: If a body other than Earth or Mars is requested.
     """
+    # Only Earth and Mars orbits are modelled; any other name used to fall
+    # back to Earth silently, yielding a meaningless Earth-to-Earth grid.
+    for body in (departure_body, arrival_body):
+        if body.lower() not in ("earth", "mars"):
+            raise ValueError(
+                f"Unsupported body '{body}': only 'Earth' and 'Mars' are modelled"
+            )
+
     # Default date ranges if not provided
     if departure_dates is None:
         # Earth-Mars synodic period is ~26 months, sample over 2 years
@@ -978,7 +994,6 @@ def porkchop_plot_analysis(
 
         days_since_j2000 = (dt - datetime(2000, 1, 1, 12, 0, 0)).total_seconds() / 86400
 
-        # Unknown bodies default to Earth.
         if body.lower() == "mars":
             radius_au, period_days = mars_orbit_radius, mars_period_days
         else:
