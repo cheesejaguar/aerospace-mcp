@@ -636,6 +636,13 @@
         }
 
         /* ================= Reduced motion ================= */
+        /* Teaser band */
+        .teaser { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--bg-raise); padding: 2.25rem 0; }
+        .teaser .wrap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 1.5rem; }
+        .teaser h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.25rem, 2.4vw, 1.6rem); color: var(--ink); }
+        .teaser p { margin: 0; color: var(--ink-dim); }
+        .teaser h2::before { content: ""; display: inline-block; width: 0.55em; height: 0.55em; margin-right: 0.6em; border-radius: 50%; background: var(--amber); vertical-align: 0.1em; }
+
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
                 animation-duration: 0.01ms !important;
@@ -757,6 +764,14 @@
                 </div>
             </div>
         </header>
+
+        <!-- ================= Teaser ================= -->
+        <section class="teaser" aria-labelledby="teaser-title">
+            <div class="wrap">
+                <h2 id="teaser-title">Stealth Physical AI Startup</h2>
+                <p>Early-stage. Details to come.</p>
+            </div>
+        </section>
 
         <!-- ================= Capabilities ================= -->
         <section class="section" id="capabilities">
